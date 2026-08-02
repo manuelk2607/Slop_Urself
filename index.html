@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Slop Urself!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class = "game-container">
+    <h1>Slop Urself!</h1>
+    <p>Lade hier dein Bild hoch:</p>
+
+    <div class="upload-section">
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+        <label for="imageInput" class="custom-file-btn">
+            📸 Bild auswählen
+        </label>
+        <img id="imagePreview" alt="Bild-Vorschau" style="display: none;">
+        <button id="uploadButton">KI-Video generieren</button>
+    </div>
+
+    <div id="loadingSection" style="display: none;">
+        <div class="spinner"></div>
+        <p id="loadingText">Die KI verarbeitet dein Bild...</p>
+    </div>
+
+    <div class = "video-section">
+        <video id="videoPlayer" controls style="display: none;">
+            Falsches Video-Format!
+        </video>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
