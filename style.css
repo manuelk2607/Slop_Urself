@@ -150,3 +150,44 @@ button:disabled {
     cursor: not-allowed;
     transform: none;
 }
+
+/* Lobby Styling */
+.divider {
+    margin: 15px 0;
+    color: #a4b0be;
+    font-size: 0.9rem;
+}
+
+.join-group {
+    display: flex;
+    gap: 10px;
+}
+
+#roomCodeInput {
+    background-color: #2f3542;
+    border: 1px solid #57606f;
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    text-align: center;
+    text-transform: uppercase;
+    width: 60%;
+}
+
+.error-msg {
+    color: #ff4757;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+/* Raum-Statusleiste */
+.room-bar {
+    background-color: #2f3542;
+    padding: 10px 15px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+}

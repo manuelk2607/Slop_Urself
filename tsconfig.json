@@ -5,8 +5,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true,
-    "outDir": "dist"
+    "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["**/*"],
+  "exclude": ["node_modules"]
 }

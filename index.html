@@ -6,30 +6,49 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class = "game-container">
+<div class="game-container">
     <h1>Slop Urself!</h1>
-    <p>Lade hier dein Bild hoch:</p>
 
-    <div class="upload-section">
-        <input type="file" id="imageInput" accept="image/*" style="display: none;">
-        <label for="imageInput" class="custom-file-btn">
-            📸 Bild auswählen
-        </label>
-        <img id="imagePreview" alt="Bild-Vorschau" style="display: none;">
-        <button id="uploadButton">KI-Video generieren</button>
+    <div id="lobbySection">
+        <p>Erstelle einen Raum oder tritt mit einem Code bei:</p>
+        <button id="createRoomButton">Neuen Raum erstellen</button>
+
+        <div class="divider">oder</div>
+
+        <div class="join-group">
+            <input type="text" id="roomCodeInput" placeholder="CODE" maxlength="4">
+            <button id="joinRoomButton">Beitreten</button>
+        </div>
+        <p id="lobbyError" class="error-msg"></p>
     </div>
 
-    <div id="loadingSection" style="display: none;">
-        <div class="spinner"></div>
-        <p id="loadingText">Die KI verarbeitet dein Bild...</p>
-    </div>
+    <div id="gameSection" style="display: none;">
+        <div class="room-bar">
+            <span>Raum: <strong id="displayRoomCode">----</strong></span>
+            <span>Spieler: <strong id="playerCount">1</strong>/10</span>
+        </div>
 
-    <div class = "video-section">
-        <video id="videoPlayer" controls style="display: none;">
-            Falsches Video-Format!
-        </video>
+        <div class="upload-section">
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <label for="imageInput" class="custom-file-btn">📸 Bild auswählen</label>
+            <img id="imagePreview" alt="Bild-Vorschau" style="display: none;">
+            <button id="uploadButton">KI-Video generieren</button>
+        </div>
+
+        <div id="loadingSection" style="display: none;">
+            <div class="spinner"></div>
+            <p id="loadingText">Die KI verarbeitet dein Bild...</p>
+        </div>
+
+        <div class="video-section">
+            <video id="videoPlayer" controls style="display: none;">
+                Falsches Video-Format!
+            </video>
+        </div>
     </div>
 </div>
+
+<script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
