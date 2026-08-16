@@ -98,7 +98,7 @@ uploadButton.addEventListener('click', () => {
     }
 
     if (!promptText) {
-        alert('Bitte gib eine Anweisung (Prompt) ein!');
+        alert('Bitte gib einen Prompt ein!');
         promptInput.focus();
         return;
     }
@@ -119,9 +119,6 @@ uploadButton.addEventListener('click', () => {
 
     reader.onload = () => {
         const imageBase64 = reader.result as string;
-
-        // Falls das Feld leer gelassen wurde, Fallback-Prompt nutzen
-        const promptText = promptInput.value.trim() || 'animate this image smoothly';
 
         socket.emit('sendImage', {
             roomId: currentRoomId,
