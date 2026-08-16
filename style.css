@@ -191,3 +191,25 @@ button:disabled {
     margin-bottom: 20px;
     font-size: 0.95rem;
 }
+
+#promptInput {
+    background-color: #2f3542;
+    border: 1px solid #57606f;
+    color: #ffffff;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 15px 0;
+    transition: border-color 0.2s ease;
+}
+
+#promptInput:focus {
+    outline: none;
+    border-color: #ff4757;
+}
+
+#promptInput::placeholder {
+    color: #a4b0be;
+}

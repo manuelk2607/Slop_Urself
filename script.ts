@@ -17,12 +17,13 @@ const playerCount = document.getElementById('playerCount') as HTMLElement;
 // Upload-Elemente
 const imageInput = document.getElementById('imageInput') as HTMLInputElement;
 const imagePreview = document.getElementById('imagePreview') as HTMLImageElement;
+const promptInput = document.getElementById('promptInput') as HTMLInputElement;
 const uploadButton = document.getElementById('uploadButton') as HTMLButtonElement;
 const loadingSection = document.getElementById('loadingSection') as HTMLDivElement;
 const videoPlayer = document.getElementById('videoPlayer') as HTMLVideoElement;
 const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 
-// --- SOCKET.IO LOBBY ACTIONS ---
+// --- LOBBY ACTIONS ---
 
 createRoomButton.addEventListener('click', () => {
     socket.emit('createRoom');
@@ -37,7 +38,7 @@ joinRoomButton.addEventListener('click', () => {
     socket.emit('joinRoom', code);
 });
 
-// --- SERVER ANTWORTEN (EVENTS) ---
+// --- LOBBY EVENTS ---
 
 socket.on('roomCreated', (data: { roomId: string }) => {
     enterRoom(data.roomId);
@@ -52,7 +53,14 @@ socket.on('playerCountUpdate', (data: { count: number }) => {
 });
 
 socket.on('errorMsg', (msg: string) => {
-    lobbyError.innerText = msg;
+    if (lobbySection.style.display !== 'none') {
+        lobbyError.innerText = msg;
+    } else {
+        alert(msg);
+        uploadButton.disabled = false;
+        uploadButton.innerText = 'KI-Video generieren';
+        loadingSection.style.display = 'none';
+    }
 });
 
 function enterRoom(roomId: string) {
@@ -62,7 +70,7 @@ function enterRoom(roomId: string) {
     displayRoomCode.innerText = roomId;
 }
 
-// --- UPLOAD LOGIK ---
+// --- UPLOAD & SPIEL LOGIK ---
 
 imageInput.addEventListener('change', (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -79,23 +87,64 @@ imageInput.addEventListener('change', (event: Event) => {
     }
 });
 
+
+// Bild an Server schicken
 uploadButton.addEventListener('click', () => {
-    if (!imageInput.files?.[0]) {
+    const file = imageInput.files?.[0];
+    const promptText = promptInput.value.trim();
+    if (!file) {
         alert('Bitte wähle zuerst ein Bild aus!');
         return;
     }
 
+    if (!promptText) {
+        alert('Bitte gib eine Anweisung (Prompt) ein!');
+        promptInput.focus();
+        return;
+    }
+
+    const currentRoomId = displayRoomCode.innerText;
+    if (!currentRoomId || currentRoomId === '----') {
+        alert('Du bist in keinem gültigen Raum!');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+
+    reader.onload = () => {
+        const imageBase64 = reader.result as string;
+        socket.emit('sendImage', { roomId: currentRoomId, imageBase64: imageBase64, prompt: promptText });
+    };
+
+    reader.onload = () => {
+        const imageBase64 = reader.result as string;
+
+        // Falls das Feld leer gelassen wurde, Fallback-Prompt nutzen
+        const promptText = promptInput.value.trim() || 'animate this image smoothly';
+
+        socket.emit('sendImage', {
+            roomId: currentRoomId,
+            imageBase64: imageBase64,
+            prompt: promptText
+        });
+    };
+});
+
+// Wenn die KI zu rechnen beginnt (wird bei ALLEN im Raum getriggert)
+socket.on('generationStarted', () => {
     uploadButton.disabled = true;
-    uploadButton.innerText = 'Wird generiert...';
+    uploadButton.innerText = 'KI generiert Video...';
     loadingSection.style.display = 'flex';
     videoPlayer.style.display = 'none';
+});
 
-    setTimeout(() => {
-        loadingSection.style.display = 'none';
-        uploadButton.disabled = false;
-        uploadButton.innerText = 'KI-Video generieren';
+// Wenn das Video fertig ist (wird bei ALLEN im Raum getriggert)
+socket.on('videoGenerated', (data: { videoUrl: string }) => {
+    loadingSection.style.display = 'none';
+    uploadButton.disabled = false;
+    uploadButton.innerText = 'KI-Video generieren';
 
-        videoPlayer.src = 'https://www.w3schools.com/html/mov_bbb.mp4';
-        videoPlayer.style.display = 'block';
-    }, 4000);
+    videoPlayer.src = data.videoUrl;
+    videoPlayer.style.display = 'block';
 });
