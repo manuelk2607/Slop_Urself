@@ -9,7 +9,7 @@ const io = new Server(server, { maxHttpBufferSize: 1e8 });
 
 app.use(express.static(__dirname));
 
-const HF_TOKEN = "hf_DEIN_TOKEN_HIER";
+const HF_TOKEN = "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";
 
 interface Player {
     id: string;
@@ -40,11 +40,9 @@ io.on('connection', (socket: Socket) => {
     // 1. RAUM ERSTELLEN
     socket.on('createRoom', (data: { username: string }) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
-
         rooms[roomId] = {
             players: [{ id: socket.id, name: data.username, score: 0 }]
         };
-
         socket.join(roomId);
         socket.emit('roomCreated', { roomId });
         broadcastRoomUpdate(roomId);
@@ -67,12 +65,12 @@ io.on('connection', (socket: Socket) => {
 
         room.players.push({ id: socket.id, name: data.username, score: 0 });
         socket.join(formattedRoomId);
-
         socket.emit('joinedSuccess', { roomId: formattedRoomId });
         broadcastRoomUpdate(formattedRoomId);
     });
 
-    // 3. KI-GENERIERUNG
+    // 3. 2-STUFEN KI-GENERIERUNG (Img2Img -> Img2Video)
+    // 3. 2-STUFEN KI-GENERIERUNG (InstructPix2Pix -> LTX-Video)
     socket.on('sendImage', async (data: { roomId: string; imageBase64: string; prompt: string }) => {
         const formattedRoomId = data.roomId.toUpperCase();
         const room = rooms[formattedRoomId];
@@ -83,38 +81,81 @@ io.on('connection', (socket: Socket) => {
         const author = room.players.find(p => p.id === socket.id);
         const authorName = author ? author.name : 'Ein Spieler';
 
-        io.to(formattedRoomId).emit('generationStarted');
+        console.log(`Starte 2-Stufen-Generierung für ${authorName}: "${data.prompt}"`);
+        io.to(formattedRoomId).emit('generationStarted', { step: 'Stufe 1: Transformiere Bild...' });
 
         try {
+            // Ausgangsbild vorbereiten
             const base64Data = data.imageBase64.split(',')[1];
             const mimeType = data.imageBase64.split(';')[0].split(':')[1] || 'image/png';
             const buffer = Buffer.from(base64Data, 'base64');
-            const imageBlob = new Blob([buffer], { type: mimeType });
+            const initialImageBlob = new Blob([buffer], { type: mimeType });
 
-            const hfClient = await Client.connect("Lightricks/ltx-video-distilled", {
+            // ==========================================
+            // STUFE 1: BILD TRANSFORMIEREN (InstructPix2Pix)
+            // ==========================================
+            console.log("Stufe 1: Verbinde zu timbrooks/instruct-pix2pix...");
+            const imgClient = await Client.connect("timbrooks/instruct-pix2pix", {
                 token: HF_TOKEN as `hf_${string}`
             });
 
-            const result = await hfClient.predict("/image_to_video", [
-                data.prompt,
-                "worst quality, inconsistent motion, blurry, jittery, distorted",
-                handle_file(imageBlob),
-                null,
-                512,
-                704,
-                "image-to-video",
-                4,
-                9,
-                42,
-                true,
-                1.0,
-                true
+            console.log("Stufe 1: Führe Bild-Transformation aus...");
+
+            // Exakte 8 Parameter gemäß Schnittstelle
+            const imgResult = await imgClient.predict("/generate", [
+                handle_file(initialImageBlob), // 0: Input Image
+                data.prompt,                   // 1: Edit Instruction (z.B. "make this person explode into fire")
+                25,                            // 2: Steps (25 reicht für schnelle & gute Ergebnisse)
+                "Randomize Seed",              // 3: randomize_seed
+                1371,                          // 4: seed
+                "Fix CFG",                     // 5: randomize_cfg ("Fix CFG", damit feste Werte greifen)
+                7.5,                           // 6: text_cfg_scale (Stärke des Prompts)
+                1.3                            // 7: image_cfg_scale (1.2 - 1.5 für gute Ähnlichkeit)
             ]) as any;
 
-            const videoData = result.data[0];
+            // WICHTIG: Das generierte Bild liegt bei Index 3!
+            const transformedImageData = imgResult.data[3];
+            const transformedImageUrl = transformedImageData?.url || transformedImageData?.path || transformedImageData;
+
+            console.log("Stufe 1 fertig. Transformiertes Bild URL:", transformedImageUrl);
+
+            // Bild als Blob für Stufe 2 herunterladen
+            const transformedImageRes = await fetch(transformedImageUrl);
+            const transformedBlob = await transformedImageRes.blob();
+
+
+            // Status-Update an Spieler
+            io.to(formattedRoomId).emit('generationProgress', { step: 'Stufe 2: Erstelle Video-Animation...' });
+
+            // ==========================================
+            // STUFE 2: VIDEO ANIMIEREN (LTX-Video)
+            // ==========================================
+            console.log("Stufe 2: Verbinde zu LTX-Video...");
+            const videoClient = await Client.connect("Lightricks/ltx-video-distilled", {
+                token: HF_TOKEN as `hf_${string}`
+            });
+
+            const videoResult = await videoClient.predict("/image_to_video", [
+                `${data.prompt}, realistic dynamic motion, high quality`,        // 0: Prompt
+                "blurry, motionless, static frame, distorted noise",              // 1: Negative Prompt
+                handle_file(transformedBlob),                                     // 2: Transformiertes Bild
+                null,                                                             // 3: Input Video
+                512,                                                              // 4: Height
+                704,                                                              // 5: Width
+                "image-to-video",                                                 // 6: Mode
+                4,                                                                // 7: Video Duration (4s)
+                9,                                                                // 8: Frames
+                42,                                                               // 9: Seed
+                true,                                                             // 10: Randomize Seed
+                1.8,                                                              // 11: Guidance Scale
+                true                                                              // 12: Improve Texture
+            ]) as any;
+
+            const videoData = videoResult.data[0];
             const generatedVideoUrl = videoData?.video?.url || videoData?.url || videoData;
 
-            // Video zusammen mit Ersteller-Infos ausspielen
+            console.log("Stufe 2 fertig. Video:", generatedVideoUrl);
+
             io.to(formattedRoomId).emit('videoGenerated', {
                 videoUrl: generatedVideoUrl,
                 authorId: socket.id,
@@ -122,12 +163,12 @@ io.on('connection', (socket: Socket) => {
             });
 
         } catch (error) {
-            console.error("Fehler bei KI-Generierung:", error);
-            io.to(formattedRoomId).emit('errorMsg', 'KI-Generierung fehlgeschlagen. Bitte versuche es erneut!');
+            console.error("Fehler in der 2-Stufen-Pipeline:", error);
+            io.to(formattedRoomId).emit('errorMsg', 'Generierung fehlgeschlagen. Bitte versuche es erneut!');
         }
     });
 
-    // 4. BEWERTUNG EMPFANGEN & PUNKTE VERGEBEN
+    // 4. BEWERTUNG EMPFANGEN
     socket.on('submitVote', (data: { roomId: string; points: number }) => {
         const formattedRoomId = data.roomId.toUpperCase();
         const room = rooms[formattedRoomId];

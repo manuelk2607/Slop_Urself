@@ -21,6 +21,7 @@ const imagePreview = document.getElementById('imagePreview') as HTMLImageElement
 const promptInput = document.getElementById('promptInput') as HTMLInputElement;
 const uploadButton = document.getElementById('uploadButton') as HTMLButtonElement;
 const loadingSection = document.getElementById('loadingSection') as HTMLDivElement;
+const loadingText = document.getElementById('loadingText') as HTMLParagraphElement;
 const videoPlayer = document.getElementById('videoPlayer') as HTMLVideoElement;
 const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 
@@ -139,12 +140,18 @@ uploadButton.addEventListener('click', () => {
     };
 });
 
-socket.on('generationStarted', () => {
+// Fortschrittsanzeige während der 2 Stufen
+socket.on('generationStarted', (data: { step?: string }) => {
     uploadButton.disabled = true;
-    uploadButton.innerText = 'KI generiert Video...';
+    uploadButton.innerText = 'KI arbeitet...';
     loadingSection.style.display = 'flex';
+    if (loadingText) loadingText.innerText = data?.step || 'Stufe 1: Transformiere Bild...';
     videoPlayer.style.display = 'none';
     votingSection.style.display = 'none';
+});
+
+socket.on('generationProgress', (data: { step: string }) => {
+    if (loadingText) loadingText.innerText = data.step;
 });
 
 // Video fertig -> Voting anzeigen
@@ -227,3 +234,4 @@ joinRoomButton.addEventListener('click', () => {
     }
     socket.emit('joinRoom', { roomId: code, username });
 });
+

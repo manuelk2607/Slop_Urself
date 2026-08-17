@@ -18,6 +18,7 @@ const imagePreview = document.getElementById('imagePreview');
 const promptInput = document.getElementById('promptInput');
 const uploadButton = document.getElementById('uploadButton');
 const loadingSection = document.getElementById('loadingSection');
+const loadingText = document.getElementById('loadingText');
 const videoPlayer = document.getElementById('videoPlayer');
 const customButton = document.querySelector('.custom-file-btn');
 // Voting-Elemente
@@ -122,12 +123,19 @@ uploadButton.addEventListener('click', () => {
         });
     };
 });
-socket.on('generationStarted', () => {
+// Fortschrittsanzeige während der 2 Stufen
+socket.on('generationStarted', (data) => {
     uploadButton.disabled = true;
-    uploadButton.innerText = 'KI generiert Video...';
+    uploadButton.innerText = 'KI arbeitet...';
     loadingSection.style.display = 'flex';
+    if (loadingText)
+        loadingText.innerText = (data === null || data === void 0 ? void 0 : data.step) || 'Stufe 1: Transformiere Bild...';
     videoPlayer.style.display = 'none';
     votingSection.style.display = 'none';
+});
+socket.on('generationProgress', (data) => {
+    if (loadingText)
+        loadingText.innerText = data.step;
 });
 // Video fertig -> Voting anzeigen
 socket.on('videoGenerated', (data) => {
