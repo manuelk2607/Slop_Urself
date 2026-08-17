@@ -1,45 +1,58 @@
 import express from 'express';
 import http from 'http';
-import {Server, Socket} from 'socket.io';
-import {Client, handle_file} from '@gradio/client';
+import { Server, Socket } from 'socket.io';
+import { Client, handle_file } from '@gradio/client';
 
 const app = express();
 const server = http.createServer(app);
-const HF_TOKEN = "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";
-
-// WICHTIG: Limit auf 100 MB anheben (1e8 Bytes)
-const io = new Server(server, {
-    maxHttpBufferSize: 1e8
-});
+const io = new Server(server, { maxHttpBufferSize: 1e8 });
 
 app.use(express.static(__dirname));
 
+const HF_TOKEN = "hf_DEIN_TOKEN_HIER";
+
+interface Player {
+    id: string;
+    name: string;
+    score: number;
+}
+
 interface Room {
-    players: string[];
+    players: Player[];
+    currentAuthorId?: string;
 }
 
 const rooms: Record<string, Room> = {};
 const MAX_PLAYERS = 10;
 
+function broadcastRoomUpdate(roomId: string) {
+    const room = rooms[roomId];
+    if (!room) return;
+    io.to(roomId).emit('roomDataUpdate', {
+        playerCount: room.players.length,
+        players: room.players
+    });
+}
+
 io.on('connection', (socket: Socket) => {
     console.log(`Spieler verbunden: ${socket.id}`);
 
     // 1. RAUM ERSTELLEN
-    socket.on('createRoom', () => {
+    socket.on('createRoom', (data: { username: string }) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
 
         rooms[roomId] = {
-            players: [socket.id]
+            players: [{ id: socket.id, name: data.username, score: 0 }]
         };
 
         socket.join(roomId);
-        socket.emit('roomCreated', {roomId});
-        console.log(`Raum ${roomId} erstellt.`);
+        socket.emit('roomCreated', { roomId });
+        broadcastRoomUpdate(roomId);
     });
 
     // 2. RAUM BEITRETEN
-    socket.on('joinRoom', (roomId: string) => {
-        const formattedRoomId = roomId.toUpperCase();
+    socket.on('joinRoom', (data: { roomId: string; username: string }) => {
+        const formattedRoomId = data.roomId.toUpperCase();
         const room = rooms[formattedRoomId];
 
         if (!room) {
@@ -48,88 +61,96 @@ io.on('connection', (socket: Socket) => {
         }
 
         if (room.players.length >= MAX_PLAYERS) {
-            socket.emit('errorMsg', `Raum ${formattedRoomId} ist voll! (Max. ${MAX_PLAYERS} Spieler)`);
+            socket.emit('errorMsg', `Raum ist voll! (Max. ${MAX_PLAYERS} Spieler)`);
             return;
         }
 
-        room.players.push(socket.id);
+        room.players.push({ id: socket.id, name: data.username, score: 0 });
         socket.join(formattedRoomId);
 
-        socket.emit('joinedSuccess', {roomId: formattedRoomId});
-        io.to(formattedRoomId).emit('playerCountUpdate', {count: room.players.length});
-
-        console.log(`Spieler ${socket.id} beigetreten zu ${formattedRoomId} (${room.players.length}/${MAX_PLAYERS})`);
+        socket.emit('joinedSuccess', { roomId: formattedRoomId });
+        broadcastRoomUpdate(formattedRoomId);
     });
 
-    // 3. ECHTE KI-GENERIERUNG VIA HUGGING FACE
-    // Typisierung im Event erweitern
+    // 3. KI-GENERIERUNG
     socket.on('sendImage', async (data: { roomId: string; imageBase64: string; prompt: string }) => {
         const formattedRoomId = data.roomId.toUpperCase();
+        const room = rooms[formattedRoomId];
 
-        if (!data.prompt || !data.prompt.trim()) {
-            socket.emit('errorMsg', 'Der Prompt darf nicht leer sein!');
-            return;
-        }
+        if (!room) return;
+        room.currentAuthorId = socket.id;
 
-        console.log(`Prompt für Raum ${formattedRoomId}: "${data.prompt}"`);
+        const author = room.players.find(p => p.id === socket.id);
+        const authorName = author ? author.name : 'Ein Spieler';
+
         io.to(formattedRoomId).emit('generationStarted');
 
         try {
             const base64Data = data.imageBase64.split(',')[1];
             const mimeType = data.imageBase64.split(';')[0].split(':')[1] || 'image/png';
             const buffer = Buffer.from(base64Data, 'base64');
-            const imageBlob = new Blob([buffer], {type: mimeType});
+            const imageBlob = new Blob([buffer], { type: mimeType });
 
-            console.log("Verbinde zum Hugging Face Space...");
             const hfClient = await Client.connect("Lightricks/ltx-video-distilled", {
                 token: HF_TOKEN as `hf_${string}`
             });
 
-            const minDuration = 4.0, maxDuration = 8.5;
-            const videoDuration = Number((Math.random() * (maxDuration - minDuration) + minDuration).toFixed(1));
-            console.log("Generiere Video via Space...");
-
-            // Exakte Parameterliste gemäß API-Schnittstelle (13 Argumente)
             const result = await hfClient.predict("/image_to_video", [
-                data.prompt,                                                  // 0: Prompt
-                "worst quality, inconsistent motion, blurry, jittery, distorted", // 1: Negative Prompt
-                handle_file(imageBlob),                                       // 2: Input Image
-                null,                                                         // 3: Input Video (leer bei Bild-zu-Video)
-                512,                                                          // 4: Height
-                704,                                                          // 5: Width
-                "image-to-video",                                             // 6: Mode
-                videoDuration,                                                            // 7: Video Duration (Sekunden)
-                9,                                                            // 8: Frames to use
-                42,                                                           // 9: Seed
-                true,                                                         // 10: Randomize Seed
-                1.0,                                                          // 11: Guidance Scale (CFG)
-                true                                                          // 12: Improve Texture
+                data.prompt,
+                "worst quality, inconsistent motion, blurry, jittery, distorted",
+                handle_file(imageBlob),
+                null,
+                512,
+                704,
+                "image-to-video",
+                4,
+                9,
+                42,
+                true,
+                1.0,
+                true
             ]) as any;
 
-            // Video-URL aus der Rückgabe extrahieren
             const videoData = result.data[0];
             const generatedVideoUrl = videoData?.video?.url || videoData?.url || videoData;
 
-            console.log("Video erfolgreich erstellt:", generatedVideoUrl);
+            // Video zusammen mit Ersteller-Infos ausspielen
+            io.to(formattedRoomId).emit('videoGenerated', {
+                videoUrl: generatedVideoUrl,
+                authorId: socket.id,
+                authorName: authorName
+            });
 
-            io.to(formattedRoomId).emit('videoGenerated', { videoUrl: generatedVideoUrl });
         } catch (error) {
             console.error("Fehler bei KI-Generierung:", error);
-            io.to(formattedRoomId).emit('errorMsg', 'KI-Generierung fehlgeschlagen oder überlastet. Bitte versuche es erneut!');
+            io.to(formattedRoomId).emit('errorMsg', 'KI-Generierung fehlgeschlagen. Bitte versuche es erneut!');
         }
     });
 
-    // 4. VERBINDUNG TRENNEN
+    // 4. BEWERTUNG EMPFANGEN & PUNKTE VERGEBEN
+    socket.on('submitVote', (data: { roomId: string; points: number }) => {
+        const formattedRoomId = data.roomId.toUpperCase();
+        const room = rooms[formattedRoomId];
+        if (!room || !room.currentAuthorId) return;
+
+        const author = room.players.find(p => p.id === room.currentAuthorId);
+        if (author) {
+            author.score += data.points;
+            broadcastRoomUpdate(formattedRoomId);
+        }
+    });
+
+    // 5. DISCONNECT
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
-            const index = room.players.indexOf(socket.id);
+            const index = room.players.findIndex(p => p.id === socket.id);
             if (index !== -1) {
                 room.players.splice(index, 1);
-                io.to(roomId).emit('playerCountUpdate', {count: room.players.length});
-
                 if (room.players.length === 0) {
                     delete rooms[roomId];
+                } else {
+                    broadcastRoomUpdate(roomId);
                 }
                 break;
             }
@@ -137,6 +158,4 @@ io.on('connection', (socket: Socket) => {
     });
 });
 
-server.listen(3000, () => {
-    console.log('Server läuft auf http://localhost:3000');
-});
+server.listen(3000, () => console.log('Server läuft auf http://localhost:3000'));

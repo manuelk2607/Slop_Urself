@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <title>Slop Urself!</title>
@@ -9,7 +9,10 @@
 <div class="game-container">
     <h1>Slop Urself!</h1>
 
+    <!-- 1. LOBBY -->
     <div id="lobbySection">
+        <input type="text" id="usernameInput" placeholder="Dein Spielername" maxlength="15">
+
         <p>Erstelle einen Raum oder tritt mit einem Code bei:</p>
         <button id="createRoomButton">Neuen Raum erstellen</button>
 
@@ -22,22 +25,31 @@
         <p id="lobbyError" class="error-msg"></p>
     </div>
 
+    <!-- 2. SPIEL-BEREICH -->
     <div id="gameSection" style="display: none;">
         <div class="room-bar">
             <span>Raum: <strong id="displayRoomCode">----</strong></span>
             <span>Spieler: <strong id="playerCount">1</strong>/10</span>
         </div>
 
+        <!-- Bestenliste -->
+        <div class="scoreboard">
+            <h3>🏆 Punktestand</h3>
+            <ul id="scoreList"></ul>
+        </div>
+
         <div class="upload-section">
             <input type="file" id="imageInput" accept="image/*" style="display: none;">
             <label for="imageInput" class="custom-file-btn">📸 Bild auswählen</label>
             <img id="imagePreview" alt="Bild-Vorschau" style="display: none;">
+
             <input
                     type="text"
                     id="promptInput"
                     placeholder="Prompt auf Englisch eingeben..."
                     maxlength="150"
             >
+
             <button id="uploadButton">KI-Video generieren</button>
         </div>
 
@@ -50,6 +62,18 @@
             <video id="videoPlayer" controls style="display: none;">
                 Falsches Video-Format!
             </video>
+
+            <!-- Bewertungsbereich nach der Generierung -->
+            <div id="votingSection" style="display: none;">
+                <p id="votingText">Bewerte das Video:</p>
+                <div class="vote-buttons">
+                    <button class="voteButton" data-points="1">⭐ 1</button>
+                    <button class="voteButton" data-points="2">⭐⭐ 2</button>
+                    <button class="voteButton" data-points="3">⭐⭐⭐ 3</button>
+                    <button class="voteButton" data-points="4">⭐⭐⭐⭐ 4</button>
+                    <button class="voteButton" data-points="5">⭐⭐⭐⭐⭐ 5</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>

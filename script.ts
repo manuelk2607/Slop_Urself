@@ -1,20 +1,21 @@
-// Socket.io vom Browser-Window greifen
 declare const io: () => any;
 const socket = io();
 
 // Lobby-Elemente
 const lobbySection = document.getElementById('lobbySection') as HTMLDivElement;
+const usernameInput = document.getElementById('usernameInput') as HTMLInputElement;
 const createRoomButton = document.getElementById('createRoomButton') as HTMLButtonElement;
 const joinRoomButton = document.getElementById('joinRoomButton') as HTMLButtonElement;
 const roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
 const lobbyError = document.getElementById('lobbyError') as HTMLParagraphElement;
 
-// Spiel- & Raum-Elemente
+// Spiel-Elemente
 const gameSection = document.getElementById('gameSection') as HTMLDivElement;
 const displayRoomCode = document.getElementById('displayRoomCode') as HTMLElement;
 const playerCount = document.getElementById('playerCount') as HTMLElement;
+const scoreList = document.getElementById('scoreList') as HTMLUListElement;
 
-// Upload-Elemente
+// Upload- & Prompt-Elemente
 const imageInput = document.getElementById('imageInput') as HTMLInputElement;
 const imagePreview = document.getElementById('imagePreview') as HTMLImageElement;
 const promptInput = document.getElementById('promptInput') as HTMLInputElement;
@@ -23,33 +24,57 @@ const loadingSection = document.getElementById('loadingSection') as HTMLDivEleme
 const videoPlayer = document.getElementById('videoPlayer') as HTMLVideoElement;
 const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 
+// Voting-Elemente
+const votingSection = document.getElementById('votingSection') as HTMLDivElement;
+const votingText = document.getElementById('votingText') as HTMLParagraphElement;
+const voteButtons = document.querySelectorAll('.voteButton') as NodeListOf<HTMLButtonElement>;
+
 // --- LOBBY ACTIONS ---
 
 createRoomButton.addEventListener('click', () => {
-    socket.emit('createRoom');
+    const username = usernameInput.value.trim();
+    if (!username) {
+        lobbyError.innerText = 'Bitte gib zuerst einen Spielernamen ein!';
+        usernameInput.focus();
+        return;
+    }
+    socket.emit('createRoom', { username });
 });
 
 joinRoomButton.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
     const code = roomCodeInput.value.trim();
-    if (!code) {
-        lobbyError.innerText = 'Bitte gib einen 4-stelligen Code ein!';
+
+    if (!username) {
+        lobbyError.innerText = 'Bitte gib zuerst einen Spielernamen ein!';
+        usernameInput.focus();
         return;
     }
-    socket.emit('joinRoom', code);
+    if (!code) {
+        lobbyError.innerText = 'Bitte gib einen 4-stelligen Code ein!';
+        roomCodeInput.focus();
+        return;
+    }
+    socket.emit('joinRoom', { roomId: code, username });
 });
 
-// --- LOBBY EVENTS ---
+// --- SERVER EVENTS ---
 
-socket.on('roomCreated', (data: { roomId: string }) => {
-    enterRoom(data.roomId);
-});
+socket.on('roomCreated', (data: { roomId: string }) => enterRoom(data.roomId));
+socket.on('joinedSuccess', (data: { roomId: string }) => enterRoom(data.roomId));
 
-socket.on('joinedSuccess', (data: { roomId: string }) => {
-    enterRoom(data.roomId);
-});
+socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string; name: string; score: number }[] }) => {
+    playerCount.innerText = data.playerCount.toString();
 
-socket.on('playerCountUpdate', (data: { count: number }) => {
-    playerCount.innerText = data.count.toString();
+    // Bestenliste sortieren (Höchste Punktzahl oben)
+    data.players.sort((a, b) => b.score - a.score);
+
+    scoreList.innerHTML = '';
+    data.players.forEach(p => {
+        const li = document.createElement('li');
+        li.innerText = `${p.name}: ${p.score} Pkt.`;
+        scoreList.appendChild(li);
+    });
 });
 
 socket.on('errorMsg', (msg: string) => {
@@ -70,7 +95,7 @@ function enterRoom(roomId: string) {
     displayRoomCode.innerText = roomId;
 }
 
-// --- UPLOAD & SPIEL LOGIK ---
+// --- UPLOAD LOGIK ---
 
 imageInput.addEventListener('change', (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -87,61 +112,118 @@ imageInput.addEventListener('change', (event: Event) => {
     }
 });
 
-
-// Bild an Server schicken
 uploadButton.addEventListener('click', () => {
     const file = imageInput.files?.[0];
     const promptText = promptInput.value.trim();
+
     if (!file) {
         alert('Bitte wähle zuerst ein Bild aus!');
         return;
     }
-
     if (!promptText) {
-        alert('Bitte gib einen Prompt ein!');
+        alert('Bitte gib eine Anweisung (Prompt) ein!');
         promptInput.focus();
         return;
     }
 
     const currentRoomId = displayRoomCode.innerText;
-    if (!currentRoomId || currentRoomId === '----') {
-        alert('Du bist in keinem gültigen Raum!');
-        return;
-    }
-
     const reader = new FileReader();
     reader.readAsDataURL(file);
 
     reader.onload = () => {
-        const imageBase64 = reader.result as string;
-        socket.emit('sendImage', { roomId: currentRoomId, imageBase64: imageBase64, prompt: promptText });
-    };
-
-    reader.onload = () => {
-        const imageBase64 = reader.result as string;
-
         socket.emit('sendImage', {
             roomId: currentRoomId,
-            imageBase64: imageBase64,
+            imageBase64: reader.result as string,
             prompt: promptText
         });
     };
 });
 
-// Wenn die KI zu rechnen beginnt (wird bei ALLEN im Raum getriggert)
 socket.on('generationStarted', () => {
     uploadButton.disabled = true;
     uploadButton.innerText = 'KI generiert Video...';
     loadingSection.style.display = 'flex';
     videoPlayer.style.display = 'none';
+    votingSection.style.display = 'none';
 });
 
-// Wenn das Video fertig ist (wird bei ALLEN im Raum getriggert)
-socket.on('videoGenerated', (data: { videoUrl: string }) => {
+// Video fertig -> Voting anzeigen
+socket.on('videoGenerated', (data: { videoUrl: string; authorId: string; authorName: string }) => {
     loadingSection.style.display = 'none';
     uploadButton.disabled = false;
     uploadButton.innerText = 'KI-Video generieren';
 
     videoPlayer.src = data.videoUrl;
     videoPlayer.style.display = 'block';
+
+    // Voting-Leiste einblenden
+    votingSection.style.display = 'block';
+
+    if (socket.id === data.authorId) {
+        votingText.innerText = 'Das ist dein Video! Die anderen Spieler bewerten jetzt...';
+        voteButtons.forEach(btn => btn.style.display = 'none');
+    } else {
+        votingText.innerText = `Bewerte das Video von ${data.authorName}:`;
+        voteButtons.forEach(btn => {
+            btn.style.display = 'inline-block';
+            btn.disabled = false;
+        });
+    }
+});
+
+// Voting-Klick verarbeiten
+voteButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        const points = parseInt(button.getAttribute('data-points') || '0', 10);
+        const currentRoomId = displayRoomCode.innerText;
+
+        socket.emit('submitVote', { roomId: currentRoomId, points });
+
+        // Buttons nach Stimmabgabe deaktivieren
+        voteButtons.forEach(btn => btn.disabled = true);
+        votingText.innerText = `Danke für deine Bewertung (${points} Sterne)!`;
+    });
+});
+
+// Funktion für Namensfehler
+function triggerNameError() {
+    lobbyError.innerText = '⚠️ Bitte gib zuerst einen Spielernamen ein!';
+    usernameInput.classList.add('input-error');
+    usernameInput.focus();
+}
+
+// Fehler zurücksetzen, sobald der Spieler zu tippen beginnt
+usernameInput.addEventListener('input', () => {
+    if (usernameInput.value.trim().length > 0) {
+        lobbyError.innerText = '';
+        usernameInput.classList.remove('input-error');
+    }
+});
+
+// Bei Raum-Erstellung prüfen
+createRoomButton.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
+    if (!username) {
+        triggerNameError();
+        return;
+    }
+    socket.emit('createRoom', { username });
+});
+
+// Bei Raum-Beitritt prüfen
+joinRoomButton.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
+    const code = roomCodeInput.value.trim();
+
+    if (!username) {
+        triggerNameError();
+        return;
+    }
+    if (!code) {
+        lobbyError.innerText = '⚠️ Bitte gib einen 4-stelligen Raumcode ein!';
+        roomCodeInput.classList.add('input-error');
+        roomCodeInput.focus();
+        return;
+    }
+    socket.emit('joinRoom', { roomId: code, username });
 });
