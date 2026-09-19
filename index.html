@@ -2,81 +2,174 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Slop Urself!</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="game-container">
-    <h1>Slop Urself!</h1>
 
-    <!-- 1. LOBBY -->
-    <div id="lobbySection">
+    <!-- HEADER (Immer sichtbar im Spiel) -->
+    <header id="gameHeader" style="display: none;">
+        <div class="header-info">
+            <span>Raum: <strong id="displayRoomCode">----</strong></span>
+            <span>Spieler: <strong id="playerCount">1</strong></span>
+            <span>Runde: <strong id="roundCounter">1/1</strong></span>
+        </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 1: LOBBY                            -->
+    <!-- ========================================== -->
+    <section id="screenLobby" class="game-screen active-screen">
+        <h1>Slop Urself!</h1>
         <input type="text" id="usernameInput" placeholder="Dein Spielername" maxlength="15">
+        <label class="field-label" for="roundCountInput">Runden</label>
+        <input type="number" id="roundCountInput" min="1" max="5" value="5">
+        <p id="roundLimitHint" class="hint-text">Maximal 5 Runden pro Spiel.</p>
 
         <p>Erstelle einen Raum oder tritt mit einem Code bei:</p>
-        <button id="createRoomButton">Neuen Raum erstellen</button>
+        <button id="createRoomButton" class="btn-primary">Neuen Raum erstellen</button>
+        <button id="statsButton" class="btn-muted" type="button">Statistiken ansehen</button>
 
         <div class="divider">oder</div>
 
         <div class="join-group">
             <input type="text" id="roomCodeInput" placeholder="CODE" maxlength="4">
-            <button id="joinRoomButton">Beitreten</button>
+            <button id="joinRoomButton" class="btn-secondary">Beitreten</button>
         </div>
         <p id="lobbyError" class="error-msg"></p>
-    </div>
+    </section>
 
-    <!-- 2. SPIEL-BEREICH -->
-    <div id="gameSection" style="display: none;">
-        <div class="room-bar">
-            <span>Raum: <strong id="displayRoomCode">----</strong></span>
-            <span>Spieler: <strong id="playerCount">1</strong>/10</span>
-        </div>
+    <!-- ========================================== -->
+    <!-- SCREEN 2: STATISTIKEN                      -->
+    <!-- ========================================== -->
+    <section id="screenStats" class="game-screen" style="display: none;">
+        <h2>Statistiken</h2>
+        <p id="statsNotice" class="subtitle"></p>
+        <ul id="statsList" class="scoreboard-list"></ul>
+        <button id="backToLobbyButton" class="btn-secondary" type="button">Zurueck</button>
+    </section>
 
-        <!-- Bestenliste -->
-        <div class="scoreboard">
-            <h3>🏆 Punktestand</h3>
-            <ul id="scoreList"></ul>
-        </div>
+    <!-- ========================================== -->
+    <!-- SCREEN 3: RAUM-LOBBY                       -->
+    <!-- ========================================== -->
+    <section id="screenRoomLobby" class="game-screen" style="display: none;">
+        <h2>Raum-Lobby</h2>
+        <p id="hostNotice" class="subtitle">Warte auf den Host...</p>
 
-        <div class="upload-section">
-            <input type="file" id="imageInput" accept="image/*" style="display: none;">
-            <label for="imageInput" class="custom-file-btn">📸 Bild auswählen</label>
-            <img id="imagePreview" alt="Bild-Vorschau" style="display: none;">
+        <ul id="lobbyPlayerList" class="scoreboard-list"></ul>
 
-            <input
-                    type="text"
-                    id="promptInput"
-                    value="make this person explode into fire and black smoke"
-                    placeholder="Prompt auf Englisch eingeben..."
-                    maxlength="150"
-            >
+        <button id="startGameButton" class="btn-primary">Spiel starten</button>
+    </section>
 
-            <button id="uploadButton">KI-Video generieren</button>
-        </div>
+    <!-- ========================================== -->
+    <!-- SCREEN 4: ERSTELLEN & WARTEN               -->
+    <!-- ========================================== -->
+    <section id="screenCreate" class="game-screen" style="display: none;">
 
-        <div id="loadingSection" style="display: none;">
-            <div class="spinner"></div>
-            <p id="loadingText">Die KI verarbeitet dein Bild...</p>
-        </div>
+        <!-- 2A: WIRD NUR DEM AKTIVEN SPIELER ANGEZEIGT -->
+        <div id="creatorControls" style="display: none;">
+            <h2>🎨 Du bist an der Reihe!</h2>
+            <p class="subtitle">Wähle ein Bild und gib eine Anweisung ein:</p>
 
-        <div class="video-section">
-            <video id="videoPlayer" controls style="display: none;">
-                Falsches Video-Format!
-            </video>
+            <div class="upload-section">
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                <label for="imageInput" class="custom-file-btn">📸 Bild auswählen</label>
+                <img id="imagePreview" alt="Vorschau" style="display: none;">
 
-            <!-- Bewertungsbereich nach der Generierung -->
-            <div id="votingSection" style="display: none;">
-                <p id="votingText">Bewerte das Video:</p>
-                <div class="vote-buttons">
-                    <button class="voteButton" data-points="1">⭐ 1</button>
-                    <button class="voteButton" data-points="2">⭐⭐ 2</button>
-                    <button class="voteButton" data-points="3">⭐⭐⭐ 3</button>
-                    <button class="voteButton" data-points="4">⭐⭐⭐⭐ 4</button>
-                    <button class="voteButton" data-points="5">⭐⭐⭐⭐⭐ 5</button>
-                </div>
+                <input
+                        type="text"
+                        id="promptInput"
+                        placeholder="Was soll passieren? (z.B. make this person explode into fire)"
+                        maxlength="150"
+                >
+
+                <button id="uploadButton" class="btn-primary">KI-Video generieren</button>
             </div>
         </div>
-    </div>
+
+        <!-- 2B: WIRD ALLEN WARTENDEN SPIELERN ANGEZEIGT -->
+        <div id="waitControls" style="display: none;">
+            <h2>⏳ Bitte warten...</h2>
+            <div class="spinner"></div>
+            <p id="waitNoticeText" style="font-size: 1.1rem; margin-top: 15px;">
+                <strong>Spieler</strong> erstellt gerade ein Video...
+            </p>
+        </div>
+
+        <!-- Lade-Status während der KI-Berechnung (für alle sichtbar) -->
+        <div id="loadingSection" style="display: none;">
+            <div class="spinner"></div>
+            <p id="loadingText">KI berechnet das Video...</p>
+        </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 5: SEPARATE VOTING-SEITE            -->
+    <!-- ========================================== -->
+    <section id="screenVoting" class="game-screen" style="display: none;">
+        <h2 id="votingTitle">🎬 Film ab!</h2>
+        <p id="authorNotice" class="subtitle"></p>
+
+        <div class="video-container">
+            <video id="votingVideoPlayer" controls autoplay loop playsinline>
+                Dein Browser unterstützt keine Videos.
+            </video>
+        </div>
+
+        <!-- Voting-Bereich für Mitspieler -->
+        <div id="votingActionBox">
+            <h3>Bewerte das Meisterwerk:</h3>
+            <div class="vote-buttons">
+                <button class="voteBtn" data-points="1">⭐ 1</button>
+                <button class="voteBtn" data-points="2">⭐⭐ 2</button>
+                <button class="voteBtn" data-points="3">⭐⭐⭐ 3</button>
+                <button class="voteBtn" data-points="4">⭐⭐⭐⭐ 4</button>
+                <button class="voteBtn" data-points="5">⭐⭐⭐⭐⭐ 5</button>
+            </div>
+        </div>
+
+        <!-- Warte-Status -->
+        <div id="votingWaitingBox" style="display: none;">
+            <div class="pulse-dot"></div>
+            <p id="votingStatusText">Warte auf Bewertungen der anderen Spieler...</p>
+        </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 6: ERGEBNISSE & HIGHSCORES          -->
+    <!-- ========================================== -->
+    <section id="screenResult" class="game-screen" style="display: none;">
+        <h2>🏆 Runden-Ergebnis</h2>
+
+        <div class="round-card">
+            <h3 id="resultAuthorName">Spieler</h3>
+            <p id="resultPointsSummary">+0 Punkte erhalten</p>
+        </div>
+
+        <h3>Rangliste</h3>
+        <ul id="scoreList" class="scoreboard-list"></ul>
+
+        <button id="nextRoundButton" class="btn-primary">Nächste Runde starten 🚀</button>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 7: FINALES ERGEBNIS                 -->
+    <!-- ========================================== -->
+    <section id="screenGameOver" class="game-screen" style="display: none;">
+        <h2>Spiel beendet</h2>
+
+        <div class="round-card">
+            <h3 id="winnerName">Gewinner</h3>
+            <p>Finale Rangliste</p>
+        </div>
+
+        <ul id="finalScoreList" class="scoreboard-list"></ul>
+
+        <button id="restartButton" class="btn-primary">Neues Spiel starten</button>
+    </section>
+
 </div>
 
 <script src="/socket.io/socket.io.js"></script>

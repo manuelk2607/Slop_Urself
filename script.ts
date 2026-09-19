@@ -1,205 +1,185 @@
 declare const io: () => any;
 const socket = io();
 
-// Lobby-Elemente
-const lobbySection = document.getElementById('lobbySection') as HTMLDivElement;
-const usernameInput = document.getElementById('usernameInput') as HTMLInputElement;
-const createRoomButton = document.getElementById('createRoomButton') as HTMLButtonElement;
-const joinRoomButton = document.getElementById('joinRoomButton') as HTMLButtonElement;
-const roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
-const lobbyError = document.getElementById('lobbyError') as HTMLParagraphElement;
-
-// Spiel-Elemente
-const gameSection = document.getElementById('gameSection') as HTMLDivElement;
+// Header
+const gameHeader = document.getElementById('gameHeader') as HTMLElement;
 const displayRoomCode = document.getElementById('displayRoomCode') as HTMLElement;
 const playerCount = document.getElementById('playerCount') as HTMLElement;
-const scoreList = document.getElementById('scoreList') as HTMLUListElement;
+const roundCounter = document.getElementById('roundCounter') as HTMLElement;
 
-// Upload- & Prompt-Elemente
+// Screens
+const screenLobby = document.getElementById('screenLobby') as HTMLElement;
+const screenStats = document.getElementById('screenStats') as HTMLElement;
+const screenRoomLobby = document.getElementById('screenRoomLobby') as HTMLElement;
+const screenCreate = document.getElementById('screenCreate') as HTMLElement;
+const screenVoting = document.getElementById('screenVoting') as HTMLElement;
+const screenResult = document.getElementById('screenResult') as HTMLElement;
+const screenGameOver = document.getElementById('screenGameOver') as HTMLElement;
+
+// Lobby-Elemente
+const usernameInput = document.getElementById('usernameInput') as HTMLInputElement;
+const roundCountInput = document.getElementById('roundCountInput') as HTMLInputElement;
+const roundLimitHint = document.getElementById('roundLimitHint') as HTMLParagraphElement;
+const createRoomButton = document.getElementById('createRoomButton') as HTMLButtonElement;
+const joinRoomButton = document.getElementById('joinRoomButton') as HTMLButtonElement;
+const statsButton = document.getElementById('statsButton') as HTMLButtonElement;
+const backToLobbyButton = document.getElementById('backToLobbyButton') as HTMLButtonElement;
+const roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
+const lobbyError = document.getElementById('lobbyError') as HTMLParagraphElement;
+const statsNotice = document.getElementById('statsNotice') as HTMLParagraphElement;
+const statsList = document.getElementById('statsList') as HTMLUListElement;
+const hostNotice = document.getElementById('hostNotice') as HTMLParagraphElement;
+const lobbyPlayerList = document.getElementById('lobbyPlayerList') as HTMLUListElement;
+const startGameButton = document.getElementById('startGameButton') as HTMLButtonElement;
+
+// Create / Wait-Elemente
+const creatorControls = document.getElementById('creatorControls') as HTMLDivElement;
+const waitControls = document.getElementById('waitControls') as HTMLDivElement;
+const waitNoticeText = document.getElementById('waitNoticeText') as HTMLParagraphElement;
 const imageInput = document.getElementById('imageInput') as HTMLInputElement;
 const imagePreview = document.getElementById('imagePreview') as HTMLImageElement;
 const promptInput = document.getElementById('promptInput') as HTMLInputElement;
 const uploadButton = document.getElementById('uploadButton') as HTMLButtonElement;
+const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 const loadingSection = document.getElementById('loadingSection') as HTMLDivElement;
 const loadingText = document.getElementById('loadingText') as HTMLParagraphElement;
-const videoPlayer = document.getElementById('videoPlayer') as HTMLVideoElement;
-const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 
 // Voting-Elemente
-const votingSection = document.getElementById('votingSection') as HTMLDivElement;
-const votingText = document.getElementById('votingText') as HTMLParagraphElement;
-const voteButtons = document.querySelectorAll('.voteButton') as NodeListOf<HTMLButtonElement>;
+const authorNotice = document.getElementById('authorNotice') as HTMLParagraphElement;
+const votingVideoPlayer = document.getElementById('votingVideoPlayer') as HTMLVideoElement;
+const votingActionBox = document.getElementById('votingActionBox') as HTMLDivElement;
+const votingWaitingBox = document.getElementById('votingWaitingBox') as HTMLDivElement;
+const votingStatusText = document.getElementById('votingStatusText') as HTMLParagraphElement;
+const voteButtons = document.querySelectorAll('.voteBtn') as NodeListOf<HTMLButtonElement>;
 
-// --- LOBBY ACTIONS ---
+// Result-Elemente
+const resultAuthorName = document.getElementById('resultAuthorName') as HTMLElement;
+const resultPointsSummary = document.getElementById('resultPointsSummary') as HTMLParagraphElement;
+const scoreList = document.getElementById('scoreList') as HTMLUListElement;
+const nextRoundButton = document.getElementById('nextRoundButton') as HTMLButtonElement;
+const winnerName = document.getElementById('winnerName') as HTMLElement;
+const finalScoreList = document.getElementById('finalScoreList') as HTMLUListElement;
+const restartButton = document.getElementById('restartButton') as HTMLButtonElement;
 
-createRoomButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    if (!username) {
-        lobbyError.innerText = 'Bitte gib zuerst einen Spielernamen ein!';
-        usernameInput.focus();
-        return;
-    }
-    socket.emit('createRoom', { username });
-});
+let previewObjectUrl: string | null = null;
+let currentRoomId = '';
+let currentHostId = '';
+let aiRoundLimit = 5;
 
-joinRoomButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    const code = roomCodeInput.value.trim();
-
-    if (!username) {
-        lobbyError.innerText = 'Bitte gib zuerst einen Spielernamen ein!';
-        usernameInput.focus();
-        return;
-    }
-    if (!code) {
-        lobbyError.innerText = 'Bitte gib einen 4-stelligen Code ein!';
-        roomCodeInput.focus();
-        return;
-    }
-    socket.emit('joinRoom', { roomId: code, username });
-});
-
-// --- SERVER EVENTS ---
-
-socket.on('roomCreated', (data: { roomId: string }) => enterRoom(data.roomId));
-socket.on('joinedSuccess', (data: { roomId: string }) => enterRoom(data.roomId));
-
-socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string; name: string; score: number }[] }) => {
-    playerCount.innerText = data.playerCount.toString();
-
-    // Bestenliste sortieren (Höchste Punktzahl oben)
-    data.players.sort((a, b) => b.score - a.score);
-
-    scoreList.innerHTML = '';
-    data.players.forEach(p => {
-        const li = document.createElement('li');
-        li.innerText = `${p.name}: ${p.score} Pkt.`;
-        scoreList.appendChild(li);
-    });
-});
-
-socket.on('errorMsg', (msg: string) => {
-    if (lobbySection.style.display !== 'none') {
-        lobbyError.innerText = msg;
-    } else {
-        alert(msg);
-        uploadButton.disabled = false;
-        uploadButton.innerText = 'KI-Video generieren';
-        loadingSection.style.display = 'none';
-    }
-});
-
-function enterRoom(roomId: string) {
-    lobbyError.innerText = '';
-    lobbySection.style.display = 'none';
-    gameSection.style.display = 'block';
-    displayRoomCode.innerText = roomId;
+// --- SCREEN SWITCHER ---
+function showScreen(screenToShow: HTMLElement) {
+    [screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
+    screenToShow.style.display = 'block';
 }
 
-// --- UPLOAD LOGIK ---
-
-imageInput.addEventListener('change', (event: Event) => {
-    const target = event.target as HTMLInputElement;
-    const file = target.files?.[0];
-
-    if (file) {
-        imagePreview.src = URL.createObjectURL(file);
-        imagePreview.style.display = 'block';
-        if (customButton) customButton.innerText = '📸 Anderes Bild auswählen';
-    } else {
-        imagePreview.style.display = 'none';
-        imagePreview.src = '';
-        if (customButton) customButton.innerText = '📸 Bild auswählen';
+function clearImagePreview() {
+    if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = null;
     }
-});
+    imageInput.value = '';
+    imagePreview.style.display = 'none';
+    imagePreview.src = '';
+    if (customButton) customButton.innerText = 'Bild auswählen';
+}
 
-uploadButton.addEventListener('click', () => {
-    const file = imageInput.files?.[0];
-    const promptText = promptInput.value.trim();
+function renderScoreList(target: HTMLUListElement, players: { id: string; name: string; score: number }[]) {
+    target.innerHTML = '';
 
-    if (!file) {
-        alert('Bitte wähle zuerst ein Bild aus!');
-        return;
-    }
-    if (!promptText) {
-        alert('Bitte gib eine Anweisung (Prompt) ein!');
-        promptInput.focus();
-        return;
-    }
+    [...players].sort((a, b) => b.score - a.score).forEach((p, index) => {
+        const li = document.createElement('li');
+        li.className = `score-item ${index === 0 ? 'leader' : ''}`;
 
-    const currentRoomId = displayRoomCode.innerText;
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
+        const playerInfo = document.createElement('div');
+        playerInfo.className = 'player-info';
 
-    reader.onload = () => {
-        socket.emit('sendImage', {
-            roomId: currentRoomId,
-            imageBase64: reader.result as string,
-            prompt: promptText
-        });
-    };
-});
+        const rankBadge = document.createElement('span');
+        rankBadge.className = 'rank-badge';
+        rankBadge.innerText = `#${index + 1}`;
 
-// Fortschrittsanzeige während der 2 Stufen
-socket.on('generationStarted', (data: { step?: string }) => {
-    uploadButton.disabled = true;
-    uploadButton.innerText = 'KI arbeitet...';
-    loadingSection.style.display = 'flex';
-    if (loadingText) loadingText.innerText = data?.step || 'Stufe 1: Transformiere Bild...';
-    videoPlayer.style.display = 'none';
-    votingSection.style.display = 'none';
-});
+        const name = document.createElement('span');
+        name.className = 'player-name';
+        name.innerText = p.name;
 
-socket.on('generationProgress', (data: { step: string }) => {
-    if (loadingText) loadingText.innerText = data.step;
-});
+        const score = document.createElement('span');
+        score.className = 'score-badge';
+        score.innerText = `${p.score} Pkt.`;
 
-// Video fertig -> Voting anzeigen
-socket.on('videoGenerated', (data: { videoUrl: string; authorId: string; authorName: string }) => {
-    loadingSection.style.display = 'none';
-    uploadButton.disabled = false;
-    uploadButton.innerText = 'KI-Video generieren';
-
-    videoPlayer.src = data.videoUrl;
-    videoPlayer.style.display = 'block';
-
-    // Voting-Leiste einblenden
-    votingSection.style.display = 'block';
-
-    if (socket.id === data.authorId) {
-        votingText.innerText = 'Das ist dein Video! Die anderen Spieler bewerten jetzt...';
-        voteButtons.forEach(btn => btn.style.display = 'none');
-    } else {
-        votingText.innerText = `Bewerte das Video von ${data.authorName}:`;
-        voteButtons.forEach(btn => {
-            btn.style.display = 'inline-block';
-            btn.disabled = false;
-        });
-    }
-});
-
-// Voting-Klick verarbeiten
-voteButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        const points = parseInt(button.getAttribute('data-points') || '0', 10);
-        const currentRoomId = displayRoomCode.innerText;
-
-        socket.emit('submitVote', { roomId: currentRoomId, points });
-
-        // Buttons nach Stimmabgabe deaktivieren
-        voteButtons.forEach(btn => btn.disabled = true);
-        votingText.innerText = `Danke für deine Bewertung (${points} Sterne)!`;
+        playerInfo.append(rankBadge, name);
+        li.append(playerInfo, score);
+        target.appendChild(li);
     });
-});
+}
 
-// Funktion für Namensfehler
+function renderLobbyPlayers(players: { id: string; name: string; score: number }[]) {
+    lobbyPlayerList.innerHTML = '';
+
+    players.forEach((player, index) => {
+        const li = document.createElement('li');
+        li.className = 'score-item';
+
+        const playerInfo = document.createElement('div');
+        playerInfo.className = 'player-info';
+
+        const rankBadge = document.createElement('span');
+        rankBadge.className = 'rank-badge';
+        rankBadge.innerText = `${index + 1}`;
+
+        const name = document.createElement('span');
+        name.className = 'player-name';
+        name.innerText = player.id === currentHostId ? `${player.name} (Host)` : player.name;
+
+        playerInfo.append(rankBadge, name);
+        li.appendChild(playerInfo);
+        lobbyPlayerList.appendChild(li);
+    });
+}
+
+function renderStats(players: { name: string; gamesPlayed: number; roundsCreated: number; totalScore: number; votesGiven: number; averageVoteGiven: number }[]) {
+    statsList.innerHTML = '';
+
+    if (players.length === 0) {
+        statsNotice.innerText = 'Noch keine gespeicherten Runden vorhanden.';
+        return;
+    }
+
+    statsNotice.innerText = 'Gespeicherte Gesamtwertung ueber alle Spiele.';
+    players.forEach((player, index) => {
+        const li = document.createElement('li');
+        li.className = `score-item ${index === 0 ? 'leader' : ''}`;
+
+        const playerInfo = document.createElement('div');
+        playerInfo.className = 'player-info';
+
+        const rankBadge = document.createElement('span');
+        rankBadge.className = 'rank-badge';
+        rankBadge.innerText = `#${index + 1}`;
+
+        const name = document.createElement('span');
+        name.className = 'player-name';
+        name.innerText = player.name;
+
+        const details = document.createElement('span');
+        details.className = 'stat-details';
+        details.innerText = `${player.gamesPlayed} Spiele · ${player.roundsCreated} Runden · Ø Vote ${player.averageVoteGiven}`;
+
+        const score = document.createElement('span');
+        score.className = 'score-badge';
+        score.innerText = `${player.totalScore} Pkt.`;
+
+        playerInfo.append(rankBadge, name, details);
+        li.append(playerInfo, score);
+        statsList.appendChild(li);
+    });
+}
+
+// --- LOBBY ACTIONS ---
 function triggerNameError() {
     lobbyError.innerText = '⚠️ Bitte gib zuerst einen Spielernamen ein!';
     usernameInput.classList.add('input-error');
     usernameInput.focus();
 }
 
-// Fehler zurücksetzen, sobald der Spieler zu tippen beginnt
 usernameInput.addEventListener('input', () => {
     if (usernameInput.value.trim().length > 0) {
         lobbyError.innerText = '';
@@ -207,25 +187,34 @@ usernameInput.addEventListener('input', () => {
     }
 });
 
-// Bei Raum-Erstellung prüfen
+async function loadGameConfig() {
+    try {
+        const response = await fetch('/api/config');
+        if (!response.ok) return;
+
+        const config = await response.json() as { aiRoundLimit: number; mockAi: boolean };
+        aiRoundLimit = Math.max(Number(config.aiRoundLimit) || 5, 1);
+        roundCountInput.max = String(aiRoundLimit);
+        roundCountInput.value = String(Math.min(Number(roundCountInput.value) || aiRoundLimit, aiRoundLimit));
+        roundLimitHint.innerText = `Maximal ${aiRoundLimit} Runden pro Spiel, passend zum aktuellen KI-Limit.`;
+    } catch {
+        roundLimitHint.innerText = 'Maximal 5 Runden pro Spiel.';
+    }
+}
+
+void loadGameConfig();
+
 createRoomButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
-    if (!username) {
-        triggerNameError();
-        return;
-    }
-    socket.emit('createRoom', { username });
+    const maxRounds = Math.min(Math.max(Number(roundCountInput.value) || aiRoundLimit, 1), aiRoundLimit);
+    if (!username) return triggerNameError();
+    socket.emit('createRoom', { username, maxRounds });
 });
 
-// Bei Raum-Beitritt prüfen
 joinRoomButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
     const code = roomCodeInput.value.trim();
-
-    if (!username) {
-        triggerNameError();
-        return;
-    }
+    if (!username) return triggerNameError();
     if (!code) {
         lobbyError.innerText = '⚠️ Bitte gib einen 4-stelligen Raumcode ein!';
         roomCodeInput.classList.add('input-error');
@@ -235,3 +224,231 @@ joinRoomButton.addEventListener('click', () => {
     socket.emit('joinRoom', { roomId: code, username });
 });
 
+function enterRoom(roomId: string) {
+    currentRoomId = roomId;
+    displayRoomCode.innerText = roomId;
+    gameHeader.style.display = 'block';
+    showScreen(screenRoomLobby);
+}
+
+socket.on('roomCreated', (data: { roomId: string }) => enterRoom(data.roomId));
+socket.on('joinedSuccess', (data: { roomId: string }) => enterRoom(data.roomId));
+
+socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string; name: string; score: number }[]; hostId: string; gameState: string; currentRound: number; maxRounds: number }) => {
+    playerCount.innerText = data.playerCount.toString();
+    roundCounter.innerText = `${data.currentRound}/${data.maxRounds}`;
+    currentHostId = data.hostId;
+
+    if (data.gameState === 'LOBBY') {
+        const isHost = socket.id === data.hostId;
+        renderLobbyPlayers(data.players);
+        hostNotice.innerText = isHost
+            ? 'Alle bereit? Starte die Partie, sobald genug Spieler im Raum sind.'
+            : 'Warte darauf, dass der Host die Partie startet.';
+        startGameButton.style.display = isHost ? 'block' : 'none';
+        showScreen(screenRoomLobby);
+    }
+});
+
+socket.on('errorMsg', (msg: string) => {
+    if (screenLobby.style.display !== 'none') {
+        lobbyError.innerText = msg;
+    } else {
+        alert(msg);
+        uploadButton.disabled = false;
+        uploadButton.innerText = 'KI-Video generieren';
+        loadingSection.style.display = 'none';
+    }
+});
+
+startGameButton.addEventListener('click', () => {
+    socket.emit('startGame', { roomId: currentRoomId || displayRoomCode.innerText });
+});
+
+statsButton.addEventListener('click', async () => {
+    showScreen(screenStats);
+    statsNotice.innerText = 'Lade Statistiken...';
+    statsList.innerHTML = '';
+
+    try {
+        const response = await fetch('/api/stats');
+        if (!response.ok) throw new Error('Statistik-Request fehlgeschlagen');
+
+        const data = await response.json() as {
+            databaseEnabled: boolean;
+            players: { name: string; gamesPlayed: number; roundsCreated: number; totalScore: number; votesGiven: number; averageVoteGiven: number }[];
+        };
+
+        if (!data.databaseEnabled) {
+            statsNotice.innerText = 'Keine Datenbank verbunden. Setze DATABASE_URL, um Statistiken zu speichern.';
+            return;
+        }
+
+        renderStats(data.players);
+    } catch {
+        statsNotice.innerText = 'Statistiken konnten nicht geladen werden.';
+    }
+});
+
+backToLobbyButton.addEventListener('click', () => {
+    showScreen(screenLobby);
+});
+
+// --- SCREEN 2: ERSTELLEN vs. WARTEN ---
+socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string }) => {
+    showScreen(screenCreate);
+    loadingSection.style.display = 'none';
+
+    // Formular aufräumen
+    clearImagePreview();
+    uploadButton.disabled = false;
+    uploadButton.innerText = 'KI-Video generieren';
+
+    const isMe = (socket.id === data.activeCreatorId);
+
+    if (isMe) {
+        // Dieser Spieler darf erstellen
+        creatorControls.style.display = 'block';
+        waitControls.style.display = 'none';
+    } else {
+        // Alle anderen müssen warten
+        creatorControls.style.display = 'none';
+        waitControls.style.display = 'block';
+        waitNoticeText.innerText = `${data.activeCreatorName} denkt sich gerade ein Meisterwerk aus...`;
+    }
+});
+
+imageInput.addEventListener('change', (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) {
+        if (!file.type.startsWith('image/')) {
+            alert('Bitte wähle eine Bilddatei aus.');
+            clearImagePreview();
+            return;
+        }
+
+        if (file.size > 8 * 1024 * 1024) {
+            alert('Das Bild ist zu groß. Bitte nutze maximal 8 MB.');
+            clearImagePreview();
+            return;
+        }
+
+        if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = URL.createObjectURL(file);
+        imagePreview.src = previewObjectUrl;
+        imagePreview.style.display = 'block';
+        if (customButton) customButton.innerText = 'Anderes Bild auswählen';
+    } else {
+        clearImagePreview();
+    }
+});
+
+uploadButton.addEventListener('click', () => {
+    const file = imageInput.files?.[0];
+    const promptText = promptInput.value.trim();
+
+    if (!file) return alert('Bitte wähle zuerst ein Bild aus!');
+    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+        alert('Bitte wähle ein gültiges Bild bis maximal 8 MB aus.');
+        return;
+    }
+    if (!promptText) {
+        alert('Bitte gib eine Anweisung ein!');
+        promptInput.focus();
+        return;
+    }
+
+    uploadButton.disabled = true;
+    uploadButton.innerText = 'Wird hochgeladen...';
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+        socket.emit('sendImage', {
+            roomId: displayRoomCode.innerText,
+            imageBase64: reader.result as string,
+            prompt: promptText
+        });
+    };
+    reader.onerror = () => {
+        alert('Das Bild konnte nicht gelesen werden.');
+        uploadButton.disabled = false;
+        uploadButton.innerText = 'KI-Video generieren';
+    };
+});
+
+socket.on('generationStarted', (data: { authorName: string; step: string }) => {
+    creatorControls.style.display = 'none';
+    waitControls.style.display = 'none';
+    loadingSection.style.display = 'block';
+    loadingText.innerText = `⏳ ${data.authorName} generiert... (${data.step})`;
+});
+
+socket.on('generationProgress', (data: { step: string }) => {
+    loadingText.innerText = data.step;
+});
+
+// --- SCREEN 3: VOTING ---
+socket.on('showVotingScreen', (data: { videoUrl: string; authorId: string; authorName: string }) => {
+    showScreen(screenVoting);
+    votingVideoPlayer.src = data.videoUrl;
+    votingVideoPlayer.play().catch(() => {});
+
+    const isMe = (socket.id === data.authorId);
+
+    if (isMe) {
+        authorNotice.innerText = '🎬 Das ist dein Video! Die anderen bewerten jetzt...';
+        votingActionBox.style.display = 'none';
+        votingWaitingBox.style.display = 'block';
+        votingStatusText.innerText = 'Warte auf Bewertungen...';
+    } else {
+        authorNotice.innerText = `🎬 Video erstellt von: ${data.authorName}`;
+        votingActionBox.style.display = 'block';
+        votingWaitingBox.style.display = 'none';
+        voteButtons.forEach(btn => btn.disabled = false);
+    }
+});
+
+socket.on('voteProgress', (data: { voted: number; total: number }) => {
+    votingStatusText.innerText = `Stimmen erhalten: ${data.voted}/${data.total}`;
+});
+
+voteButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const points = parseInt(btn.getAttribute('data-points') || '0', 10);
+        socket.emit('submitVote', { roomId: displayRoomCode.innerText, points });
+
+        votingActionBox.style.display = 'none';
+        votingWaitingBox.style.display = 'block';
+        votingStatusText.innerText = `Du hast ${points} Sterne gegeben! Warte auf die anderen...`;
+    });
+});
+
+// SCREEN 4: ERGEBNISSE & HIGHSCORE
+socket.on('showResultsScreen', (data: { authorName: string; roundPoints: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; isFinalRound: boolean }) => {
+    showScreen(screenResult);
+
+    resultAuthorName.innerText = `Video von ${data.authorName}`;
+    resultPointsSummary.innerText = `+${data.roundPoints} Punkte in dieser Runde`;
+    nextRoundButton.style.display = data.isFinalRound ? 'none' : 'block';
+    nextRoundButton.innerText = `Runde ${data.currentRound + 1} starten`;
+
+    renderScoreList(scoreList, data.players);
+});
+
+// Nächste Runde triggern (jeder Spieler kann den Button klicken)
+nextRoundButton.addEventListener('click', () => {
+    socket.emit('startNextRound', { roomId: displayRoomCode.innerText });
+});
+
+socket.on('showGameOverScreen', (data: { players: { id: string; name: string; score: number }[]; maxRounds: number }) => {
+    showScreen(screenGameOver);
+    const winner = data.players[0];
+    winnerName.innerText = winner ? `${winner.name} gewinnt mit ${winner.score} Punkten` : 'Keine Wertung vorhanden';
+    renderScoreList(finalScoreList, data.players);
+});
+
+restartButton.addEventListener('click', () => {
+    window.location.reload();
+});
