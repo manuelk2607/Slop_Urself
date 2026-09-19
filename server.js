@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 const express_1 = __importDefault(require("express"));
@@ -25,12 +26,19 @@ const server = http_1.default.createServer(app);
 const io = new socket_io_1.Server(server, { maxHttpBufferSize: 1e8 });
 app.use(express_1.default.static(__dirname));
 const HF_TOKEN = process.env.HF_TOKEN;
-const USE_MOCK_AI = process.env.USE_MOCK_AI !== 'false';
 const PORT = Number(process.env.PORT) || 3000;
 const MIN_ROUNDS = 1;
 const AI_ROUND_LIMIT = Math.max(Number(process.env.AI_ROUND_LIMIT) || 5, MIN_ROUNDS);
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const AI_PROVIDER = parseAiProvider((_a = process.env.AI_PROVIDER) !== null && _a !== void 0 ? _a : (process.env.USE_MOCK_AI === 'false' ? 'ltx' : 'mock'));
+const HF_SPACE_ID = process.env.HF_SPACE_ID || 'Lightricks/ltx-video-distilled';
+const HF_PREDICT_ENDPOINT = process.env.HF_PREDICT_ENDPOINT || '/image_to_video';
 const rooms = {};
+function parseAiProvider(value) {
+    if (value === 'ltx' || value === 'wan')
+        return value;
+    return 'mock';
+}
 function sanitizeUsername(username) {
     return typeof username === 'string' ? username.trim().slice(0, 15) : '';
 }
@@ -39,6 +47,9 @@ function sanitizeRoomId(roomId) {
 }
 function sanitizePrompt(prompt) {
     return typeof prompt === 'string' ? prompt.trim().slice(0, 150) : '';
+}
+function sanitizeSessionId(sessionId) {
+    return typeof sessionId === 'string' ? sessionId.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) : '';
 }
 function sanitizeMaxRounds(value) {
     const parsed = Number(value);
@@ -61,12 +72,18 @@ function getRoomForSocket(roomId, socketId) {
     }
     return { roomId: formattedRoomId, room };
 }
+function getPlayerBySocket(room, socketId) {
+    return room.players.find(player => player.id === socketId);
+}
+function getConnectedPlayers(room) {
+    return room.players.filter(player => player.connected);
+}
 function broadcastRoomUpdate(roomId) {
     const room = rooms[roomId];
     if (!room)
         return;
     io.to(roomId).emit('roomDataUpdate', {
-        playerCount: room.players.length,
+        playerCount: getConnectedPlayers(room).length,
         players: room.players,
         hostId: room.hostId,
         gameState: room.state,
@@ -78,10 +95,14 @@ function logPersistenceError(action, error) {
     console.error(`[DB] ${action} fehlgeschlagen:`, error);
 }
 function getActiveCreator(room) {
-    if (room.players.length === 0)
+    const connectedPlayers = getConnectedPlayers(room);
+    if (connectedPlayers.length === 0)
         return undefined;
     if (room.activeCreatorIndex >= room.players.length) {
         room.activeCreatorIndex = 0;
+    }
+    while (room.players[room.activeCreatorIndex] && !room.players[room.activeCreatorIndex].connected) {
+        room.activeCreatorIndex = (room.activeCreatorIndex + 1) % room.players.length;
     }
     return room.players[room.activeCreatorIndex];
 }
@@ -94,7 +115,92 @@ function sendCreateScreenState(roomId) {
         return;
     io.to(roomId).emit('showCreateScreen', {
         activeCreatorId: activeCreator.id,
-        activeCreatorName: activeCreator.name
+        activeCreatorName: activeCreator.name,
+        hostId: room.hostId
+    });
+}
+function emitRoomNotice(roomId, message) {
+    io.to(roomId).emit('roomNotice', message);
+}
+function getRequiredHfToken() {
+    if (!HF_TOKEN) {
+        throw new Error('HF_TOKEN fehlt. Setze AI_PROVIDER=mock oder hinterlege einen Hugging-Face-Token.');
+    }
+    return HF_TOKEN;
+}
+function getImageBlob(imageBase64) {
+    const base64Data = imageBase64.split(',')[1];
+    const mimeType = imageBase64.split(';')[0].split(':')[1] || 'image/png';
+    const estimatedBytes = Math.ceil((base64Data.length * 3) / 4);
+    if (estimatedBytes > MAX_IMAGE_BYTES) {
+        throw new Error('IMAGE_TOO_LARGE');
+    }
+    const buffer = Buffer.from(base64Data, 'base64');
+    return new Blob([buffer], { type: mimeType });
+}
+function extractVideoUrl(result) {
+    var _a, _b, _c;
+    const videoData = (_b = (_a = result === null || result === void 0 ? void 0 : result.data) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : result;
+    const url = ((_c = videoData === null || videoData === void 0 ? void 0 : videoData.video) === null || _c === void 0 ? void 0 : _c.url) || (videoData === null || videoData === void 0 ? void 0 : videoData.url) || (videoData === null || videoData === void 0 ? void 0 : videoData.path) || videoData;
+    if (typeof url !== 'string' || url.length === 0) {
+        throw new Error('KI hat keine Video-URL zurueckgegeben.');
+    }
+    return url;
+}
+function generateMockVideo() {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield new Promise(resolve => setTimeout(resolve, 2000));
+        return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+    });
+}
+function generateLtxVideo(imageBlob, prompt) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const client = yield client_1.Client.connect(HF_SPACE_ID, {
+            token: getRequiredHfToken()
+        });
+        const result = yield client.predict(HF_PREDICT_ENDPOINT, [
+            prompt,
+            'blurry, low quality, distorted, static, motionless',
+            (0, client_1.handle_file)(imageBlob),
+            null,
+            512,
+            704,
+            'image-to-video',
+            4,
+            9,
+            42,
+            true,
+            1.6,
+            true
+        ]);
+        return extractVideoUrl(result);
+    });
+}
+function generateWanVideo(imageBlob, prompt) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const client = yield client_1.Client.connect(HF_SPACE_ID, {
+            token: getRequiredHfToken()
+        });
+        const result = yield client.predict(HF_PREDICT_ENDPOINT, [
+            (0, client_1.handle_file)(imageBlob),
+            prompt,
+            'blurry, low quality, distorted, static, motionless',
+            42,
+            true
+        ]);
+        return extractVideoUrl(result);
+    });
+}
+function generateAiVideo(imageBase64, prompt) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (AI_PROVIDER === 'mock') {
+            return generateMockVideo();
+        }
+        const imageBlob = getImageBlob(imageBase64);
+        if (AI_PROVIDER === 'wan') {
+            return generateWanVideo(imageBlob, prompt);
+        }
+        return generateLtxVideo(imageBlob, prompt);
     });
 }
 function persistFinishedRound(roomId, room, activeCreator, totalRoundPoints) {
@@ -127,7 +233,7 @@ function checkVotingComplete(roomId) {
         const activeCreator = getActiveCreator(room);
         if (!activeCreator)
             return;
-        const eligibleVoters = room.players.filter(p => p.id !== activeCreator.id);
+        const eligibleVoters = getConnectedPlayers(room).filter(p => p.id !== activeCreator.id);
         const votesCount = Object.keys(room.currentVotes).length;
         // Wenn alle anderen abgestimmt haben (oder man alleine testet)
         if (votesCount >= eligibleVoters.length || eligibleVoters.length === 0) {
@@ -149,9 +255,17 @@ function checkVotingComplete(roomId) {
             });
             if (room.currentRound >= room.maxRounds) {
                 room.state = 'GAME_OVER';
+                const finalStandings = [...room.players]
+                    .sort((a, b) => b.score - a.score)
+                    .map((player, index) => ({
+                    playerSocketId: player.id,
+                    name: player.name,
+                    score: player.score,
+                    finalRank: index + 1
+                }));
                 try {
                     yield (0, db_1.saveScores)(roomId, room.players, room.hostId);
-                    yield (0, db_1.markRoomFinished)(roomId);
+                    yield (0, db_1.markRoomFinished)(roomId, finalStandings);
                 }
                 catch (error) {
                     logPersistenceError('Raum abschliessen', error);
@@ -171,6 +285,56 @@ function checkVotingComplete(roomId) {
         }
     });
 }
+function removePlayerFromRoom(roomId, socketId, announce = true) {
+    var _a;
+    const room = rooms[roomId];
+    if (!room)
+        return;
+    const index = room.players.findIndex(p => p.id === socketId);
+    if (index === -1)
+        return;
+    const wasActive = room.activeCreatorIndex === index;
+    const removedPlayer = room.players[index];
+    if (room.disconnectTimers[removedPlayer.sessionId]) {
+        clearTimeout(room.disconnectTimers[removedPlayer.sessionId]);
+        delete room.disconnectTimers[removedPlayer.sessionId];
+    }
+    room.players.splice(index, 1);
+    delete room.currentVotes[socketId];
+    if (room.players.length === 0) {
+        delete rooms[roomId];
+        return;
+    }
+    if (room.hostId === socketId) {
+        const nextHost = (_a = getConnectedPlayers(room)[0]) !== null && _a !== void 0 ? _a : room.players[0];
+        room.hostId = nextHost.id;
+        if (announce)
+            emitRoomNotice(roomId, `${removedPlayer.name} hat den Raum verlassen. ${nextHost.name} ist jetzt Host.`);
+    }
+    else if (announce) {
+        emitRoomNotice(roomId, `${removedPlayer.name} hat den Raum verlassen.`);
+    }
+    if (room.activeCreatorIndex >= room.players.length) {
+        room.activeCreatorIndex = 0;
+    }
+    if (wasActive && (room.state === 'GENERATING' || room.state === 'VOTING')) {
+        room.state = 'IDLE';
+        room.currentVotes = {};
+        broadcastRoomUpdate(roomId);
+        sendCreateScreenState(roomId);
+        emitRoomNotice(roomId, 'Der aktive Spieler hat das Spiel verlassen. Die Runde wurde zurückgesetzt.');
+    }
+    else if (room.state === 'VOTING') {
+        void checkVotingComplete(roomId);
+        broadcastRoomUpdate(roomId);
+    }
+    else {
+        broadcastRoomUpdate(roomId);
+        if (room.state === 'IDLE') {
+            sendCreateScreenState(roomId);
+        }
+    }
+}
 app.get('/api/stats', (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         res.json({
@@ -186,7 +350,8 @@ app.get('/api/stats', (_req, res) => __awaiter(void 0, void 0, void 0, function*
 app.get('/api/config', (_req, res) => {
     res.json({
         aiRoundLimit: AI_ROUND_LIMIT,
-        mockAi: USE_MOCK_AI
+        aiProvider: AI_PROVIDER,
+        mockAi: AI_PROVIDER === 'mock'
     });
 });
 io.on('connection', (socket) => {
@@ -194,6 +359,7 @@ io.on('connection', (socket) => {
     // 1. RAUM ERSTELLEN
     socket.on('createRoom', (data) => __awaiter(void 0, void 0, void 0, function* () {
         const username = sanitizeUsername(data === null || data === void 0 ? void 0 : data.username);
+        const sessionId = sanitizeSessionId(data === null || data === void 0 ? void 0 : data.sessionId) || socket.id;
         if (!username) {
             socket.emit('errorMsg', 'Bitte gib einen gültigen Spielernamen ein!');
             return;
@@ -201,17 +367,18 @@ io.on('connection', (socket) => {
         const roomId = createRoomId();
         rooms[roomId] = {
             hostId: socket.id,
-            players: [{ id: socket.id, name: username, score: 0 }],
+            players: [{ id: socket.id, sessionId, name: username, score: 0, connected: true }],
             state: 'LOBBY',
             activeCreatorIndex: 0,
             currentVotes: {},
             currentRound: 1,
             maxRounds: sanitizeMaxRounds(data === null || data === void 0 ? void 0 : data.maxRounds),
             currentPrompt: '',
-            currentVideoUrl: ''
+            currentVideoUrl: '',
+            disconnectTimers: {}
         };
         socket.join(roomId);
-        socket.emit('roomCreated', { roomId });
+        socket.emit('roomCreated', { roomId, sessionId });
         broadcastRoomUpdate(roomId);
         try {
             yield (0, db_1.saveRoom)(roomId, socket.id, rooms[roomId].maxRounds);
@@ -231,6 +398,7 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', (data) => __awaiter(void 0, void 0, void 0, function* () {
         const formattedRoomId = sanitizeRoomId(data === null || data === void 0 ? void 0 : data.roomId);
         const username = sanitizeUsername(data === null || data === void 0 ? void 0 : data.username);
+        const sessionId = sanitizeSessionId(data === null || data === void 0 ? void 0 : data.sessionId) || socket.id;
         const room = rooms[formattedRoomId];
         if (!username) {
             socket.emit('errorMsg', 'Bitte gib einen gültigen Spielernamen ein!');
@@ -252,9 +420,9 @@ io.on('connection', (socket) => {
             socket.emit('errorMsg', 'Du bist bereits in diesem Raum!');
             return;
         }
-        room.players.push({ id: socket.id, name: username, score: 0 });
+        room.players.push({ id: socket.id, sessionId, name: username, score: 0, connected: true });
         socket.join(formattedRoomId);
-        socket.emit('joinedSuccess', { roomId: formattedRoomId });
+        socket.emit('joinedSuccess', { roomId: formattedRoomId, sessionId });
         broadcastRoomUpdate(formattedRoomId);
         try {
             yield (0, db_1.savePlayer)({
@@ -269,6 +437,79 @@ io.on('connection', (socket) => {
             logPersistenceError('Spieler speichern', error);
         }
     }));
+    socket.on('resumeRoom', (data) => {
+        var _a, _b, _c, _d, _e;
+        const formattedRoomId = sanitizeRoomId(data === null || data === void 0 ? void 0 : data.roomId);
+        const sessionId = sanitizeSessionId(data === null || data === void 0 ? void 0 : data.sessionId);
+        const room = rooms[formattedRoomId];
+        if (!room || !sessionId) {
+            socket.emit('resumeFailed');
+            return;
+        }
+        const player = room.players.find(p => p.sessionId === sessionId);
+        if (!player) {
+            socket.emit('resumeFailed');
+            return;
+        }
+        if (room.disconnectTimers[sessionId]) {
+            clearTimeout(room.disconnectTimers[sessionId]);
+            delete room.disconnectTimers[sessionId];
+        }
+        const oldSocketId = player.id;
+        player.id = socket.id;
+        player.connected = true;
+        if (room.hostId === oldSocketId)
+            room.hostId = socket.id;
+        if (room.currentVotes[oldSocketId] !== undefined) {
+            room.currentVotes[socket.id] = room.currentVotes[oldSocketId];
+            delete room.currentVotes[oldSocketId];
+        }
+        socket.join(formattedRoomId);
+        socket.emit('resumeSuccess', {
+            roomId: formattedRoomId,
+            sessionId,
+            gameState: room.state
+        });
+        broadcastRoomUpdate(formattedRoomId);
+        emitRoomNotice(formattedRoomId, `${player.name} ist wieder verbunden.`);
+        if (room.state === 'LOBBY')
+            return;
+        if (room.state === 'IDLE' || room.state === 'GENERATING') {
+            sendCreateScreenState(formattedRoomId);
+        }
+        else if (room.state === 'VOTING') {
+            socket.emit('showVotingScreen', {
+                videoUrl: room.currentVideoUrl,
+                authorId: (_a = getActiveCreator(room)) === null || _a === void 0 ? void 0 : _a.id,
+                authorName: (_c = (_b = getActiveCreator(room)) === null || _b === void 0 ? void 0 : _b.name) !== null && _c !== void 0 ? _c : 'Spieler'
+            });
+            void checkVotingComplete(formattedRoomId);
+        }
+        else if (room.state === 'RESULTS') {
+            socket.emit('showResultsScreen', {
+                authorName: (_e = (_d = getActiveCreator(room)) === null || _d === void 0 ? void 0 : _d.name) !== null && _e !== void 0 ? _e : 'Spieler',
+                roundPoints: 0,
+                players: room.players,
+                currentRound: room.currentRound,
+                maxRounds: room.maxRounds,
+                isFinalRound: room.currentRound >= room.maxRounds
+            });
+        }
+        else if (room.state === 'GAME_OVER') {
+            socket.emit('showGameOverScreen', {
+                players: [...room.players].sort((a, b) => b.score - a.score),
+                maxRounds: room.maxRounds
+            });
+        }
+    });
+    socket.on('leaveRoom', (data) => {
+        const { roomId: formattedRoomId, room } = getRoomForSocket(data === null || data === void 0 ? void 0 : data.roomId, socket.id);
+        if (!room)
+            return;
+        socket.leave(formattedRoomId);
+        removePlayerFromRoom(formattedRoomId, socket.id);
+        socket.emit('leftRoom');
+    });
     // 3. SPIEL STARTEN (NUR HOST)
     socket.on('startGame', (data) => __awaiter(void 0, void 0, void 0, function* () {
         const { roomId: formattedRoomId, room } = getRoomForSocket(data === null || data === void 0 ? void 0 : data.roomId, socket.id);
@@ -299,7 +540,6 @@ io.on('connection', (socket) => {
     }));
     // 4. KI-GENERIERUNG (NUR FÜR DEN AKTIVEN SPIELER ERLAUBT)
     socket.on('sendImage', (data) => __awaiter(void 0, void 0, void 0, function* () {
-        var _a;
         const { roomId: formattedRoomId, room } = getRoomForSocket(data === null || data === void 0 ? void 0 : data.roomId, socket.id);
         const prompt = sanitizePrompt(data === null || data === void 0 ? void 0 : data.prompt);
         if (!room || room.state !== 'IDLE')
@@ -323,91 +563,10 @@ io.on('connection', (socket) => {
         room.currentVideoUrl = '';
         io.to(formattedRoomId).emit('generationStarted', {
             authorName: activeCreator.name,
-            step: 'Stufe 1: Transformiere Bild...'
+            step: AI_PROVIDER === 'mock' ? 'Mock-Video wird vorbereitet...' : `${AI_PROVIDER.toUpperCase()} erstellt ein Video...`
         });
         try {
-            if (USE_MOCK_AI) {
-                console.log(`[MOCK] Simuliere Generierung für ${activeCreator.name}...`);
-                // Simuliert 2 Sekunden Ladezeit
-                yield new Promise(resolve => setTimeout(resolve, 2000));
-                const dummyVideoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-                room.state = 'VOTING';
-                room.currentVideoUrl = dummyVideoUrl;
-                broadcastRoomUpdate(formattedRoomId);
-                io.to(formattedRoomId).emit('showVotingScreen', {
-                    videoUrl: dummyVideoUrl,
-                    authorId: activeCreator.id,
-                    authorName: activeCreator.name
-                });
-                checkVotingComplete(formattedRoomId);
-                return;
-            }
-            if (!HF_TOKEN) {
-                throw new Error('HF_TOKEN fehlt. Setze USE_MOCK_AI=true oder hinterlege einen Hugging-Face-Token.');
-            }
-            const base64Data = data.imageBase64.split(',')[1];
-            const mimeType = data.imageBase64.split(';')[0].split(':')[1] || 'image/png';
-            const estimatedBytes = Math.ceil((base64Data.length * 3) / 4);
-            if (estimatedBytes > MAX_IMAGE_BYTES) {
-                socket.emit('errorMsg', 'Das Bild ist zu groß. Bitte nutze maximal 8 MB.');
-                room.state = 'IDLE';
-                broadcastRoomUpdate(formattedRoomId);
-                sendCreateScreenState(formattedRoomId);
-                return;
-            }
-            const buffer = Buffer.from(base64Data, 'base64');
-            const initialImageBlob = new Blob([buffer], { type: mimeType });
-            // ============================================================
-            // STUFE 1: BILD TRANSFORMIEREN (InstructPix2Pix)
-            // ============================================================
-            console.log("Stufe 1: Verbinde zu timbrooks/instruct-pix2pix...");
-            const imgClient = yield client_1.Client.connect("timbrooks/instruct-pix2pix", {
-                token: HF_TOKEN
-            });
-            // Prompt mit Nachdruck verstärken
-            const strongPrompt = `${prompt}, dramatic visual change, cinematic lighting, intense effect`;
-            console.log("Stufe 1: Führe Transformation aus mit:", strongPrompt);
-            const imgResult = yield imgClient.predict("/generate", [
-                (0, client_1.handle_file)(initialImageBlob), // 0: Input Image
-                strongPrompt, // 1: Edit Instruction
-                30, // 2: Steps (30 gibt mehr Detailtiefe)
-                "Randomize Seed", // 3: randomize_seed
-                Math.floor(Math.random() * 100000), // 4: seed (echter Zufall)
-                "Fix CFG", // 5: randomize_cfg
-                9.0, // 6: text_cfg_scale (9.0 zwingt den Prompt durch!)
-                1.05 // 7: image_cfg_scale (1.05 erlaubt drastische Zerstörung/Mutation)
-            ]);
-            const transformedImageData = imgResult.data[3];
-            const transformedImageUrl = (transformedImageData === null || transformedImageData === void 0 ? void 0 : transformedImageData.url) || (transformedImageData === null || transformedImageData === void 0 ? void 0 : transformedImageData.path) || transformedImageData;
-            console.log("Stufe 1 erfolgreich:", transformedImageUrl);
-            const transformedImageRes = yield fetch(transformedImageUrl);
-            const transformedBlob = yield transformedImageRes.blob();
-            io.to(formattedRoomId).emit('generationProgress', { step: 'Stufe 2: Animiere Video...' });
-            // ============================================================
-            // STUFE 2: VIDEO ANIMIEREN (LTX-Video)
-            // ============================================================
-            console.log("Stufe 2: Verbinde zu LTX-Video...");
-            const videoClient = yield client_1.Client.connect("Lightricks/ltx-video-distilled", {
-                token: HF_TOKEN
-            });
-            const videoPrompt = `${prompt}, explosive fast movement, chaotic motion, high quality`;
-            const videoResult = yield videoClient.predict("/image_to_video", [
-                videoPrompt, // 0: Prompt
-                "blurry, motionless, static frame, slow", // 1: Negative Prompt
-                (0, client_1.handle_file)(transformedBlob), // 2: Input Image (aus Stufe 1)
-                null, // 3: Input Video
-                512, // 4: Height
-                704, // 5: Width
-                "image-to-video", // 6: Mode
-                4, // 7: Duration
-                9, // 8: Frames
-                42, // 9: Seed
-                true, // 10: Randomize Seed
-                1.6, // 11: Guidance Scale
-                true // 12: Improve Texture
-            ]);
-            const videoData = videoResult.data[0];
-            const generatedVideoUrl = ((_a = videoData === null || videoData === void 0 ? void 0 : videoData.video) === null || _a === void 0 ? void 0 : _a.url) || (videoData === null || videoData === void 0 ? void 0 : videoData.url) || videoData;
+            const generatedVideoUrl = yield generateAiVideo(data.imageBase64, prompt);
             room.state = 'VOTING';
             room.currentVideoUrl = generatedVideoUrl;
             broadcastRoomUpdate(formattedRoomId);
@@ -423,7 +582,10 @@ io.on('connection', (socket) => {
             room.state = 'IDLE';
             broadcastRoomUpdate(formattedRoomId);
             sendCreateScreenState(formattedRoomId);
-            io.to(formattedRoomId).emit('errorMsg', 'Generierung fehlgeschlagen. Bitte erneut versuchen!');
+            const message = error instanceof Error && error.message === 'IMAGE_TOO_LARGE'
+                ? 'Das Bild ist zu groß. Bitte nutze maximal 8 MB.'
+                : 'Generierung fehlgeschlagen. Bitte erneut versuchen!';
+            io.to(formattedRoomId).emit('errorMsg', message);
         }
     }));
     // 5. BEWERTUNG EMPFANGEN
@@ -445,6 +607,10 @@ io.on('connection', (socket) => {
         const { roomId: formattedRoomId, room } = getRoomForSocket(data === null || data === void 0 ? void 0 : data.roomId, socket.id);
         if (!room || room.state !== 'RESULTS')
             return;
+        if (room.hostId !== socket.id) {
+            socket.emit('errorMsg', 'Nur der Host kann die nächste Runde starten!');
+            return;
+        }
         // Zum nächsten Spieler in der Liste wechseln
         room.activeCreatorIndex = (room.activeCreatorIndex + 1) % room.players.length;
         room.currentRound += 1;
@@ -461,37 +627,11 @@ io.on('connection', (socket) => {
             const room = rooms[roomId];
             const index = room.players.findIndex(p => p.id === socket.id);
             if (index !== -1) {
-                const wasActive = room.activeCreatorIndex === index;
-                room.players.splice(index, 1);
-                delete room.currentVotes[socket.id];
-                if (room.players.length === 0) {
-                    delete rooms[roomId];
-                }
-                else {
-                    if (room.hostId === socket.id) {
-                        room.hostId = room.players[0].id;
-                    }
-                    if (room.activeCreatorIndex >= room.players.length) {
-                        room.activeCreatorIndex = 0;
-                    }
-                    if (wasActive && (room.state === 'GENERATING' || room.state === 'VOTING')) {
-                        room.state = 'IDLE';
-                        room.currentVotes = {};
-                        broadcastRoomUpdate(roomId);
-                        sendCreateScreenState(roomId);
-                        io.to(roomId).emit('errorMsg', 'Der aktive Spieler hat das Spiel verlassen. Nächster Spieler ist an der Reihe!');
-                    }
-                    else if (room.state === 'VOTING') {
-                        void checkVotingComplete(roomId);
-                        broadcastRoomUpdate(roomId);
-                    }
-                    else {
-                        broadcastRoomUpdate(roomId);
-                        if (room.state === 'IDLE') {
-                            sendCreateScreenState(roomId);
-                        }
-                    }
-                }
+                room.players[index].connected = false;
+                broadcastRoomUpdate(roomId);
+                room.disconnectTimers[room.players[index].sessionId] = setTimeout(() => {
+                    removePlayerFromRoom(roomId, socket.id);
+                }, 15000);
                 break;
             }
         }

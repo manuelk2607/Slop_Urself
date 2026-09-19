@@ -6,6 +6,9 @@ const gameHeader = document.getElementById('gameHeader') as HTMLElement;
 const displayRoomCode = document.getElementById('displayRoomCode') as HTMLElement;
 const playerCount = document.getElementById('playerCount') as HTMLElement;
 const roundCounter = document.getElementById('roundCounter') as HTMLElement;
+const copyRoomCodeButton = document.getElementById('copyRoomCodeButton') as HTMLButtonElement;
+const leaveRoomButton = document.getElementById('leaveRoomButton') as HTMLButtonElement;
+const roomNotice = document.getElementById('roomNotice') as HTMLParagraphElement;
 
 // Screens
 const screenLobby = document.getElementById('screenLobby') as HTMLElement;
@@ -64,7 +67,27 @@ const restartButton = document.getElementById('restartButton') as HTMLButtonElem
 let previewObjectUrl: string | null = null;
 let currentRoomId = '';
 let currentHostId = '';
+let currentSessionId = '';
 let aiRoundLimit = 5;
+let noticeTimeout: number | undefined;
+const storedSessionRaw = localStorage.getItem('slopurself-session');
+
+function createSessionId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function saveSession(roomId: string, sessionId: string) {
+    currentRoomId = roomId;
+    currentSessionId = sessionId;
+    localStorage.setItem('slopurself-session', JSON.stringify({ roomId, sessionId }));
+}
+
+function clearSession() {
+    currentRoomId = '';
+    currentSessionId = '';
+    localStorage.removeItem('slopurself-session');
+}
 
 // --- SCREEN SWITCHER ---
 function showScreen(screenToShow: HTMLElement) {
@@ -133,6 +156,16 @@ function renderLobbyPlayers(players: { id: string; name: string; score: number }
         li.appendChild(playerInfo);
         lobbyPlayerList.appendChild(li);
     });
+}
+
+function showRoomNotice(message: string) {
+    roomNotice.innerText = message;
+    roomNotice.style.display = 'block';
+
+    if (noticeTimeout) window.clearTimeout(noticeTimeout);
+    noticeTimeout = window.setTimeout(() => {
+        roomNotice.style.display = 'none';
+    }, 5000);
 }
 
 function renderStats(players: { name: string; gamesPlayed: number; roundsCreated: number; totalScore: number; votesGiven: number; averageVoteGiven: number }[]) {
@@ -208,7 +241,7 @@ createRoomButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
     const maxRounds = Math.min(Math.max(Number(roundCountInput.value) || aiRoundLimit, 1), aiRoundLimit);
     if (!username) return triggerNameError();
-    socket.emit('createRoom', { username, maxRounds });
+    socket.emit('createRoom', { username, maxRounds, sessionId: createSessionId() });
 });
 
 joinRoomButton.addEventListener('click', () => {
@@ -221,18 +254,27 @@ joinRoomButton.addEventListener('click', () => {
         roomCodeInput.focus();
         return;
     }
-    socket.emit('joinRoom', { roomId: code, username });
+    socket.emit('joinRoom', { roomId: code, username, sessionId: createSessionId() });
 });
 
-function enterRoom(roomId: string) {
-    currentRoomId = roomId;
+function enterRoom(roomId: string, sessionId: string) {
+    saveSession(roomId, sessionId);
     displayRoomCode.innerText = roomId;
     gameHeader.style.display = 'block';
     showScreen(screenRoomLobby);
 }
 
-socket.on('roomCreated', (data: { roomId: string }) => enterRoom(data.roomId));
-socket.on('joinedSuccess', (data: { roomId: string }) => enterRoom(data.roomId));
+socket.on('roomCreated', (data: { roomId: string; sessionId: string }) => enterRoom(data.roomId, data.sessionId));
+socket.on('joinedSuccess', (data: { roomId: string; sessionId: string }) => enterRoom(data.roomId, data.sessionId));
+socket.on('resumeSuccess', (data: { roomId: string; sessionId: string; gameState: string }) => {
+    enterRoom(data.roomId, data.sessionId);
+    showRoomNotice('Verbindung wiederhergestellt.');
+});
+socket.on('resumeFailed', () => {
+    clearSession();
+    gameHeader.style.display = 'none';
+    showScreen(screenLobby);
+});
 
 socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string; name: string; score: number }[]; hostId: string; gameState: string; currentRound: number; maxRounds: number }) => {
     playerCount.innerText = data.playerCount.toString();
@@ -294,10 +336,52 @@ backToLobbyButton.addEventListener('click', () => {
     showScreen(screenLobby);
 });
 
+copyRoomCodeButton.addEventListener('click', async () => {
+    const roomCode = currentRoomId || displayRoomCode.innerText;
+    if (!roomCode || roomCode === '----') return;
+
+    try {
+        await navigator.clipboard.writeText(roomCode);
+        showRoomNotice(`Raumcode ${roomCode} kopiert.`);
+    } catch {
+        showRoomNotice(`Raumcode: ${roomCode}`);
+    }
+});
+
+leaveRoomButton.addEventListener('click', () => {
+    if (!currentRoomId) return;
+    socket.emit('leaveRoom', { roomId: currentRoomId });
+});
+
+socket.on('leftRoom', () => {
+    clearSession();
+    gameHeader.style.display = 'none';
+    showScreen(screenLobby);
+    showRoomNotice('');
+});
+
+socket.on('roomNotice', (message: string) => {
+    showRoomNotice(message);
+});
+
+socket.on('connect', () => {
+    if (!storedSessionRaw) return;
+
+    try {
+        const storedSession = JSON.parse(storedSessionRaw) as { roomId?: string; sessionId?: string };
+        if (storedSession.roomId && storedSession.sessionId) {
+            socket.emit('resumeRoom', storedSession);
+        }
+    } catch {
+        clearSession();
+    }
+});
+
 // --- SCREEN 2: ERSTELLEN vs. WARTEN ---
-socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string }) => {
+socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string; hostId: string }) => {
     showScreen(screenCreate);
     loadingSection.style.display = 'none';
+    currentHostId = data.hostId;
 
     // Formular aufräumen
     clearImagePreview();
@@ -428,11 +512,15 @@ voteButtons.forEach(btn => {
 // SCREEN 4: ERGEBNISSE & HIGHSCORE
 socket.on('showResultsScreen', (data: { authorName: string; roundPoints: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; isFinalRound: boolean }) => {
     showScreen(screenResult);
+    const isHost = socket.id === currentHostId;
 
     resultAuthorName.innerText = `Video von ${data.authorName}`;
     resultPointsSummary.innerText = `+${data.roundPoints} Punkte in dieser Runde`;
-    nextRoundButton.style.display = data.isFinalRound ? 'none' : 'block';
+    nextRoundButton.style.display = !data.isFinalRound && isHost ? 'block' : 'none';
     nextRoundButton.innerText = `Runde ${data.currentRound + 1} starten`;
+    if (!data.isFinalRound && !isHost) {
+        showRoomNotice('Warte darauf, dass der Host die nächste Runde startet.');
+    }
 
     renderScoreList(scoreList, data.players);
 });

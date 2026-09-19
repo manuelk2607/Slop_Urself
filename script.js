@@ -14,6 +14,9 @@ const gameHeader = document.getElementById('gameHeader');
 const displayRoomCode = document.getElementById('displayRoomCode');
 const playerCount = document.getElementById('playerCount');
 const roundCounter = document.getElementById('roundCounter');
+const copyRoomCodeButton = document.getElementById('copyRoomCodeButton');
+const leaveRoomButton = document.getElementById('leaveRoomButton');
+const roomNotice = document.getElementById('roomNotice');
 // Screens
 const screenLobby = document.getElementById('screenLobby');
 const screenStats = document.getElementById('screenStats');
@@ -66,7 +69,25 @@ const restartButton = document.getElementById('restartButton');
 let previewObjectUrl = null;
 let currentRoomId = '';
 let currentHostId = '';
+let currentSessionId = '';
 let aiRoundLimit = 5;
+let noticeTimeout;
+const storedSessionRaw = localStorage.getItem('slopurself-session');
+function createSessionId() {
+    if (crypto.randomUUID)
+        return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+function saveSession(roomId, sessionId) {
+    currentRoomId = roomId;
+    currentSessionId = sessionId;
+    localStorage.setItem('slopurself-session', JSON.stringify({ roomId, sessionId }));
+}
+function clearSession() {
+    currentRoomId = '';
+    currentSessionId = '';
+    localStorage.removeItem('slopurself-session');
+}
 // --- SCREEN SWITCHER ---
 function showScreen(screenToShow) {
     [screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
@@ -121,6 +142,15 @@ function renderLobbyPlayers(players) {
         li.appendChild(playerInfo);
         lobbyPlayerList.appendChild(li);
     });
+}
+function showRoomNotice(message) {
+    roomNotice.innerText = message;
+    roomNotice.style.display = 'block';
+    if (noticeTimeout)
+        window.clearTimeout(noticeTimeout);
+    noticeTimeout = window.setTimeout(() => {
+        roomNotice.style.display = 'none';
+    }, 5000);
 }
 function renderStats(players) {
     statsList.innerHTML = '';
@@ -186,7 +216,7 @@ createRoomButton.addEventListener('click', () => {
     const maxRounds = Math.min(Math.max(Number(roundCountInput.value) || aiRoundLimit, 1), aiRoundLimit);
     if (!username)
         return triggerNameError();
-    socket.emit('createRoom', { username, maxRounds });
+    socket.emit('createRoom', { username, maxRounds, sessionId: createSessionId() });
 });
 joinRoomButton.addEventListener('click', () => {
     const username = usernameInput.value.trim();
@@ -199,16 +229,25 @@ joinRoomButton.addEventListener('click', () => {
         roomCodeInput.focus();
         return;
     }
-    socket.emit('joinRoom', { roomId: code, username });
+    socket.emit('joinRoom', { roomId: code, username, sessionId: createSessionId() });
 });
-function enterRoom(roomId) {
-    currentRoomId = roomId;
+function enterRoom(roomId, sessionId) {
+    saveSession(roomId, sessionId);
     displayRoomCode.innerText = roomId;
     gameHeader.style.display = 'block';
     showScreen(screenRoomLobby);
 }
-socket.on('roomCreated', (data) => enterRoom(data.roomId));
-socket.on('joinedSuccess', (data) => enterRoom(data.roomId));
+socket.on('roomCreated', (data) => enterRoom(data.roomId, data.sessionId));
+socket.on('joinedSuccess', (data) => enterRoom(data.roomId, data.sessionId));
+socket.on('resumeSuccess', (data) => {
+    enterRoom(data.roomId, data.sessionId);
+    showRoomNotice('Verbindung wiederhergestellt.');
+});
+socket.on('resumeFailed', () => {
+    clearSession();
+    gameHeader.style.display = 'none';
+    showScreen(screenLobby);
+});
 socket.on('roomDataUpdate', (data) => {
     playerCount.innerText = data.playerCount.toString();
     roundCounter.innerText = `${data.currentRound}/${data.maxRounds}`;
@@ -259,10 +298,50 @@ statsButton.addEventListener('click', () => __awaiter(void 0, void 0, void 0, fu
 backToLobbyButton.addEventListener('click', () => {
     showScreen(screenLobby);
 });
+copyRoomCodeButton.addEventListener('click', () => __awaiter(void 0, void 0, void 0, function* () {
+    const roomCode = currentRoomId || displayRoomCode.innerText;
+    if (!roomCode || roomCode === '----')
+        return;
+    try {
+        yield navigator.clipboard.writeText(roomCode);
+        showRoomNotice(`Raumcode ${roomCode} kopiert.`);
+    }
+    catch (_a) {
+        showRoomNotice(`Raumcode: ${roomCode}`);
+    }
+}));
+leaveRoomButton.addEventListener('click', () => {
+    if (!currentRoomId)
+        return;
+    socket.emit('leaveRoom', { roomId: currentRoomId });
+});
+socket.on('leftRoom', () => {
+    clearSession();
+    gameHeader.style.display = 'none';
+    showScreen(screenLobby);
+    showRoomNotice('');
+});
+socket.on('roomNotice', (message) => {
+    showRoomNotice(message);
+});
+socket.on('connect', () => {
+    if (!storedSessionRaw)
+        return;
+    try {
+        const storedSession = JSON.parse(storedSessionRaw);
+        if (storedSession.roomId && storedSession.sessionId) {
+            socket.emit('resumeRoom', storedSession);
+        }
+    }
+    catch (_a) {
+        clearSession();
+    }
+});
 // --- SCREEN 2: ERSTELLEN vs. WARTEN ---
 socket.on('showCreateScreen', (data) => {
     showScreen(screenCreate);
     loadingSection.style.display = 'none';
+    currentHostId = data.hostId;
     // Formular aufräumen
     clearImagePreview();
     uploadButton.disabled = false;
@@ -382,10 +461,14 @@ voteButtons.forEach(btn => {
 // SCREEN 4: ERGEBNISSE & HIGHSCORE
 socket.on('showResultsScreen', (data) => {
     showScreen(screenResult);
+    const isHost = socket.id === currentHostId;
     resultAuthorName.innerText = `Video von ${data.authorName}`;
     resultPointsSummary.innerText = `+${data.roundPoints} Punkte in dieser Runde`;
-    nextRoundButton.style.display = data.isFinalRound ? 'none' : 'block';
+    nextRoundButton.style.display = !data.isFinalRound && isHost ? 'block' : 'none';
     nextRoundButton.innerText = `Runde ${data.currentRound + 1} starten`;
+    if (!data.isFinalRound && !isHost) {
+        showRoomNotice('Warte darauf, dass der Host die nächste Runde startet.');
+    }
     renderScoreList(scoreList, data.players);
 });
 // Nächste Runde triggern (jeder Spieler kann den Button klicken)

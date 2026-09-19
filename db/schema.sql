@@ -3,6 +3,8 @@ create table if not exists rooms (
     host_socket_id text not null,
     max_rounds integer not null,
     status text not null,
+    winner_socket_id text,
+    winner_name text,
     created_at timestamptz not null default now(),
     started_at timestamptz,
     ended_at timestamptz
@@ -13,6 +15,7 @@ create table if not exists players (
     socket_id text not null,
     name text not null,
     score integer not null default 0,
+    final_rank integer,
     is_host boolean not null default false,
     joined_at timestamptz not null default now(),
     primary key (room_code, socket_id)
@@ -41,3 +44,7 @@ create table if not exists votes (
 create index if not exists players_name_idx on players(name);
 create index if not exists rounds_room_code_idx on rounds(room_code);
 create index if not exists votes_voter_socket_id_idx on votes(voter_socket_id);
+
+alter table rooms add column if not exists winner_socket_id text;
+alter table rooms add column if not exists winner_name text;
+alter table players add column if not exists final_rank integer;

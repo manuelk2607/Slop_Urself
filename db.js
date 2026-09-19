@@ -45,6 +45,8 @@ function ensureDatabaseSchema() {
             host_socket_id text not null,
             max_rounds integer not null,
             status text not null,
+            winner_socket_id text,
+            winner_name text,
             created_at timestamptz not null default now(),
             started_at timestamptz,
             ended_at timestamptz
@@ -55,6 +57,7 @@ function ensureDatabaseSchema() {
             socket_id text not null,
             name text not null,
             score integer not null default 0,
+            final_rank integer,
             is_host boolean not null default false,
             joined_at timestamptz not null default now(),
             primary key (room_code, socket_id)
@@ -83,6 +86,10 @@ function ensureDatabaseSchema() {
         create index if not exists players_name_idx on players(name);
         create index if not exists rounds_room_code_idx on rounds(room_code);
         create index if not exists votes_voter_socket_id_idx on votes(voter_socket_id);
+
+        alter table rooms add column if not exists winner_socket_id text;
+        alter table rooms add column if not exists winner_name text;
+        alter table players add column if not exists final_rank integer;
     `);
     });
 }
@@ -126,15 +133,38 @@ function markRoomStarted(roomCode) {
          where code = $1`, [roomCode]);
     });
 }
-function markRoomFinished(roomCode) {
+function markRoomFinished(roomCode, standings) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         const pool = getPool();
         if (!pool)
             return;
-        yield pool.query(`update rooms
-         set status = 'GAME_OVER',
-             ended_at = coalesce(ended_at, now())
-         where code = $1`, [roomCode]);
+        const winner = standings[0];
+        const client = yield pool.connect();
+        try {
+            yield client.query('begin');
+            yield client.query(`update rooms
+             set status = 'GAME_OVER',
+                 winner_socket_id = $2,
+                 winner_name = $3,
+                 ended_at = coalesce(ended_at, now())
+             where code = $1`, [roomCode, (_a = winner === null || winner === void 0 ? void 0 : winner.playerSocketId) !== null && _a !== void 0 ? _a : null, (_b = winner === null || winner === void 0 ? void 0 : winner.name) !== null && _b !== void 0 ? _b : null]);
+            for (const standing of standings) {
+                yield client.query(`update players
+                 set score = $3,
+                     final_rank = $4
+                 where room_code = $1
+                   and socket_id = $2`, [roomCode, standing.playerSocketId, standing.score, standing.finalRank]);
+            }
+            yield client.query('commit');
+        }
+        catch (error) {
+            yield client.query('rollback');
+            throw error;
+        }
+        finally {
+            client.release();
+        }
     });
 }
 function saveRound(input) {

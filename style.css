@@ -43,6 +43,41 @@ body {
     color: #ffa502;
 }
 
+.icon-button {
+    width: auto;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border: 1px solid #57606f;
+    background: #2f3542;
+    color: #ffffff;
+    font-size: 0.85rem;
+}
+
+.icon-button:hover {
+    background: #3f4857;
+}
+
+.icon-button.danger {
+    margin-left: 8px;
+    border-color: rgba(255, 71, 87, 0.45);
+    color: #ff9aa5;
+}
+
+.icon-button.danger:hover {
+    background: rgba(255, 71, 87, 0.16);
+}
+
+.room-notice {
+    display: none;
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 165, 2, 0.45);
+    border-radius: 8px;
+    background: rgba(255, 165, 2, 0.12);
+    color: #ffd28a;
+    font-size: 0.85rem;
+}
+
 h1 {
     margin-bottom: 14px;
     color: #ff4757;

@@ -40,7 +40,7 @@ Beim Start legt der Server die benoetigten Tabellen automatisch an. Das Schema l
 Fuer echte KI plus Statistik:
 
 ```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require" HF_TOKEN=dein_token USE_MOCK_AI=false AI_ROUND_LIMIT=5 npm run dev
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require" HF_TOKEN=dein_token AI_PROVIDER=ltx AI_ROUND_LIMIT=5 npm run dev
 ```
 
 ## Mit Freunden per Cloudflare Quick Tunnel spielen
@@ -73,7 +73,42 @@ Wichtig:
 Zum Entwickeln und Testen sollte die Mock-AI aktiv bleiben. Fuer echte Hugging-Face-Generierung kannst du spaeter so starten:
 
 ```bash
-HF_TOKEN=dein_token USE_MOCK_AI=false npm run dev
+HF_TOKEN=dein_token AI_PROVIDER=ltx npm run dev
 ```
 
-Ohne `USE_MOCK_AI=false` bleibt die Mock-AI aktiv.
+Ohne `AI_PROVIDER=ltx` bleibt die Mock-AI aktiv.
+
+Empfohlene erste echte KI-Konfiguration:
+
+```bash
+HF_TOKEN=dein_token \
+AI_PROVIDER=ltx \
+HF_SPACE_ID=Lightricks/ltx-video-distilled \
+HF_PREDICT_ENDPOINT=/image_to_video \
+AI_ROUND_LIMIT=5 \
+npm run dev
+```
+
+Die LTX-Anbindung nutzt das Originalbild direkt als Image-to-Video-Eingabe. Es gibt keine vorgeschaltete InstructPix2Pix-Bildtransformation mehr und der Prompt wird nicht automatisch mit starken Stilwoertern erweitert.
+
+Aktuelle LTX-Parameter im Server:
+
+- Prompt: exakt der Spieler-Prompt
+- Negative Prompt: `blurry, low quality, distorted, static, motionless`
+- Aufloesung: `512 x 704`
+- Dauer: `4`
+- Frames: `9`
+- Guidance: `1.6`
+- Seed: randomisiert
+
+Alternative zum Experimentieren:
+
+```bash
+HF_TOKEN=dein_token \
+AI_PROVIDER=wan \
+HF_SPACE_ID=multimodalart/wan2-1-fast \
+HF_PREDICT_ENDPOINT=/predict \
+npm run dev
+```
+
+Wan-Spaces koennen ihre Gradio-Parameter aendern. Wenn diese Variante fehlschlaegt, muss die konkrete Space-API einmal mit `@gradio/client` inspiziert und die Parameterliste in `generateWanVideo` angepasst werden.

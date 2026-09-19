@@ -26,6 +26,13 @@ export interface PersistPlayerInput {
     isHost: boolean;
 }
 
+export interface FinalStandingInput {
+    playerSocketId: string;
+    name: string;
+    score: number;
+    finalRank: number;
+}
+
 export interface PersistRoundInput {
     roomCode: string;
     roundNumber: number;
@@ -55,6 +62,8 @@ export async function ensureDatabaseSchema() {
             host_socket_id text not null,
             max_rounds integer not null,
             status text not null,
+            winner_socket_id text,
+            winner_name text,
             created_at timestamptz not null default now(),
             started_at timestamptz,
             ended_at timestamptz
@@ -65,6 +74,7 @@ export async function ensureDatabaseSchema() {
             socket_id text not null,
             name text not null,
             score integer not null default 0,
+            final_rank integer,
             is_host boolean not null default false,
             joined_at timestamptz not null default now(),
             primary key (room_code, socket_id)
@@ -93,6 +103,10 @@ export async function ensureDatabaseSchema() {
         create index if not exists players_name_idx on players(name);
         create index if not exists rounds_room_code_idx on rounds(room_code);
         create index if not exists votes_voter_socket_id_idx on votes(voter_socket_id);
+
+        alter table rooms add column if not exists winner_socket_id text;
+        alter table rooms add column if not exists winner_name text;
+        alter table players add column if not exists final_rank integer;
     `);
 }
 
@@ -143,17 +157,43 @@ export async function markRoomStarted(roomCode: string) {
     );
 }
 
-export async function markRoomFinished(roomCode: string) {
+export async function markRoomFinished(roomCode: string, standings: FinalStandingInput[]) {
     const pool = getPool();
     if (!pool) return;
 
-    await pool.query(
-        `update rooms
-         set status = 'GAME_OVER',
-             ended_at = coalesce(ended_at, now())
-         where code = $1`,
-        [roomCode]
-    );
+    const winner = standings[0];
+    const client = await pool.connect();
+
+    try {
+        await client.query('begin');
+        await client.query(
+            `update rooms
+             set status = 'GAME_OVER',
+                 winner_socket_id = $2,
+                 winner_name = $3,
+                 ended_at = coalesce(ended_at, now())
+             where code = $1`,
+            [roomCode, winner?.playerSocketId ?? null, winner?.name ?? null]
+        );
+
+        for (const standing of standings) {
+            await client.query(
+                `update players
+                 set score = $3,
+                     final_rank = $4
+                 where room_code = $1
+                   and socket_id = $2`,
+                [roomCode, standing.playerSocketId, standing.score, standing.finalRank]
+            );
+        }
+
+        await client.query('commit');
+    } catch (error) {
+        await client.query('rollback');
+        throw error;
+    } finally {
+        client.release();
+    }
 }
 
 export async function saveRound(input: PersistRoundInput) {
