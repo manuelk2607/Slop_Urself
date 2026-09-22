@@ -2,11 +2,11 @@
   "name": "slopurself",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "dev": "npm run build && node server.js",
-    "start": "node server.js",
+    "dev": "npm run build && node dist/server.js",
+    "start": "node dist/server.js",
     "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "devDependencies": {

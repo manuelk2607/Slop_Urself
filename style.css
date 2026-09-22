@@ -411,10 +411,102 @@ input::placeholder {
     font-weight: 700;
 }
 
+.stats-overview {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0 24px;
+}
+
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding: 12px 10px;
+    border: 1px solid rgba(255, 165, 2, 0.22);
+    border-radius: 8px;
+    background: #252a38;
+    text-align: center;
+}
+
+.stat-card strong {
+    color: #ffa502;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.stat-card span {
+    overflow-wrap: anywhere;
+    color: #a4b0be;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
 .stat-details {
     color: #a4b0be;
     font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.video-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 12px 0 24px;
+    padding: 0;
+    list-style: none;
+}
+
+.video-stat-item {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid rgba(87, 96, 111, 0.55);
+    border-radius: 8px;
+    background: #252a38;
+    text-align: left;
+}
+
+.video-stat-item video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 6px;
+    background: #000000;
+    object-fit: cover;
+}
+
+.video-stat-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.video-stat-meta strong {
+    overflow: hidden;
+    color: #f1f2f6;
+    font-size: 0.96rem;
+    text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.video-stat-meta span {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #a4b0be;
+    font-size: 0.86rem;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.video-stat-meta small {
+    color: #ffa502;
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .input-error {
@@ -477,5 +569,17 @@ input::placeholder {
     .score-item {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .stats-overview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .video-stat-item {
+        grid-template-columns: 1fr;
+    }
+
+    .video-stat-meta strong {
+        white-space: normal;
     }
 }

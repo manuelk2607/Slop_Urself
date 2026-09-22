@@ -13,7 +13,7 @@ Die App laeuft dann lokal unter:
 http://127.0.0.1:3000
 ```
 
-Standardmaessig nutzt das Projekt die Mock-AI, damit beim Testen keine Tokens verbraucht werden.
+Standardmaessig nutzt das Projekt die echte LTX-Video-Anbindung ueber Hugging Face. Wenn du beim Entwickeln keine KI-Aufrufe verbrauchen willst, starte lokal mit `AI_PROVIDER=mock npm run dev`.
 
 Die maximale Rundenzahl orientiert sich am KI-Kontingent und liegt standardmaessig bei 5 Runden. Du kannst sie beim Start anpassen:
 
@@ -40,7 +40,7 @@ Beim Start legt der Server die benoetigten Tabellen automatisch an. Das Schema l
 Fuer echte KI plus Statistik:
 
 ```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require" HF_TOKEN=dein_token AI_PROVIDER=ltx AI_ROUND_LIMIT=5 npm run dev
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require" HF_TOKEN=dein_token AI_ROUND_LIMIT=5 npm run dev
 ```
 
 ## Mit Freunden per Cloudflare Quick Tunnel spielen
@@ -68,21 +68,26 @@ Wichtig:
 - Der Server muss auf Port `3000` laufen, damit `npm run tunnel` direkt funktioniert.
 - Teile die URL nur mit Leuten, die mitspielen sollen.
 
-## Echte KI optional aktivieren
+## KI konfigurieren
 
-Zum Entwickeln und Testen sollte die Mock-AI aktiv bleiben. Fuer echte Hugging-Face-Generierung kannst du spaeter so starten:
+Die echte Hugging-Face-Generierung ist der Standard. Empfohlen fuer den Test mit Freunden:
 
 ```bash
-HF_TOKEN=dein_token AI_PROVIDER=ltx npm run dev
+HF_TOKEN=dein_token npm run dev
 ```
 
-Ohne `AI_PROVIDER=ltx` bleibt die Mock-AI aktiv.
+Ohne `HF_TOKEN` versucht die App den oeffentlichen Hugging-Face-Space. Wenn der Space Login oder ZeroGPU-Zugriff verlangt, hinterlege einen kostenlosen Hugging-Face-Token.
+
+Wenn du wieder ohne echte KI testen willst:
+
+```bash
+AI_PROVIDER=mock npm run dev
+```
 
 Empfohlene erste echte KI-Konfiguration:
 
 ```bash
 HF_TOKEN=dein_token \
-AI_PROVIDER=ltx \
 HF_SPACE_ID=Lightricks/ltx-video-distilled \
 HF_PREDICT_ENDPOINT=/image_to_video \
 AI_ROUND_LIMIT=5 \

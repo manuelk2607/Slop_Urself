@@ -21,9 +21,6 @@
         <p id="roomNotice" class="room-notice"></p>
     </header>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 1: LOBBY                            -->
-    <!-- ========================================== -->
     <section id="screenLobby" class="game-screen active-screen">
         <h1>Slop Urself!</h1>
         <input type="text" id="usernameInput" placeholder="Dein Spielername" maxlength="15">
@@ -44,19 +41,18 @@
         <p id="lobbyError" class="error-msg"></p>
     </section>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 2: STATISTIKEN                      -->
-    <!-- ========================================== -->
     <section id="screenStats" class="game-screen" style="display: none;">
         <h2>Statistiken</h2>
         <p id="statsNotice" class="subtitle"></p>
+        <div id="statsOverview" class="stats-overview"></div>
+        <h3>Spieler</h3>
         <ul id="statsList" class="scoreboard-list"></ul>
+        <h3>Video-Historie</h3>
+        <p id="videoStatsNotice" class="hint-text"></p>
+        <ul id="videoStatsList" class="video-stats-list"></ul>
         <button id="backToLobbyButton" class="btn-secondary" type="button">Zurueck</button>
     </section>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 3: RAUM-LOBBY                       -->
-    <!-- ========================================== -->
     <section id="screenRoomLobby" class="game-screen" style="display: none;">
         <h2>Raum-Lobby</h2>
         <p id="hostNotice" class="subtitle">Warte auf den Host...</p>
@@ -66,12 +62,7 @@
         <button id="startGameButton" class="btn-primary">Spiel starten</button>
     </section>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 4: ERSTELLEN & WARTEN               -->
-    <!-- ========================================== -->
     <section id="screenCreate" class="game-screen" style="display: none;">
-
-        <!-- 2A: WIRD NUR DEM AKTIVEN SPIELER ANGEZEIGT -->
         <div id="creatorControls" style="display: none;">
             <h2>🎨 Du bist an der Reihe!</h2>
             <p class="subtitle">Wähle ein Bild und gib eine Anweisung ein:</p>
@@ -92,7 +83,6 @@
             </div>
         </div>
 
-        <!-- 2B: WIRD ALLEN WARTENDEN SPIELERN ANGEZEIGT -->
         <div id="waitControls" style="display: none;">
             <h2>⏳ Bitte warten...</h2>
             <div class="spinner"></div>
@@ -101,16 +91,12 @@
             </p>
         </div>
 
-        <!-- Lade-Status während der KI-Berechnung (für alle sichtbar) -->
         <div id="loadingSection" style="display: none;">
             <div class="spinner"></div>
             <p id="loadingText">KI berechnet das Video...</p>
         </div>
     </section>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 5: SEPARATE VOTING-SEITE            -->
-    <!-- ========================================== -->
     <section id="screenVoting" class="game-screen" style="display: none;">
         <h2 id="votingTitle">🎬 Film ab!</h2>
         <p id="authorNotice" class="subtitle"></p>
@@ -121,7 +107,6 @@
             </video>
         </div>
 
-        <!-- Voting-Bereich für Mitspieler -->
         <div id="votingActionBox">
             <h3>Bewerte das Meisterwerk:</h3>
             <div class="vote-buttons">
@@ -133,16 +118,12 @@
             </div>
         </div>
 
-        <!-- Warte-Status -->
         <div id="votingWaitingBox" style="display: none;">
             <div class="pulse-dot"></div>
             <p id="votingStatusText">Warte auf Bewertungen der anderen Spieler...</p>
         </div>
     </section>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 6: ERGEBNISSE & HIGHSCORES          -->
-    <!-- ========================================== -->
     <section id="screenResult" class="game-screen" style="display: none;">
         <h2>🏆 Runden-Ergebnis</h2>
 
@@ -157,9 +138,6 @@
         <button id="nextRoundButton" class="btn-primary">Nächste Runde starten 🚀</button>
     </section>
 
-    <!-- ========================================== -->
-    <!-- SCREEN 7: FINALES ERGEBNIS                 -->
-    <!-- ========================================== -->
     <section id="screenGameOver" class="game-screen" style="display: none;">
         <h2>Spiel beendet</h2>
 

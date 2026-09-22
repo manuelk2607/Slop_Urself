@@ -30,7 +30,10 @@ const backToLobbyButton = document.getElementById('backToLobbyButton') as HTMLBu
 const roomCodeInput = document.getElementById('roomCodeInput') as HTMLInputElement;
 const lobbyError = document.getElementById('lobbyError') as HTMLParagraphElement;
 const statsNotice = document.getElementById('statsNotice') as HTMLParagraphElement;
+const statsOverview = document.getElementById('statsOverview') as HTMLDivElement;
 const statsList = document.getElementById('statsList') as HTMLUListElement;
+const videoStatsNotice = document.getElementById('videoStatsNotice') as HTMLParagraphElement;
+const videoStatsList = document.getElementById('videoStatsList') as HTMLUListElement;
 const hostNotice = document.getElementById('hostNotice') as HTMLParagraphElement;
 const lobbyPlayerList = document.getElementById('lobbyPlayerList') as HTMLUListElement;
 const startGameButton = document.getElementById('startGameButton') as HTMLButtonElement;
@@ -71,6 +74,37 @@ let currentSessionId = '';
 let aiRoundLimit = 5;
 let noticeTimeout: number | undefined;
 const storedSessionRaw = localStorage.getItem('slopurself-session');
+
+interface PlayerStats {
+    name: string;
+    gamesPlayed: number;
+    wins: number;
+    roundsCreated: number;
+    totalScore: number;
+    averageScore: number;
+    averageReceivedPoints: number;
+    votesGiven: number;
+    averageVoteGiven: number;
+}
+
+interface StatsOverview {
+    gamesPlayed: number;
+    completedGames: number;
+    roundsPlayed: number;
+    votesCast: number;
+    videosArchived: number;
+    highestScore: number;
+}
+
+interface VideoStats {
+    roomCode: string;
+    roundNumber: number;
+    creatorName: string;
+    prompt: string;
+    videoUrl: string;
+    roundPoints: number;
+    createdAt: string;
+}
 
 function createSessionId() {
     if (crypto.randomUUID) return crypto.randomUUID();
@@ -168,7 +202,34 @@ function showRoomNotice(message: string) {
     }, 5000);
 }
 
-function renderStats(players: { name: string; gamesPlayed: number; roundsCreated: number; totalScore: number; votesGiven: number; averageVoteGiven: number }[]) {
+function renderStatsOverview(overview: StatsOverview) {
+    statsOverview.innerHTML = '';
+
+    const items = [
+        { label: 'Spiele', value: overview.gamesPlayed },
+        { label: 'Beendet', value: overview.completedGames },
+        { label: 'Runden', value: overview.roundsPlayed },
+        { label: 'Votes', value: overview.votesCast },
+        { label: 'Videos', value: overview.videosArchived },
+        { label: 'Topscore', value: overview.highestScore }
+    ];
+
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'stat-card';
+
+        const value = document.createElement('strong');
+        value.innerText = String(item.value);
+
+        const label = document.createElement('span');
+        label.innerText = item.label;
+
+        card.append(value, label);
+        statsOverview.appendChild(card);
+    });
+}
+
+function renderStats(players: PlayerStats[]) {
     statsList.innerHTML = '';
 
     if (players.length === 0) {
@@ -194,7 +255,7 @@ function renderStats(players: { name: string; gamesPlayed: number; roundsCreated
 
         const details = document.createElement('span');
         details.className = 'stat-details';
-        details.innerText = `${player.gamesPlayed} Spiele · ${player.roundsCreated} Runden · Ø Vote ${player.averageVoteGiven}`;
+        details.innerText = `${player.gamesPlayed} Spiele · ${player.wins} Siege · ${player.roundsCreated} Videos · Ø ${player.averageReceivedPoints} Pkt./Video · Ø Vote ${player.averageVoteGiven}`;
 
         const score = document.createElement('span');
         score.className = 'score-badge';
@@ -203,6 +264,45 @@ function renderStats(players: { name: string; gamesPlayed: number; roundsCreated
         playerInfo.append(rankBadge, name, details);
         li.append(playerInfo, score);
         statsList.appendChild(li);
+    });
+}
+
+function renderVideoStats(videos: VideoStats[], videoStorageMode: string) {
+    videoStatsList.innerHTML = '';
+
+    if (videos.length === 0) {
+        videoStatsNotice.innerText = 'Noch keine Videos gespeichert.';
+        return;
+    }
+
+    videoStatsNotice.innerText = videoStorageMode === 'url'
+        ? 'Videos werden platzsparend als Link zur gespielten Runde gespeichert.'
+        : 'Gespeicherte Videos aus den letzten Runden.';
+
+    videos.forEach(video => {
+        const li = document.createElement('li');
+        li.className = 'video-stat-item';
+
+        const videoElement = document.createElement('video');
+        videoElement.controls = true;
+        videoElement.preload = 'metadata';
+        videoElement.src = video.videoUrl;
+
+        const meta = document.createElement('div');
+        meta.className = 'video-stat-meta';
+
+        const title = document.createElement('strong');
+        title.innerText = `${video.creatorName} · Raum ${video.roomCode} · Runde ${video.roundNumber}`;
+
+        const prompt = document.createElement('span');
+        prompt.innerText = video.prompt;
+
+        const points = document.createElement('small');
+        points.innerText = `${video.roundPoints} Punkte · ${new Date(video.createdAt).toLocaleDateString('de-DE')}`;
+
+        meta.append(title, prompt, points);
+        li.append(videoElement, meta);
+        videoStatsList.appendChild(li);
     });
 }
 
@@ -310,7 +410,10 @@ startGameButton.addEventListener('click', () => {
 statsButton.addEventListener('click', async () => {
     showScreen(screenStats);
     statsNotice.innerText = 'Lade Statistiken...';
+    statsOverview.innerHTML = '';
     statsList.innerHTML = '';
+    videoStatsNotice.innerText = '';
+    videoStatsList.innerHTML = '';
 
     try {
         const response = await fetch('/api/stats');
@@ -318,7 +421,10 @@ statsButton.addEventListener('click', async () => {
 
         const data = await response.json() as {
             databaseEnabled: boolean;
-            players: { name: string; gamesPlayed: number; roundsCreated: number; totalScore: number; votesGiven: number; averageVoteGiven: number }[];
+            overview: StatsOverview;
+            players: PlayerStats[];
+            recentVideos: VideoStats[];
+            videoStorageMode: string;
         };
 
         if (!data.databaseEnabled) {
@@ -326,7 +432,9 @@ statsButton.addEventListener('click', async () => {
             return;
         }
 
+        renderStatsOverview(data.overview);
         renderStats(data.players);
+        renderVideoStats(data.recentVideos, data.videoStorageMode);
     } catch {
         statsNotice.innerText = 'Statistiken konnten nicht geladen werden.';
     }

@@ -46,10 +46,32 @@ export interface PersistRoundInput {
 export interface PlayerStats {
     name: string;
     gamesPlayed: number;
+    wins: number;
     roundsCreated: number;
     totalScore: number;
+    averageScore: number;
+    averageReceivedPoints: number;
     votesGiven: number;
     averageVoteGiven: number;
+}
+
+export interface StatsOverview {
+    gamesPlayed: number;
+    completedGames: number;
+    roundsPlayed: number;
+    votesCast: number;
+    videosArchived: number;
+    highestScore: number;
+}
+
+export interface VideoStats {
+    roomCode: string;
+    roundNumber: number;
+    creatorName: string;
+    prompt: string;
+    videoUrl: string;
+    roundPoints: number;
+    createdAt: string;
 }
 
 export async function ensureDatabaseSchema() {
@@ -255,24 +277,55 @@ export async function saveScores(roomCode: string, players: { id: string; name: 
     })));
 }
 
-export async function getStats(): Promise<PlayerStats[]> {
+export async function getStats(): Promise<{
+    overview: StatsOverview;
+    players: PlayerStats[];
+    recentVideos: VideoStats[];
+}> {
     const pool = getPool();
-    if (!pool) return [];
+    if (!pool) {
+        return {
+            overview: {
+                gamesPlayed: 0,
+                completedGames: 0,
+                roundsPlayed: 0,
+                votesCast: 0,
+                videosArchived: 0,
+                highestScore: 0
+            },
+            players: [],
+            recentVideos: []
+        };
+    }
 
-    const result = await pool.query<PlayerStats>(`
+    const overviewResult = await pool.query<StatsOverview>(`
+        select
+            count(*)::int as "gamesPlayed",
+            count(*) filter (where status = 'GAME_OVER')::int as "completedGames",
+            (select count(*)::int from rounds) as "roundsPlayed",
+            (select count(*)::int from votes) as "votesCast",
+            (select count(*)::int from rounds where video_url <> '') as "videosArchived",
+            coalesce((select max(score)::int from players), 0) as "highestScore"
+        from rooms
+    `);
+
+    const playersResult = await pool.query<PlayerStats>(`
         with player_totals as (
             select
                 lower(name) as player_key,
                 max(name) as name,
                 count(distinct room_code) as "gamesPlayed",
-                coalesce(sum(score), 0)::int as "totalScore"
+                count(*) filter (where final_rank = 1)::int as wins,
+                coalesce(sum(score), 0)::int as "totalScore",
+                coalesce(avg(score), 0)::float as "averageScore"
             from players
             group by lower(name)
         ),
         created_rounds as (
             select
                 lower(p.name) as player_key,
-                count(r.id)::int as "roundsCreated"
+                count(r.id)::int as "roundsCreated",
+                coalesce(avg(r.round_points), 0)::float as "averageReceivedPoints"
             from rounds r
             join players p
               on p.room_code = r.room_code
@@ -295,7 +348,10 @@ export async function getStats(): Promise<PlayerStats[]> {
             pt.name,
             pt."gamesPlayed"::int,
             coalesce(cr."roundsCreated", 0)::int as "roundsCreated",
+            round(pt."averageScore"::numeric, 2)::float as "averageScore",
+            round(coalesce(cr."averageReceivedPoints", 0)::numeric, 2)::float as "averageReceivedPoints",
             pt."totalScore"::int,
+            pt.wins::int,
             coalesce(gv."votesGiven", 0)::int as "votesGiven",
             round(coalesce(gv."averageVoteGiven", 0)::numeric, 2)::float as "averageVoteGiven"
         from player_totals pt
@@ -305,5 +361,27 @@ export async function getStats(): Promise<PlayerStats[]> {
         limit 50
     `);
 
-    return result.rows;
+    const videosResult = await pool.query<VideoStats>(`
+        select
+            r.room_code as "roomCode",
+            r.round_number::int as "roundNumber",
+            coalesce(p.name, 'Unbekannt') as "creatorName",
+            r.prompt,
+            r.video_url as "videoUrl",
+            r.round_points::int as "roundPoints",
+            r.created_at::text as "createdAt"
+        from rounds r
+        left join players p
+          on p.room_code = r.room_code
+         and p.socket_id = r.creator_socket_id
+        where r.video_url <> ''
+        order by r.created_at desc
+        limit 12
+    `);
+
+    return {
+        overview: overviewResult.rows[0],
+        players: playersResult.rows,
+        recentVideos: videosResult.rows
+    };
 }

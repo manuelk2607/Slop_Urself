@@ -1,12 +1,15 @@
 {
   "compilerOptions": {
-    "target": "es2016",
+    "target": "es2017",
     "module": "commonjs",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmitOnError": true
   },
-  "include": ["**/*"],
-  "exclude": ["node_modules", "neon.ts"]
+  "include": ["db.ts", "script.ts", "server.ts"],
+  "exclude": ["dist", "node_modules", "neon.ts"]
 }

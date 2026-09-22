@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
+import path from 'path';
 import { Server, Socket } from 'socket.io';
 import { Client, handle_file } from '@gradio/client';
 
@@ -22,8 +23,18 @@ import {
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e8 });
+const PUBLIC_ROOT = path.join(__dirname, '..');
 
-app.use(express.static(__dirname));
+app.get('/', (_req, res) => {
+    res.sendFile(path.join(PUBLIC_ROOT, 'index.html'));
+});
+app.get('/style.css', (_req, res) => {
+    res.sendFile(path.join(PUBLIC_ROOT, 'style.css'));
+});
+app.get('/script.js', (_req, res) => {
+    res.sendFile(path.join(__dirname, 'script.js'));
+});
+app.use('/assets', express.static(path.join(PUBLIC_ROOT, 'assets')));
 
 const HF_TOKEN = process.env.HF_TOKEN;
 const PORT = Number(process.env.PORT) || 3000;
@@ -31,7 +42,7 @@ const MIN_ROUNDS = 1;
 const AI_ROUND_LIMIT = Math.max(Number(process.env.AI_ROUND_LIMIT) || 5, MIN_ROUNDS);
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 type AiProvider = 'mock' | 'ltx' | 'wan';
-const AI_PROVIDER = parseAiProvider(process.env.AI_PROVIDER ?? (process.env.USE_MOCK_AI === 'false' ? 'ltx' : 'mock'));
+const AI_PROVIDER = parseAiProvider(process.env.AI_PROVIDER ?? (process.env.USE_MOCK_AI === 'true' ? 'mock' : 'ltx'));
 const HF_SPACE_ID = process.env.HF_SPACE_ID || 'Lightricks/ltx-video-distilled';
 const HF_PREDICT_ENDPOINT = process.env.HF_PREDICT_ENDPOINT || '/image_to_video';
 
@@ -158,12 +169,8 @@ function emitRoomNotice(roomId: string, message: string) {
     io.to(roomId).emit('roomNotice', message);
 }
 
-function getRequiredHfToken() {
-    if (!HF_TOKEN) {
-        throw new Error('HF_TOKEN fehlt. Setze AI_PROVIDER=mock oder hinterlege einen Hugging-Face-Token.');
-    }
-
-    return HF_TOKEN as `hf_${string}`;
+function getHfClientOptions() {
+    return HF_TOKEN ? { token: HF_TOKEN as `hf_${string}` } : undefined;
 }
 
 function getImageBlob(imageBase64: string) {
@@ -192,13 +199,11 @@ function extractVideoUrl(result: any): string {
 
 async function generateMockVideo() {
     await new Promise(resolve => setTimeout(resolve, 2000));
-    return 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+    return '/assets/mock-video.mp4';
 }
 
 async function generateLtxVideo(imageBlob: Blob, prompt: string) {
-    const client = await Client.connect(HF_SPACE_ID, {
-        token: getRequiredHfToken()
-    });
+    const client = await Client.connect(HF_SPACE_ID, getHfClientOptions());
 
     const result = await client.predict(HF_PREDICT_ENDPOINT, [
         prompt,
@@ -220,9 +225,7 @@ async function generateLtxVideo(imageBlob: Blob, prompt: string) {
 }
 
 async function generateWanVideo(imageBlob: Blob, prompt: string) {
-    const client = await Client.connect(HF_SPACE_ID, {
-        token: getRequiredHfToken()
-    });
+    const client = await Client.connect(HF_SPACE_ID, getHfClientOptions());
 
     const result = await client.predict(HF_PREDICT_ENDPOINT, [
         handle_file(imageBlob),
@@ -382,9 +385,11 @@ function removePlayerFromRoom(roomId: string, socketId: string, announce = true)
 
 app.get('/api/stats', async (_req, res) => {
     try {
+        const stats = await getStats();
         res.json({
             databaseEnabled: isDatabaseEnabled(),
-            players: await getStats()
+            ...stats,
+            videoStorageMode: 'url'
         });
     } catch (error) {
         console.error('[DB] Statistiken laden fehlgeschlagen:', error);
