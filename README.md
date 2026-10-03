@@ -68,6 +68,31 @@ Wichtig:
 - Der Server muss auf Port `3000` laufen, damit `npm run tunnel` direkt funktioniert.
 - Teile die URL nur mit Leuten, die mitspielen sollen.
 
+## Ohne laufenden Mac hosten
+
+Quick Tunnel ist gut fuer schnelle Tests, aber dein Mac muss dabei laufen. Fuer eine dauerhaft gehostete Version ist eine Cloudflare-Worker-Architektur vorbereitet:
+
+- statische Assets ueber Cloudflare
+- native WebSockets statt Socket.IO
+- ein Durable Object pro Spielraum
+- Hugging-Face-Token und Neon-URL als Cloudflare Secrets
+
+Die Vorbereitungen liegen in `cloudflare/`.
+
+```bash
+npm run cf:dev
+npm run cf:deploy
+```
+
+Vor einem Deploy muessen Secrets gesetzt werden:
+
+```bash
+npx wrangler secret put HF_TOKEN --config cloudflare/wrangler.toml
+npx wrangler secret put DATABASE_URL --config cloudflare/wrangler.toml
+```
+
+Wichtig: Die lokale Express/Socket.IO-Version bleibt weiterhin der stabile Spielserver. Der Cloudflare-Ordner ist die vorbereitete Migration, damit das Spiel spaeter ohne laufenden Mac betrieben werden kann.
+
 ## KI konfigurieren
 
 Die echte Hugging-Face-Generierung ist der Standard. Empfohlen fuer den Test mit Freunden:

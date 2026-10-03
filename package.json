@@ -7,6 +7,8 @@
     "build": "tsc",
     "dev": "npm run build && node dist/server.js",
     "start": "node dist/server.js",
+    "cf:dev": "npx wrangler dev --config cloudflare/wrangler.toml",
+    "cf:deploy": "npx wrangler deploy --config cloudflare/wrangler.toml",
     "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "devDependencies": {

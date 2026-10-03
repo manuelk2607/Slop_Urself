@@ -1,0 +1,31 @@
+name = "slopurself"
+main = "src/worker.ts"
+compatibility_date = "2026-10-03"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/ws/*"]
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "RoomDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDurableObject"]
+
+[vars]
+AI_PROVIDER = "ltx"
+HF_SPACE_ID = "Lightricks/ltx-video-distilled"
+HF_PREDICT_ENDPOINT = "/image_to_video"
+AI_ROUND_LIMIT = "5"
+LTX_DURATION = "5"
+LTX_HEIGHT = "512"
+LTX_WIDTH = "704"
+LTX_GUIDANCE = "1.2"
+
+# Set these with Wrangler secrets, never in this file:
+# npx wrangler secret put HF_TOKEN --config cloudflare/wrangler.toml
+# npx wrangler secret put DATABASE_URL --config cloudflare/wrangler.toml
