@@ -163,6 +163,7 @@ export class RoomDurableObject {
         const socketId = crypto.randomUUID();
         this.sockets.set(server, { socketId, sessionId: socketId });
         server.accept();
+        this.send(server, 'connect', { socketId });
 
         server.addEventListener('message', event => {
             void this.handleMessage(server, socketId, event.data);
@@ -233,9 +234,8 @@ export class RoomDurableObject {
         }
 
         const sessionId = sanitizeSessionId(payload.sessionId) || socketId;
-        const code = this.roomCode === 'NEW' ? createRoomId() : this.roomCode;
         this.room = {
-            code,
+            code: this.roomCode,
             hostId: socketId,
             players: [{ id: socketId, sessionId, name: username, score: 0, connected: true }],
             state: 'LOBBY',
@@ -249,7 +249,7 @@ export class RoomDurableObject {
         this.sockets.set(socket, { socketId, sessionId });
 
         await this.saveRoom();
-        this.send(socket, 'roomCreated', { roomId: code, sessionId });
+        this.send(socket, 'roomCreated', { roomId: this.roomCode, sessionId });
         this.broadcastRoomUpdate();
     }
 
@@ -647,10 +647,6 @@ function sanitizeMaxRounds(value: unknown, aiRoundLimit: number): number {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return aiRoundLimit;
     return Math.min(Math.max(Math.floor(parsed), MIN_ROUNDS), aiRoundLimit);
-}
-
-function createRoomId() {
-    return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
 
 function buildVideoPrompt(prompt: string) {

@@ -1,5 +1,137 @@
-declare const io: () => any;
-const socket = io();
+type SocketEventHandler = (data?: any) => void;
+type SocketPayload = Record<string, unknown>;
+type SocketFactory = () => any;
+
+interface SlopWindow extends Window {
+    io?: SocketFactory;
+}
+
+interface RealtimeClient {
+    readonly id: string;
+    readonly isNativeWebSocket: boolean;
+    on(event: string, handler: SocketEventHandler): void;
+    emit(event: string, payload?: SocketPayload): void;
+    connectToRoom(roomId: string): Promise<void>;
+}
+
+class SocketIoRealtimeClient implements RealtimeClient {
+    readonly isNativeWebSocket = false;
+
+    constructor(private readonly socketIoClient: any) {}
+
+    get id() {
+        return this.socketIoClient.id || '';
+    }
+
+    on(event: string, handler: SocketEventHandler) {
+        this.socketIoClient.on(event, handler);
+    }
+
+    emit(event: string, payload?: SocketPayload) {
+        this.socketIoClient.emit(event, payload);
+    }
+
+    async connectToRoom() {}
+}
+
+class NativeWebSocketRealtimeClient implements RealtimeClient {
+    readonly isNativeWebSocket = true;
+    private socket: WebSocket | null = null;
+    private socketId = '';
+    private activeRoomId = '';
+    private openPromise: Promise<void> | null = null;
+    private readonly handlers = new Map<string, SocketEventHandler[]>();
+    private readonly queuedMessages: { type: string; payload?: SocketPayload }[] = [];
+
+    get id() {
+        return this.socketId;
+    }
+
+    on(event: string, handler: SocketEventHandler) {
+        const handlers = this.handlers.get(event) || [];
+        handlers.push(handler);
+        this.handlers.set(event, handlers);
+    }
+
+    emit(event: string, payload?: SocketPayload) {
+        const message = { type: event, payload };
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify(message));
+            return;
+        }
+
+        this.queuedMessages.push(message);
+    }
+
+    async connectToRoom(roomId: string) {
+        const normalizedRoomId = roomId.trim().toUpperCase();
+        if (!normalizedRoomId) throw new Error('Raumcode fehlt.');
+
+        if (
+            this.socket &&
+            this.activeRoomId === normalizedRoomId &&
+            (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+        ) {
+            await this.openPromise;
+            return;
+        }
+
+        this.socket?.close();
+        this.activeRoomId = normalizedRoomId;
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        this.socket = new WebSocket(`${protocol}://${window.location.host}/ws/${encodeURIComponent(normalizedRoomId)}`);
+        this.openPromise = new Promise((resolve, reject) => {
+            const socket = this.socket;
+            if (!socket) {
+                reject(new Error('WebSocket konnte nicht erstellt werden.'));
+                return;
+            }
+
+            socket.addEventListener('open', () => {
+                this.flushQueuedMessages();
+                resolve();
+            }, { once: true });
+
+            socket.addEventListener('error', () => {
+                reject(new Error('Verbindung zum Cloudflare-Spielraum fehlgeschlagen.'));
+            }, { once: true });
+
+            socket.addEventListener('message', event => this.handleMessage(event.data));
+            socket.addEventListener('close', () => this.dispatch('disconnect'));
+        });
+
+        await this.openPromise;
+    }
+
+    private flushQueuedMessages() {
+        while (this.queuedMessages.length > 0 && this.socket?.readyState === WebSocket.OPEN) {
+            const message = this.queuedMessages.shift();
+            if (message) this.socket.send(JSON.stringify(message));
+        }
+    }
+
+    private handleMessage(data: unknown) {
+        try {
+            const message = JSON.parse(String(data)) as { type?: string; payload?: any };
+            if (!message.type) return;
+            if (message.type === 'connect' && typeof message.payload?.socketId === 'string') {
+                this.socketId = message.payload.socketId;
+            }
+            this.dispatch(message.type, message.payload);
+        } catch {
+            this.dispatch('errorMsg', 'Ungueltige Server-Antwort.');
+        }
+    }
+
+    private dispatch(event: string, payload?: any) {
+        (this.handlers.get(event) || []).forEach(handler => handler(payload));
+    }
+}
+
+const slopWindow = window as SlopWindow;
+const socket: RealtimeClient = slopWindow.io
+    ? new SocketIoRealtimeClient(slopWindow.io())
+    : new NativeWebSocketRealtimeClient();
 
 // Header
 const gameHeader = document.getElementById('gameHeader') as HTMLElement;
@@ -74,6 +206,24 @@ let currentSessionId = '';
 let aiRoundLimit = 5;
 let noticeTimeout: number | undefined;
 const storedSessionRaw = localStorage.getItem('slopurself-session');
+
+function createRoomCode() {
+    return Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
+function isCurrentSocket(socketId: string) {
+    return socket.id === socketId;
+}
+
+async function connectToRoom(roomId: string) {
+    try {
+        await socket.connectToRoom(roomId);
+        return true;
+    } catch (error) {
+        lobbyError.innerText = error instanceof Error ? error.message : 'Verbindung zum Raum fehlgeschlagen.';
+        return false;
+    }
+}
 
 interface PlayerStats {
     name: string;
@@ -337,16 +487,20 @@ async function loadGameConfig() {
 
 void loadGameConfig();
 
-createRoomButton.addEventListener('click', () => {
+createRoomButton.addEventListener('click', async () => {
     const username = usernameInput.value.trim();
     const maxRounds = Math.min(Math.max(Number(roundCountInput.value) || aiRoundLimit, 1), aiRoundLimit);
     if (!username) return triggerNameError();
-    socket.emit('createRoom', { username, maxRounds, sessionId: createSessionId() });
+
+    const roomId = socket.isNativeWebSocket ? createRoomCode() : '';
+    if (roomId && !(await connectToRoom(roomId))) return;
+
+    socket.emit('createRoom', { roomId, username, maxRounds, sessionId: createSessionId() });
 });
 
-joinRoomButton.addEventListener('click', () => {
+joinRoomButton.addEventListener('click', async () => {
     const username = usernameInput.value.trim();
-    const code = roomCodeInput.value.trim();
+    const code = roomCodeInput.value.trim().toUpperCase();
     if (!username) return triggerNameError();
     if (!code) {
         lobbyError.innerText = '⚠️ Bitte gib einen 4-stelligen Raumcode ein!';
@@ -354,6 +508,7 @@ joinRoomButton.addEventListener('click', () => {
         roomCodeInput.focus();
         return;
     }
+    if (!(await connectToRoom(code))) return;
     socket.emit('joinRoom', { roomId: code, username, sessionId: createSessionId() });
 });
 
@@ -382,7 +537,7 @@ socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string;
     currentHostId = data.hostId;
 
     if (data.gameState === 'LOBBY') {
-        const isHost = socket.id === data.hostId;
+        const isHost = isCurrentSocket(data.hostId);
         renderLobbyPlayers(data.players);
         hostNotice.innerText = isHost
             ? 'Alle bereit? Starte die Partie, sobald genug Spieler im Raum sind.'
@@ -472,18 +627,25 @@ socket.on('roomNotice', (message: string) => {
     showRoomNotice(message);
 });
 
-socket.on('connect', () => {
+async function resumeStoredSession() {
     if (!storedSessionRaw) return;
 
     try {
         const storedSession = JSON.parse(storedSessionRaw) as { roomId?: string; sessionId?: string };
         if (storedSession.roomId && storedSession.sessionId) {
+            if (socket.isNativeWebSocket && !(await connectToRoom(storedSession.roomId))) return;
             socket.emit('resumeRoom', storedSession);
         }
     } catch {
         clearSession();
     }
+}
+
+socket.on('connect', () => {
+    if (!socket.isNativeWebSocket) void resumeStoredSession();
 });
+
+if (socket.isNativeWebSocket) void resumeStoredSession();
 
 // --- SCREEN 2: ERSTELLEN vs. WARTEN ---
 socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string; hostId: string }) => {
@@ -496,7 +658,7 @@ socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorNam
     uploadButton.disabled = false;
     uploadButton.innerText = 'KI-Video generieren';
 
-    const isMe = (socket.id === data.activeCreatorId);
+    const isMe = isCurrentSocket(data.activeCreatorId);
 
     if (isMe) {
         // Dieser Spieler darf erstellen
@@ -587,7 +749,7 @@ socket.on('showVotingScreen', (data: { videoUrl: string; authorId: string; autho
     votingVideoPlayer.src = data.videoUrl;
     votingVideoPlayer.play().catch(() => {});
 
-    const isMe = (socket.id === data.authorId);
+    const isMe = isCurrentSocket(data.authorId);
 
     if (isMe) {
         authorNotice.innerText = '🎬 Das ist dein Video! Die anderen bewerten jetzt...';
@@ -620,7 +782,7 @@ voteButtons.forEach(btn => {
 // SCREEN 4: ERGEBNISSE & HIGHSCORE
 socket.on('showResultsScreen', (data: { authorName: string; roundPoints: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; isFinalRound: boolean }) => {
     showScreen(screenResult);
-    const isHost = socket.id === currentHostId;
+    const isHost = isCurrentSocket(currentHostId);
 
     resultAuthorName.innerText = `Video von ${data.authorName}`;
     resultPointsSummary.innerText = `+${data.roundPoints} Punkte in dieser Runde`;

@@ -7,8 +7,9 @@
     "build": "tsc",
     "dev": "npm run build && node dist/server.js",
     "start": "node dist/server.js",
-    "cf:dev": "npx wrangler dev --config cloudflare/wrangler.toml",
-    "cf:deploy": "npx wrangler deploy --config cloudflare/wrangler.toml",
+    "cf:build": "npm run build && mkdir -p cloudflare/public/assets && cp index.html cloudflare/public/index.html && cp style.css cloudflare/public/style.css && cp dist/script.js cloudflare/public/script.js && cp assets/mock-video.mp4 cloudflare/public/assets/mock-video.mp4",
+    "cf:dev": "npm run cf:build && npx wrangler dev --config cloudflare/wrangler.toml",
+    "cf:deploy": "npm run cf:build && npx wrangler deploy --config cloudflare/wrangler.toml",
     "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "devDependencies": {

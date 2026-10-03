@@ -3,3 +3,5 @@
 .env.local
 dist/
 node_modules/
+cloudflare/public/*
+!cloudflare/public/README.md
