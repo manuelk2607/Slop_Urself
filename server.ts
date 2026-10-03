@@ -3,7 +3,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import { Server, Socket } from 'socket.io';
-import { Client, handle_file } from '@gradio/client';
+import { Client, prepare_files } from '@gradio/client';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -41,10 +41,19 @@ const PORT = Number(process.env.PORT) || 3000;
 const MIN_ROUNDS = 1;
 const AI_ROUND_LIMIT = Math.max(Number(process.env.AI_ROUND_LIMIT) || 5, MIN_ROUNDS);
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const SOLO_PREVIEW_MS = 10000;
 type AiProvider = 'mock' | 'ltx' | 'wan';
 const AI_PROVIDER = parseAiProvider(process.env.AI_PROVIDER ?? (process.env.USE_MOCK_AI === 'true' ? 'mock' : 'ltx'));
 const HF_SPACE_ID = process.env.HF_SPACE_ID || 'Lightricks/ltx-video-distilled';
 const HF_PREDICT_ENDPOINT = process.env.HF_PREDICT_ENDPOINT || '/image_to_video';
+const HF_SPACE_ROOT = `https://${HF_SPACE_ID.toLowerCase().replace('/', '-')}.hf.space`;
+const LTX_HEIGHT = clampNumber(process.env.LTX_HEIGHT, 256, 1280, 512);
+const LTX_WIDTH = clampNumber(process.env.LTX_WIDTH, 256, 1280, 704);
+const LTX_DURATION = clampNumber(process.env.LTX_DURATION, 0.3, 8.5, 5);
+const LTX_FRAMES = clampNumber(process.env.LTX_FRAMES, 9, 257, 9);
+const LTX_GUIDANCE = clampNumber(process.env.LTX_GUIDANCE, 1, 10, 1.2);
+const LTX_NEGATIVE_PROMPT = process.env.LTX_NEGATIVE_PROMPT
+    || 'worst quality, inconsistent motion, blurry, jittery, distorted, static, frozen, bad anatomy, warped body, extra limbs, deformed face, flickering, camera shake, low quality';
 
 interface Player {
     id: string;
@@ -74,6 +83,12 @@ const rooms: Record<string, Room> = {};
 function parseAiProvider(value: string): AiProvider {
     if (value === 'ltx' || value === 'wan') return value;
     return 'mock';
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
 }
 
 function sanitizeUsername(username: unknown): string {
@@ -173,7 +188,7 @@ function getHfClientOptions() {
     return HF_TOKEN ? { token: HF_TOKEN as `hf_${string}` } : undefined;
 }
 
-function getImageBlob(imageBase64: string) {
+function getImageFile(imageBase64: string) {
     const base64Data = imageBase64.split(',')[1];
     const mimeType = imageBase64.split(';')[0].split(':')[1] || 'image/png';
     const estimatedBytes = Math.ceil((base64Data.length * 3) / 4);
@@ -183,7 +198,8 @@ function getImageBlob(imageBase64: string) {
     }
 
     const buffer = Buffer.from(base64Data, 'base64');
-    return new Blob([buffer], { type: mimeType });
+    const extension = mimeType.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'png';
+    return new File([buffer], `input.${extension}`, { type: mimeType });
 }
 
 function extractVideoUrl(result: any): string {
@@ -197,38 +213,62 @@ function extractVideoUrl(result: any): string {
     return url;
 }
 
+function buildVideoPrompt(prompt: string) {
+    return [
+        prompt,
+        'Animate the uploaded image into a short, smooth video.',
+        'Preserve the original subject identity, colors, composition, and background.',
+        'Use natural motion only for the action described by the prompt.',
+        'Keep the camera stable unless the prompt explicitly asks for camera movement.',
+        'Make it coherent, playful, and easy to understand in a short party-game clip.'
+    ].join(' ');
+}
+
 async function generateMockVideo() {
     await new Promise(resolve => setTimeout(resolve, 2000));
     return '/assets/mock-video.mp4';
 }
 
-async function generateLtxVideo(imageBlob: Blob, prompt: string) {
+async function generateLtxVideo(imageFile: File, prompt: string) {
     const client = await Client.connect(HF_SPACE_ID, getHfClientOptions());
+    const uploadedFiles = await client.upload(await prepare_files([imageFile]), HF_SPACE_ROOT);
+    const uploadedImage = uploadedFiles?.[0];
 
+    if (!uploadedImage) {
+        throw new Error('Bild konnte nicht zu Hugging Face hochgeladen werden.');
+    }
+
+    const videoPrompt = buildVideoPrompt(prompt);
     const result = await client.predict(HF_PREDICT_ENDPOINT, [
-        prompt,
-        'blurry, low quality, distorted, static, motionless',
-        handle_file(imageBlob),
+        videoPrompt,
+        LTX_NEGATIVE_PROMPT,
+        uploadedImage,
         null,
-        512,
-        704,
+        LTX_HEIGHT,
+        LTX_WIDTH,
         'image-to-video',
-        4,
-        9,
+        LTX_DURATION,
+        LTX_FRAMES,
         42,
         true,
-        1.6,
+        LTX_GUIDANCE,
         true
     ]) as any;
 
     return extractVideoUrl(result);
 }
 
-async function generateWanVideo(imageBlob: Blob, prompt: string) {
+async function generateWanVideo(imageFile: File, prompt: string) {
     const client = await Client.connect(HF_SPACE_ID, getHfClientOptions());
+    const uploadedFiles = await client.upload(await prepare_files([imageFile]), HF_SPACE_ROOT);
+    const uploadedImage = uploadedFiles?.[0];
+
+    if (!uploadedImage) {
+        throw new Error('Bild konnte nicht zu Hugging Face hochgeladen werden.');
+    }
 
     const result = await client.predict(HF_PREDICT_ENDPOINT, [
-        handle_file(imageBlob),
+        uploadedImage,
         prompt,
         'blurry, low quality, distorted, static, motionless',
         42,
@@ -243,12 +283,12 @@ async function generateAiVideo(imageBase64: string, prompt: string) {
         return generateMockVideo();
     }
 
-    const imageBlob = getImageBlob(imageBase64);
+    const imageFile = getImageFile(imageBase64);
     if (AI_PROVIDER === 'wan') {
-        return generateWanVideo(imageBlob, prompt);
+        return generateWanVideo(imageFile, prompt);
     }
 
-    return generateLtxVideo(imageBlob, prompt);
+    return generateLtxVideo(imageFile, prompt);
 }
 
 async function persistFinishedRound(roomId: string, room: Room, activeCreator: Player, totalRoundPoints: number) {
@@ -401,7 +441,8 @@ app.get('/api/config', (_req, res) => {
     res.json({
         aiRoundLimit: AI_ROUND_LIMIT,
         aiProvider: AI_PROVIDER,
-        mockAi: AI_PROVIDER === 'mock'
+        mockAi: AI_PROVIDER === 'mock',
+        videoDuration: LTX_DURATION
     });
 });
 
@@ -649,7 +690,14 @@ io.on('connection', (socket: Socket) => {
                 authorName: activeCreator.name
             });
 
-            checkVotingComplete(formattedRoomId);
+            const hasEligibleVoters = getConnectedPlayers(room).some(player => player.id !== activeCreator.id);
+            if (hasEligibleVoters) {
+                void checkVotingComplete(formattedRoomId);
+            } else {
+                setTimeout(() => {
+                    void checkVotingComplete(formattedRoomId);
+                }, SOLO_PREVIEW_MS);
+            }
 
         } catch (error) {
             console.error("Fehler in Pipeline:", error);
