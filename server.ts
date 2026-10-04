@@ -51,7 +51,8 @@ const LTX_HEIGHT = clampNumber(process.env.LTX_HEIGHT, 256, 1280, 512);
 const LTX_WIDTH = clampNumber(process.env.LTX_WIDTH, 256, 1280, 704);
 const LTX_DURATION = clampNumber(process.env.LTX_DURATION, 0.3, 8.5, 5);
 const LTX_FRAMES = clampNumber(process.env.LTX_FRAMES, 9, 257, 121);
-const LTX_GUIDANCE = clampNumber(process.env.LTX_GUIDANCE, 1, 10, 3.5);
+const LTX_GUIDANCE = clampNumber(process.env.LTX_GUIDANCE, 1, 10, 2.5);
+const LTX_ENHANCE_PROMPT = process.env.LTX_ENHANCE_PROMPT === 'true';
 const LTX_NEGATIVE_PROMPT = process.env.LTX_NEGATIVE_PROMPT
     || 'worst quality, inconsistent motion, blurry, jittery, distorted, static, frozen, motionless subject, camera pan only, zoom only, no action, bad anatomy, warped body, extra limbs, deformed face, flickering, low quality';
 
@@ -215,14 +216,16 @@ function extractVideoUrl(result: any): string {
 
 function buildVideoPrompt(prompt: string) {
     return [
-        `Primary action: ${prompt}.`,
-        'The main subject must visibly perform the primary action during the clip.',
-        'Animate the subject, body, limbs, clothing, water, props, and nearby environment as needed to make the action clear.',
-        'Do not replace the requested action with only a camera pan, zoom, or still-image drift.',
-        'Preserve the uploaded image identity and setting, but prioritize executing the requested action over perfectly freezing the original composition.',
-        'Use a stable or gently following camera only if it helps show the action.',
-        'Make the result coherent, playful, and easy to understand in a five-second party-game clip.'
+        `Action to animate: ${prompt}.`,
+        'The visible main subject performs this action clearly on screen.',
+        'Move the subject and relevant objects in the image; do not use only camera movement.',
+        'Keep the original person, object, scene, and style recognizable.',
+        'Use a mostly static camera unless the user explicitly requests camera movement.'
     ].join(' ');
+}
+
+function createVideoSeed() {
+    return Math.floor(Math.random() * 2_147_483_647);
 }
 
 async function generateMockVideo() {
@@ -250,10 +253,10 @@ async function generateLtxVideo(imageFile: File, prompt: string) {
         'image-to-video',
         LTX_DURATION,
         LTX_FRAMES,
-        42,
-        true,
+        createVideoSeed(),
+        false,
         LTX_GUIDANCE,
-        true
+        LTX_ENHANCE_PROMPT
     ]) as any;
 
     return extractVideoUrl(result);

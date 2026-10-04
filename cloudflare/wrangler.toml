@@ -25,7 +25,8 @@ LTX_DURATION = "5"
 LTX_HEIGHT = "512"
 LTX_WIDTH = "704"
 LTX_FRAMES = "121"
-LTX_GUIDANCE = "3.5"
+LTX_GUIDANCE = "2.5"
+LTX_ENHANCE_PROMPT = "false"
 
 # Set these with Wrangler secrets, never in this file:
 # npx wrangler secret put HF_TOKEN --config cloudflare/wrangler.toml

@@ -119,22 +119,23 @@ AI_ROUND_LIMIT=5 \
 npm run dev
 ```
 
-Die LTX-Anbindung nutzt das Originalbild direkt als Image-to-Video-Eingabe. Der Server erweitert kurze Spieler-Prompts automatisch zu einem stabileren Video-Prompt, damit Motiv, Farben und Hintergrund eher erhalten bleiben.
+Die LTX-Anbindung nutzt das Originalbild direkt als Image-to-Video-Eingabe. Der Server erweitert kurze Spieler-Prompts zu einem knappen Action-Prompt, damit die sichtbare Handlung wichtiger ist als ein reiner Kameraschwenk.
 
 Aktuelle LTX-Parameter im Server:
 
-- Prompt: Spieler-Prompt plus Stabilitaets-Template
-- Negative Prompt: `worst quality, inconsistent motion, blurry, jittery, distorted, static, frozen, bad anatomy, warped body, extra limbs, deformed face, flickering, camera shake, low quality`
+- Prompt: Spieler-Prompt plus Action-Template
+- Negative Prompt: blockiert unter anderem `camera pan only`, `zoom only`, `no action` und `motionless subject`
 - Aufloesung: `512 x 704`
 - Dauer: `5`
 - Frames: `9`
-- Guidance: `1.2`
+- Guidance: `2.5`
 - Seed: randomisiert
+- Prompt-Enhancer: aus
 
 Diese Werte koennen lokal angepasst werden:
 
 ```bash
-LTX_DURATION=5 LTX_FRAMES=121 LTX_GUIDANCE=3.5 LTX_HEIGHT=512 LTX_WIDTH=704 npm run dev
+LTX_DURATION=5 LTX_FRAMES=121 LTX_GUIDANCE=2.5 LTX_ENHANCE_PROMPT=false LTX_HEIGHT=512 LTX_WIDTH=704 npm run dev
 ```
 
 Alternative zum Experimentieren:

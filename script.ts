@@ -808,5 +808,13 @@ socket.on('showGameOverScreen', (data: { players: { id: string; name: string; sc
 });
 
 restartButton.addEventListener('click', () => {
-    window.location.reload();
+    if (currentRoomId) {
+        socket.emit('leaveRoom', { roomId: currentRoomId });
+    }
+    clearSession();
+    displayRoomCode.innerText = '----';
+    playerCount.innerText = '1';
+    roundCounter.innerText = '1/1';
+    gameHeader.style.display = 'none';
+    showScreen(screenLobby);
 });

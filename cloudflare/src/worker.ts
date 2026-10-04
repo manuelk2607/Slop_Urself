@@ -46,6 +46,7 @@ export interface Env {
     LTX_WIDTH?: string;
     LTX_GUIDANCE?: string;
     LTX_FRAMES?: string;
+    LTX_ENHANCE_PROMPT?: string;
 }
 
 type GameState = 'LOBBY' | 'IDLE' | 'GENERATING' | 'VOTING' | 'RESULTS' | 'GAME_OVER';
@@ -610,10 +611,10 @@ export class RoomDurableObject {
             'image-to-video',
             Number(this.env.LTX_DURATION || 5),
             Number(this.env.LTX_FRAMES || 121),
-            42,
-            true,
-            Number(this.env.LTX_GUIDANCE || 3.5),
-            true
+            createVideoSeed(),
+            false,
+            Number(this.env.LTX_GUIDANCE || 2.5),
+            this.env.LTX_ENHANCE_PROMPT === 'true'
         ]);
 
         return extractVideoUrl(result);
@@ -680,18 +681,20 @@ function sanitizeMaxRounds(value: unknown, aiRoundLimit: number): number {
 
 function buildVideoPrompt(prompt: string) {
     return [
-        `Primary action: ${prompt}.`,
-        'The main subject must visibly perform the primary action during the clip.',
-        'Animate the subject, body, limbs, clothing, water, props, and nearby environment as needed to make the action clear.',
-        'Do not replace the requested action with only a camera pan, zoom, or still-image drift.',
-        'Preserve the uploaded image identity and setting, but prioritize executing the requested action over perfectly freezing the original composition.',
-        'Use a stable or gently following camera only if it helps show the action.',
-        'Make the result coherent, playful, and easy to understand in a five-second party-game clip.'
+        `Action to animate: ${prompt}.`,
+        'The visible main subject performs this action clearly on screen.',
+        'Move the subject and relevant objects in the image; do not use only camera movement.',
+        'Keep the original person, object, scene, and style recognizable.',
+        'Use a mostly static camera unless the user explicitly requests camera movement.'
     ].join(' ');
 }
 
 function getNegativePrompt() {
     return 'worst quality, inconsistent motion, blurry, jittery, distorted, static, frozen, motionless subject, camera pan only, zoom only, no action, bad anatomy, warped body, extra limbs, deformed face, flickering, low quality';
+}
+
+function createVideoSeed() {
+    return Math.floor(Math.random() * 2_147_483_647);
 }
 
 function makeFileData(imageBase64: string) {
