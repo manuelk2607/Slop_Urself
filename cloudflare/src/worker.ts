@@ -314,20 +314,14 @@ export class RoomDurableObject {
     private async leaveRoom(socket: CloudflareWebSocket, socketId: string) {
         const room = this.room;
         if (!room) return;
-        room.players = room.players.filter(player => player.id !== socketId);
-        delete room.currentVotes[socketId];
+        this.removePlayer(socketId);
         this.sockets.delete(socket);
-
-        if (room.players.length === 0) {
-            this.room = null;
-        } else {
-            if (room.hostId === socketId) room.hostId = room.players[0].id;
-            if (room.activeCreatorIndex >= room.players.length) room.activeCreatorIndex = 0;
-        }
 
         await this.saveRoom();
         this.send(socket, 'leftRoom');
         this.broadcastRoomUpdate();
+        if (this.room?.state === 'IDLE') this.sendCreateScreenState();
+        if (this.room?.state === 'VOTING') await this.checkVotingComplete();
     }
 
     private async startGame(socketId: string) {
@@ -374,6 +368,10 @@ export class RoomDurableObject {
 
         try {
             const videoUrl = await this.generateVideo(String(payload.imageBase64), prompt);
+            if (room.state !== 'GENERATING' || !room.players.some(player => player.id === activeCreator.id)) {
+                return;
+            }
+
             room.state = 'VOTING';
             room.currentVideoUrl = videoUrl;
             await this.saveRoom();
@@ -476,6 +474,36 @@ export class RoomDurableObject {
         this.sockets.delete(socket);
         void this.saveRoom();
         this.broadcastRoomUpdate();
+    }
+
+    private removePlayer(socketId: string) {
+        const room = this.room;
+        if (!room) return;
+
+        const index = room.players.findIndex(player => player.id === socketId);
+        if (index === -1) return;
+
+        const wasActive = room.activeCreatorIndex === index;
+        room.players.splice(index, 1);
+        delete room.currentVotes[socketId];
+
+        if (room.players.length === 0) {
+            this.room = null;
+            return;
+        }
+
+        if (room.hostId === socketId) room.hostId = room.players[0].id;
+        if (room.activeCreatorIndex >= room.players.length) room.activeCreatorIndex = 0;
+
+        if (wasActive && (room.state === 'IDLE' || room.state === 'GENERATING' || room.state === 'VOTING')) {
+            room.state = 'IDLE';
+            room.currentVotes = {};
+            room.currentPrompt = '';
+            room.currentVideoUrl = '';
+            this.broadcast('roomNotice', 'Der aktive Spieler hat das Spiel verlassen. Der naechste Spieler ist an der Reihe.');
+        } else if (room.state === 'VOTING') {
+            this.broadcast('roomNotice', 'Ein Spieler hat das Spiel verlassen.');
+        }
     }
 
     private restoreScreen(socket: CloudflareWebSocket) {

@@ -407,12 +407,14 @@ function removePlayerFromRoom(roomId: string, socketId: string, announce = true)
         room.activeCreatorIndex = 0;
     }
 
-    if (wasActive && (room.state === 'GENERATING' || room.state === 'VOTING')) {
+    if (wasActive && (room.state === 'IDLE' || room.state === 'GENERATING' || room.state === 'VOTING')) {
         room.state = 'IDLE';
         room.currentVotes = {};
+        room.currentPrompt = '';
+        room.currentVideoUrl = '';
         broadcastRoomUpdate(roomId);
         sendCreateScreenState(roomId);
-        emitRoomNotice(roomId, 'Der aktive Spieler hat das Spiel verlassen. Die Runde wurde zurückgesetzt.');
+        emitRoomNotice(roomId, 'Der aktive Spieler hat das Spiel verlassen. Der nächste Spieler ist an der Reihe.');
     } else if (room.state === 'VOTING') {
         void checkVotingComplete(roomId);
         broadcastRoomUpdate(roomId);
@@ -680,6 +682,9 @@ io.on('connection', (socket: Socket) => {
 
         try {
             const generatedVideoUrl = await generateAiVideo(data.imageBase64, prompt);
+            if (!rooms[formattedRoomId] || room.state !== 'GENERATING' || !room.players.some(player => player.id === activeCreator.id)) {
+                return;
+            }
 
             room.state = 'VOTING';
             room.currentVideoUrl = generatedVideoUrl;
