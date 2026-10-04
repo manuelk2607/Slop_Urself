@@ -24,7 +24,8 @@ AI_ROUND_LIMIT = "5"
 LTX_DURATION = "5"
 LTX_HEIGHT = "512"
 LTX_WIDTH = "704"
-LTX_GUIDANCE = "1.2"
+LTX_FRAMES = "121"
+LTX_GUIDANCE = "3.5"
 
 # Set these with Wrangler secrets, never in this file:
 # npx wrangler secret put HF_TOKEN --config cloudflare/wrangler.toml

@@ -50,10 +50,10 @@ const HF_SPACE_ROOT = `https://${HF_SPACE_ID.toLowerCase().replace('/', '-')}.hf
 const LTX_HEIGHT = clampNumber(process.env.LTX_HEIGHT, 256, 1280, 512);
 const LTX_WIDTH = clampNumber(process.env.LTX_WIDTH, 256, 1280, 704);
 const LTX_DURATION = clampNumber(process.env.LTX_DURATION, 0.3, 8.5, 5);
-const LTX_FRAMES = clampNumber(process.env.LTX_FRAMES, 9, 257, 9);
-const LTX_GUIDANCE = clampNumber(process.env.LTX_GUIDANCE, 1, 10, 1.2);
+const LTX_FRAMES = clampNumber(process.env.LTX_FRAMES, 9, 257, 121);
+const LTX_GUIDANCE = clampNumber(process.env.LTX_GUIDANCE, 1, 10, 3.5);
 const LTX_NEGATIVE_PROMPT = process.env.LTX_NEGATIVE_PROMPT
-    || 'worst quality, inconsistent motion, blurry, jittery, distorted, static, frozen, bad anatomy, warped body, extra limbs, deformed face, flickering, camera shake, low quality';
+    || 'worst quality, inconsistent motion, blurry, jittery, distorted, static, frozen, motionless subject, camera pan only, zoom only, no action, bad anatomy, warped body, extra limbs, deformed face, flickering, low quality';
 
 interface Player {
     id: string;
@@ -215,12 +215,13 @@ function extractVideoUrl(result: any): string {
 
 function buildVideoPrompt(prompt: string) {
     return [
-        prompt,
-        'Animate the uploaded image into a short, smooth video.',
-        'Preserve the original subject identity, colors, composition, and background.',
-        'Use natural motion only for the action described by the prompt.',
-        'Keep the camera stable unless the prompt explicitly asks for camera movement.',
-        'Make it coherent, playful, and easy to understand in a short party-game clip.'
+        `Primary action: ${prompt}.`,
+        'The main subject must visibly perform the primary action during the clip.',
+        'Animate the subject, body, limbs, clothing, water, props, and nearby environment as needed to make the action clear.',
+        'Do not replace the requested action with only a camera pan, zoom, or still-image drift.',
+        'Preserve the uploaded image identity and setting, but prioritize executing the requested action over perfectly freezing the original composition.',
+        'Use a stable or gently following camera only if it helps show the action.',
+        'Make the result coherent, playful, and easy to understand in a five-second party-game clip.'
     ].join(' ');
 }
 

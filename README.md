@@ -134,7 +134,7 @@ Aktuelle LTX-Parameter im Server:
 Diese Werte koennen lokal angepasst werden:
 
 ```bash
-LTX_DURATION=5 LTX_GUIDANCE=1.2 LTX_HEIGHT=512 LTX_WIDTH=704 npm run dev
+LTX_DURATION=5 LTX_FRAMES=121 LTX_GUIDANCE=3.5 LTX_HEIGHT=512 LTX_WIDTH=704 npm run dev
 ```
 
 Alternative zum Experimentieren:
