@@ -1,3 +1,5 @@
+import { neon } from '@neondatabase/serverless';
+
 interface Fetcher {
     fetch(request: Request): Promise<Response>;
 }
@@ -86,6 +88,13 @@ interface RoomState {
     currentVideoUrl: string;
 }
 
+interface FinalStandingInput {
+    playerSocketId: string;
+    name: string;
+    score: number;
+    finalRank: number;
+}
+
 interface ConnectionMeta {
     socketId: string;
     sessionId: string;
@@ -109,20 +118,11 @@ export default {
         }
 
         if (url.pathname === '/api/stats') {
+            const stats = await getStats(env);
             return json({
                 databaseEnabled: Boolean(env.DATABASE_URL),
-                overview: {
-                    gamesPlayed: 0,
-                    completedGames: 0,
-                    roundsPlayed: 0,
-                    votesCast: 0,
-                    videosArchived: 0,
-                    highestScore: 0
-                },
-                players: [],
-                recentVideos: [],
-                videoStorageMode: 'url',
-                migrationNote: 'Neon statistics persistence is implemented in the Node server and will be ported to the Worker in the next step.'
+                ...stats,
+                videoStorageMode: 'url'
             });
         }
 
@@ -251,6 +251,13 @@ export class RoomDurableObject {
         this.sockets.set(socket, { socketId, sessionId });
 
         await this.saveRoom();
+        await persistRoom(this.env, this.roomCode, socketId, this.room.maxRounds);
+        await persistPlayer(this.env, this.roomCode, {
+            playerSocketId: socketId,
+            name: username,
+            score: 0,
+            isHost: true
+        });
         this.send(socket, 'roomCreated', { roomId: this.roomCode, sessionId });
         this.broadcastRoomUpdate();
     }
@@ -278,6 +285,12 @@ export class RoomDurableObject {
         room.players.push({ id: socketId, sessionId, name: username, score: 0, connected: true });
         this.sockets.set(socket, { socketId, sessionId });
         await this.saveRoom();
+        await persistPlayer(this.env, room.code, {
+            playerSocketId: socketId,
+            name: username,
+            score: 0,
+            isHost: false
+        });
         this.send(socket, 'joinedSuccess', { roomId: room.code, sessionId });
         this.broadcastRoomUpdate();
     }
@@ -338,6 +351,8 @@ export class RoomDurableObject {
         });
 
         await this.saveRoom();
+        await markRoomStarted(this.env, room.code);
+        await persistScores(this.env, room.code, room.players, room.hostId);
         this.broadcastRoomUpdate();
         this.sendCreateScreenState();
     }
@@ -443,6 +458,15 @@ export class RoomDurableObject {
 
         const roundPoints = Object.values(room.currentVotes).reduce((sum, points) => sum + points, 0);
         activeCreator.score += roundPoints;
+        await persistScores(this.env, room.code, room.players, room.hostId);
+        await persistRound(this.env, room.code, {
+            roundNumber: room.currentRound,
+            creatorSocketId: activeCreator.id,
+            prompt: room.currentPrompt,
+            videoUrl: room.currentVideoUrl,
+            roundPoints,
+            votes: Object.entries(room.currentVotes).map(([voterSocketId, points]) => ({ voterSocketId, points }))
+        });
         room.state = 'RESULTS';
         await this.saveRoom();
         this.broadcastRoomUpdate();
@@ -457,6 +481,16 @@ export class RoomDurableObject {
 
         if (room.currentRound >= room.maxRounds) {
             room.state = 'GAME_OVER';
+            const standings = [...room.players]
+                .sort((a, b) => b.score - a.score)
+                .map((player, index) => ({
+                    playerSocketId: player.id,
+                    name: player.name,
+                    score: player.score,
+                    finalRank: index + 1
+                }));
+            await persistScores(this.env, room.code, room.players, room.hostId);
+            await markRoomFinished(this.env, room.code, standings);
             await this.saveRoom();
             this.broadcast('showGameOverScreen', {
                 players: [...room.players].sort((a, b) => b.score - a.score),
@@ -763,4 +797,282 @@ function extractVideoUrl(result: any): string {
     }
 
     return url;
+}
+
+function getSql(env: Env) {
+    return env.DATABASE_URL ? neon(env.DATABASE_URL) : null;
+}
+
+async function ensureDatabaseSchema(env: Env) {
+    const sql = getSql(env);
+    if (!sql) return;
+
+    await sql`
+        create table if not exists rooms (
+            code text primary key,
+            host_socket_id text not null,
+            max_rounds integer not null,
+            status text not null,
+            winner_socket_id text,
+            winner_name text,
+            created_at timestamptz not null default now(),
+            started_at timestamptz,
+            ended_at timestamptz
+        )
+    `;
+    await sql`
+        create table if not exists players (
+            room_code text not null references rooms(code) on delete cascade,
+            socket_id text not null,
+            name text not null,
+            score integer not null default 0,
+            final_rank integer,
+            is_host boolean not null default false,
+            joined_at timestamptz not null default now(),
+            primary key (room_code, socket_id)
+        )
+    `;
+    await sql`
+        create table if not exists rounds (
+            id bigserial primary key,
+            room_code text not null references rooms(code) on delete cascade,
+            round_number integer not null,
+            creator_socket_id text not null,
+            prompt text not null,
+            video_url text not null,
+            round_points integer not null,
+            created_at timestamptz not null default now(),
+            unique (room_code, round_number)
+        )
+    `;
+    await sql`
+        create table if not exists votes (
+            round_id bigint not null references rounds(id) on delete cascade,
+            voter_socket_id text not null,
+            points integer not null,
+            created_at timestamptz not null default now(),
+            primary key (round_id, voter_socket_id)
+        )
+    `;
+    await sql`create index if not exists players_name_idx on players(name)`;
+    await sql`create index if not exists rounds_room_code_idx on rounds(room_code)`;
+    await sql`create index if not exists votes_voter_socket_id_idx on votes(voter_socket_id)`;
+    await sql`alter table rooms add column if not exists winner_socket_id text`;
+    await sql`alter table rooms add column if not exists winner_name text`;
+    await sql`alter table players add column if not exists final_rank integer`;
+}
+
+async function persistRoom(env: Env, code: string, hostSocketId: string, maxRounds: number) {
+    const sql = getSql(env);
+    if (!sql) return;
+    await ensureDatabaseSchema(env);
+    await sql`
+        insert into rooms (code, host_socket_id, max_rounds, status)
+        values (${code}, ${hostSocketId}, ${maxRounds}, 'LOBBY')
+        on conflict (code) do update
+        set host_socket_id = excluded.host_socket_id,
+            max_rounds = excluded.max_rounds,
+            status = excluded.status
+    `;
+}
+
+async function persistPlayer(env: Env, roomCode: string, player: { playerSocketId: string; name: string; score: number; isHost: boolean }) {
+    const sql = getSql(env);
+    if (!sql) return;
+    await ensureDatabaseSchema(env);
+    await sql`
+        insert into players (room_code, socket_id, name, score, is_host)
+        values (${roomCode}, ${player.playerSocketId}, ${player.name}, ${player.score}, ${player.isHost})
+        on conflict (room_code, socket_id) do update
+        set name = excluded.name,
+            score = excluded.score,
+            is_host = excluded.is_host
+    `;
+}
+
+async function persistScores(env: Env, roomCode: string, players: Player[], hostId: string) {
+    await Promise.all(players.map(player => persistPlayer(env, roomCode, {
+        playerSocketId: player.id,
+        name: player.name,
+        score: player.score,
+        isHost: player.id === hostId
+    })));
+}
+
+async function markRoomStarted(env: Env, roomCode: string) {
+    const sql = getSql(env);
+    if (!sql) return;
+    await ensureDatabaseSchema(env);
+    await sql`
+        update rooms
+        set status = 'PLAYING',
+            started_at = coalesce(started_at, now())
+        where code = ${roomCode}
+    `;
+}
+
+async function markRoomFinished(env: Env, roomCode: string, standings: FinalStandingInput[]) {
+    const sql = getSql(env);
+    if (!sql) return;
+    await ensureDatabaseSchema(env);
+    const winner = standings[0];
+    await sql`
+        update rooms
+        set status = 'GAME_OVER',
+            winner_socket_id = ${winner?.playerSocketId ?? null},
+            winner_name = ${winner?.name ?? null},
+            ended_at = coalesce(ended_at, now())
+        where code = ${roomCode}
+    `;
+    for (const standing of standings) {
+        await sql`
+            update players
+            set score = ${standing.score},
+                final_rank = ${standing.finalRank}
+            where room_code = ${roomCode}
+              and socket_id = ${standing.playerSocketId}
+        `;
+    }
+}
+
+async function persistRound(
+    env: Env,
+    roomCode: string,
+    input: {
+        roundNumber: number;
+        creatorSocketId: string;
+        prompt: string;
+        videoUrl: string;
+        roundPoints: number;
+        votes: { voterSocketId: string; points: number }[];
+    }
+) {
+    const sql = getSql(env);
+    if (!sql) return;
+    await ensureDatabaseSchema(env);
+    const roundRows = await sql`
+        insert into rounds (room_code, round_number, creator_socket_id, prompt, video_url, round_points)
+        values (${roomCode}, ${input.roundNumber}, ${input.creatorSocketId}, ${input.prompt}, ${input.videoUrl}, ${input.roundPoints})
+        on conflict (room_code, round_number) do update
+        set creator_socket_id = excluded.creator_socket_id,
+            prompt = excluded.prompt,
+            video_url = excluded.video_url,
+            round_points = excluded.round_points
+        returning id
+    `;
+    const roundId = roundRows[0]?.id as string | undefined;
+    if (!roundId) return;
+
+    for (const vote of input.votes) {
+        await sql`
+            insert into votes (round_id, voter_socket_id, points)
+            values (${roundId}, ${vote.voterSocketId}, ${vote.points})
+            on conflict (round_id, voter_socket_id) do update
+            set points = excluded.points
+        `;
+    }
+}
+
+async function getStats(env: Env) {
+    const sql = getSql(env);
+    if (!sql) {
+        return {
+            overview: {
+                gamesPlayed: 0,
+                completedGames: 0,
+                roundsPlayed: 0,
+                votesCast: 0,
+                videosArchived: 0,
+                highestScore: 0
+            },
+            players: [],
+            recentVideos: []
+        };
+    }
+
+    await ensureDatabaseSchema(env);
+    const overview = await sql`
+        select
+            count(*)::int as "gamesPlayed",
+            count(*) filter (where status = 'GAME_OVER')::int as "completedGames",
+            (select count(*)::int from rounds) as "roundsPlayed",
+            (select count(*)::int from votes) as "votesCast",
+            (select count(*)::int from rounds where video_url <> '') as "videosArchived",
+            coalesce((select max(score)::int from players), 0) as "highestScore"
+        from rooms
+    `;
+    const players = await sql`
+        with player_totals as (
+            select
+                lower(name) as player_key,
+                max(name) as name,
+                count(distinct room_code) as "gamesPlayed",
+                count(*) filter (where final_rank = 1)::int as wins,
+                coalesce(sum(score), 0)::int as "totalScore",
+                coalesce(avg(score), 0)::float as "averageScore"
+            from players
+            group by lower(name)
+        ),
+        created_rounds as (
+            select
+                lower(p.name) as player_key,
+                count(r.id)::int as "roundsCreated",
+                coalesce(avg(r.round_points), 0)::float as "averageReceivedPoints"
+            from rounds r
+            join players p
+              on p.room_code = r.room_code
+             and p.socket_id = r.creator_socket_id
+            group by lower(p.name)
+        ),
+        given_votes as (
+            select
+                lower(p.name) as player_key,
+                count(v.points)::int as "votesGiven",
+                coalesce(avg(v.points), 0)::float as "averageVoteGiven"
+            from votes v
+            join rounds r on r.id = v.round_id
+            join players p
+              on p.room_code = r.room_code
+             and p.socket_id = v.voter_socket_id
+            group by lower(p.name)
+        )
+        select
+            pt.name,
+            pt."gamesPlayed"::int,
+            coalesce(cr."roundsCreated", 0)::int as "roundsCreated",
+            round(pt."averageScore"::numeric, 2)::float as "averageScore",
+            round(coalesce(cr."averageReceivedPoints", 0)::numeric, 2)::float as "averageReceivedPoints",
+            pt."totalScore"::int,
+            pt.wins::int,
+            coalesce(gv."votesGiven", 0)::int as "votesGiven",
+            round(coalesce(gv."averageVoteGiven", 0)::numeric, 2)::float as "averageVoteGiven"
+        from player_totals pt
+        left join created_rounds cr on cr.player_key = pt.player_key
+        left join given_votes gv on gv.player_key = pt.player_key
+        order by pt."totalScore" desc, pt.name asc
+        limit 50
+    `;
+    const recentVideos = await sql`
+        select
+            r.room_code as "roomCode",
+            r.round_number::int as "roundNumber",
+            coalesce(p.name, 'Unbekannt') as "creatorName",
+            r.prompt,
+            r.video_url as "videoUrl",
+            r.round_points::int as "roundPoints",
+            r.created_at::text as "createdAt"
+        from rounds r
+        left join players p
+          on p.room_code = r.room_code
+         and p.socket_id = r.creator_socket_id
+        where r.video_url <> ''
+        order by r.created_at desc
+        limit 12
+    `;
+
+    return {
+        overview: overview[0],
+        players,
+        recentVideos
+    };
 }
