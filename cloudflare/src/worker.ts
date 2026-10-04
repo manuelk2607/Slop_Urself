@@ -40,6 +40,7 @@ export interface Env {
     HF_TOKEN?: string;
     DATABASE_URL?: string;
     AI_PROVIDER?: string;
+    AI_PROVIDER_CHAIN?: string;
     HF_SPACE_ID?: string;
     HF_PREDICT_ENDPOINT?: string;
     AI_ROUND_LIMIT?: string;
@@ -111,7 +112,7 @@ export default {
         if (url.pathname === '/api/config') {
             return json({
                 aiRoundLimit: getAiRoundLimit(env),
-                aiProvider: env.AI_PROVIDER || 'ltx',
+                aiProvider: env.AI_PROVIDER_CHAIN || env.AI_PROVIDER || 'wan,wan22,ltx',
                 mockAi: env.AI_PROVIDER === 'mock',
                 videoDuration: Number(env.LTX_DURATION || 5)
             });
@@ -602,38 +603,27 @@ export class RoomDurableObject {
     private async generateVideo(imageBase64: string, prompt: string) {
         if (this.env.AI_PROVIDER === 'mock') return '/assets/mock-video.mp4';
 
-        return this.generateLtxVideo(imageBase64, prompt);
+        const providers = parseProviderChain(this.env.AI_PROVIDER_CHAIN || this.env.AI_PROVIDER || 'wan,wan22,ltx');
+        const errors: string[] = [];
+        for (const provider of providers) {
+            try {
+                if (provider === 'wan') return await this.generateWanVideo(imageBase64, prompt);
+                if (provider === 'wan22') return await this.generateWan22Video(imageBase64, prompt);
+                if (provider === 'ltx') return await this.generateLtxVideo(imageBase64, prompt);
+            } catch (error) {
+                errors.push(`${provider}: ${error instanceof Error ? error.message : 'unbekannter Fehler'}`);
+            }
+        }
+
+        throw new Error(`Alle KI-Provider sind fehlgeschlagen. ${errors.join(' | ')}`);
     }
 
     private async generateLtxVideo(imageBase64: string, prompt: string) {
         const space = this.env.HF_SPACE_ID || 'Lightricks/ltx-video-distilled';
         const endpoint = this.env.HF_PREDICT_ENDPOINT || '/image_to_video';
-        const root = `https://${space.toLowerCase().replace('/', '-')}.hf.space`;
         const token = this.env.HF_TOKEN;
-        const file = makeFileData(imageBase64);
-        const uploadResponse = await fetch(`${root}/gradio_api/upload`, {
-            method: 'POST',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-            body: file.formData
-        });
-
-        if (!uploadResponse.ok) {
-            throw new Error('Bild konnte nicht zu Hugging Face hochgeladen werden.');
-        }
-
-        const uploaded = await uploadResponse.json() as { path?: string }[] | string[];
-        const uploadedPath = Array.isArray(uploaded) ? (typeof uploaded[0] === 'string' ? uploaded[0] : uploaded[0]?.path) : undefined;
-        if (!uploadedPath) {
-            throw new Error('Hugging Face hat keinen Upload-Pfad zurueckgegeben.');
-        }
-
-        const fileData = {
-            path: uploadedPath,
-            url: `${root}/gradio_api/file=${uploadedPath}`,
-            orig_name: file.name,
-            mime_type: file.mimeType,
-            meta: { _type: 'gradio.FileData' }
-        };
+        const root = getHfSpaceRoot(space);
+        const { fileData } = await uploadImageToGradio(root, token, imageBase64);
 
         const result = await callGradioPredict(root, endpoint, token, [
             buildVideoPrompt(prompt),
@@ -649,6 +639,54 @@ export class RoomDurableObject {
             false,
             Number(this.env.LTX_GUIDANCE || 2.5),
             this.env.LTX_ENHANCE_PROMPT === 'true'
+        ]);
+
+        return extractVideoUrl(result);
+    }
+
+    private async generateWanVideo(imageBase64: string, prompt: string) {
+        const space = 'multimodalart/wan2-1-fast';
+        const token = this.env.HF_TOKEN;
+        const root = getHfSpaceRoot(space);
+        const { fileData } = await uploadImageToGradio(root, token, imageBase64);
+        const result = await callGradioPredict(root, '/generate_video', token, [
+            fileData,
+            buildVideoPrompt(prompt),
+            512,
+            896,
+            5,
+            'blurry, low quality, distorted, static, motionless, camera pan only, zoom only, no action',
+            6,
+            5,
+            createVideoSeed(),
+            true
+        ]);
+
+        return extractVideoUrl(result);
+    }
+
+    private async generateWan22Video(imageBase64: string, prompt: string) {
+        const space = 'Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom';
+        const token = this.env.HF_TOKEN;
+        const root = getHfSpaceRoot(space);
+        const { fileData } = await uploadImageToGradio(root, token, imageBase64);
+        const result = await callGradioPredict(root, '/generate_video', token, [
+            fileData,
+            null,
+            buildVideoPrompt(prompt),
+            6,
+            'blurry, low quality, chaotic, deformed, watermark, bad anatomy, shaky camera, static, camera pan only, no action',
+            5,
+            3,
+            2,
+            'UniPCMultistep',
+            5,
+            5,
+            createVideoSeed(),
+            true,
+            '16',
+            false,
+            true
         ]);
 
         return extractVideoUrl(result);
@@ -713,6 +751,14 @@ function sanitizeMaxRounds(value: unknown, aiRoundLimit: number): number {
     return Math.min(Math.max(Math.floor(parsed), MIN_ROUNDS), aiRoundLimit);
 }
 
+function parseProviderChain(value: string) {
+    const providers = value
+        .split(',')
+        .map(item => item.trim())
+        .filter((item): item is 'wan' | 'wan22' | 'ltx' => item === 'wan' || item === 'wan22' || item === 'ltx');
+    return providers.length > 0 ? [...new Set(providers)] : ['wan', 'wan22', 'ltx'];
+}
+
 function buildVideoPrompt(prompt: string) {
     return [
         `Action to animate: ${prompt}.`,
@@ -740,6 +786,39 @@ function makeFileData(imageBase64: string) {
     const formData = new FormData();
     formData.append('files', new Blob([bytes], { type: mimeType }), name);
     return { formData, mimeType, name };
+}
+
+function getHfSpaceRoot(space: string) {
+    return `https://${space.toLowerCase().replace('/', '-')}.hf.space`;
+}
+
+async function uploadImageToGradio(root: string, token: string | undefined, imageBase64: string) {
+    const file = makeFileData(imageBase64);
+    const uploadResponse = await fetch(`${root}/gradio_api/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: file.formData
+    });
+
+    if (!uploadResponse.ok) {
+        throw new Error('Bild konnte nicht zu Hugging Face hochgeladen werden.');
+    }
+
+    const uploaded = await uploadResponse.json() as { path?: string }[] | string[];
+    const uploadedPath = Array.isArray(uploaded) ? (typeof uploaded[0] === 'string' ? uploaded[0] : uploaded[0]?.path) : undefined;
+    if (!uploadedPath) {
+        throw new Error('Hugging Face hat keinen Upload-Pfad zurueckgegeben.');
+    }
+
+    const fileData = {
+        path: uploadedPath,
+        url: `${root}/gradio_api/file=${uploadedPath}`,
+        orig_name: file.name,
+        mime_type: file.mimeType,
+        meta: { _type: 'gradio.FileData' }
+    };
+
+    return { fileData };
 }
 
 async function callGradioPredict(root: string, endpoint: string, token: string | undefined, data: unknown[]) {

@@ -109,15 +109,23 @@ Wenn du wieder ohne echte KI testen willst:
 AI_PROVIDER=mock npm run dev
 ```
 
-Empfohlene erste echte KI-Konfiguration:
+Empfohlene echte KI-Konfiguration mit kostenloser Fallback-Kette:
 
 ```bash
 HF_TOKEN=dein_token \
-HF_SPACE_ID=Lightricks/ltx-video-distilled \
-HF_PREDICT_ENDPOINT=/image_to_video \
+AI_PROVIDER=wan \
+AI_PROVIDER_CHAIN=wan,wan22,ltx \
 AI_ROUND_LIMIT=5 \
 npm run dev
 ```
+
+Die Provider-Kette versucht nacheinander:
+
+- `wan`: `multimodalart/wan2-1-fast`
+- `wan22`: `Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom`
+- `ltx`: `Lightricks/ltx-video-distilled`
+
+Wenn ein Provider wegen Limit, Queue, Space-Fehler oder API-Fehler scheitert, wird automatisch der naechste versucht.
 
 Die LTX-Anbindung nutzt das Originalbild direkt als Image-to-Video-Eingabe. Der Server erweitert kurze Spieler-Prompts zu einem knappen Action-Prompt, damit die sichtbare Handlung wichtiger ist als ein reiner Kameraschwenk.
 
@@ -143,9 +151,8 @@ Alternative zum Experimentieren:
 ```bash
 HF_TOKEN=dein_token \
 AI_PROVIDER=wan \
-HF_SPACE_ID=multimodalart/wan2-1-fast \
-HF_PREDICT_ENDPOINT=/predict \
+AI_PROVIDER_CHAIN=wan,ltx \
 npm run dev
 ```
 
-Wan-Spaces koennen ihre Gradio-Parameter aendern. Wenn diese Variante fehlschlaegt, muss die konkrete Space-API einmal mit `@gradio/client` inspiziert und die Parameterliste in `generateWanVideo` angepasst werden.
+Wan-Spaces koennen ihre Gradio-Parameter aendern. Wenn ein Wan-Provider fehlschlaegt, faellt die App automatisch auf den naechsten Provider in `AI_PROVIDER_CHAIN` zurueck.

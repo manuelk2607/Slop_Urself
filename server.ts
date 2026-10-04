@@ -42,11 +42,11 @@ const MIN_ROUNDS = 1;
 const AI_ROUND_LIMIT = Math.max(Number(process.env.AI_ROUND_LIMIT) || 5, MIN_ROUNDS);
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const SOLO_PREVIEW_MS = 10000;
-type AiProvider = 'mock' | 'ltx' | 'wan';
-const AI_PROVIDER = parseAiProvider(process.env.AI_PROVIDER ?? (process.env.USE_MOCK_AI === 'true' ? 'mock' : 'ltx'));
+type AiProvider = 'mock' | 'ltx' | 'wan' | 'wan22';
+const AI_PROVIDER = parseAiProvider(process.env.AI_PROVIDER ?? (process.env.USE_MOCK_AI === 'true' ? 'mock' : 'wan'));
+const AI_PROVIDER_CHAIN = parseProviderChain(process.env.AI_PROVIDER_CHAIN || AI_PROVIDER);
 const HF_SPACE_ID = process.env.HF_SPACE_ID || 'Lightricks/ltx-video-distilled';
 const HF_PREDICT_ENDPOINT = process.env.HF_PREDICT_ENDPOINT || '/image_to_video';
-const HF_SPACE_ROOT = `https://${HF_SPACE_ID.toLowerCase().replace('/', '-')}.hf.space`;
 const LTX_HEIGHT = clampNumber(process.env.LTX_HEIGHT, 256, 1280, 512);
 const LTX_WIDTH = clampNumber(process.env.LTX_WIDTH, 256, 1280, 704);
 const LTX_DURATION = clampNumber(process.env.LTX_DURATION, 0.3, 8.5, 5);
@@ -82,8 +82,13 @@ interface Room {
 const rooms: Record<string, Room> = {};
 
 function parseAiProvider(value: string): AiProvider {
-    if (value === 'ltx' || value === 'wan') return value;
+    if (value === 'ltx' || value === 'wan' || value === 'wan22') return value;
     return 'mock';
+}
+
+function parseProviderChain(value: string): AiProvider[] {
+    const providers = value.split(',').map(item => parseAiProvider(item.trim())).filter(provider => provider !== 'mock');
+    return providers.length > 0 ? [...new Set(providers)] : ['wan', 'wan22', 'ltx'];
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
@@ -234,8 +239,10 @@ async function generateMockVideo() {
 }
 
 async function generateLtxVideo(imageFile: File, prompt: string) {
-    const client = await Client.connect(HF_SPACE_ID, getHfClientOptions());
-    const uploadedFiles = await client.upload(await prepare_files([imageFile]), HF_SPACE_ROOT);
+    const spaceId = HF_SPACE_ID && AI_PROVIDER === 'ltx' ? HF_SPACE_ID : 'Lightricks/ltx-video-distilled';
+    const endpoint = HF_PREDICT_ENDPOINT && AI_PROVIDER === 'ltx' ? HF_PREDICT_ENDPOINT : '/image_to_video';
+    const client = await Client.connect(spaceId, getHfClientOptions());
+    const uploadedFiles = await client.upload(await prepare_files([imageFile]), getHfSpaceRoot(spaceId));
     const uploadedImage = uploadedFiles?.[0];
 
     if (!uploadedImage) {
@@ -243,7 +250,7 @@ async function generateLtxVideo(imageFile: File, prompt: string) {
     }
 
     const videoPrompt = buildVideoPrompt(prompt);
-    const result = await client.predict(HF_PREDICT_ENDPOINT, [
+    const result = await client.predict(endpoint, [
         videoPrompt,
         LTX_NEGATIVE_PROMPT,
         uploadedImage,
@@ -263,23 +270,65 @@ async function generateLtxVideo(imageFile: File, prompt: string) {
 }
 
 async function generateWanVideo(imageFile: File, prompt: string) {
-    const client = await Client.connect(HF_SPACE_ID, getHfClientOptions());
-    const uploadedFiles = await client.upload(await prepare_files([imageFile]), HF_SPACE_ROOT);
+    const spaceId = 'multimodalart/wan2-1-fast';
+    const client = await Client.connect(spaceId, getHfClientOptions());
+    const uploadedFiles = await client.upload(await prepare_files([imageFile]), getHfSpaceRoot(spaceId));
     const uploadedImage = uploadedFiles?.[0];
 
     if (!uploadedImage) {
         throw new Error('Bild konnte nicht zu Hugging Face hochgeladen werden.');
     }
 
-    const result = await client.predict(HF_PREDICT_ENDPOINT, [
+    const result = await client.predict('/generate_video', [
         uploadedImage,
-        prompt,
-        'blurry, low quality, distorted, static, motionless',
-        42,
+        buildVideoPrompt(prompt),
+        512,
+        896,
+        5,
+        'blurry, low quality, distorted, static, motionless, camera pan only, zoom only, no action',
+        6,
+        5,
+        createVideoSeed(),
         true
     ]) as any;
 
     return extractVideoUrl(result);
+}
+
+async function generateWan22Video(imageFile: File, prompt: string) {
+    const spaceId = 'Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom';
+    const client = await Client.connect(spaceId, getHfClientOptions());
+    const uploadedFiles = await client.upload(await prepare_files([imageFile]), getHfSpaceRoot(spaceId));
+    const uploadedImage = uploadedFiles?.[0];
+
+    if (!uploadedImage) {
+        throw new Error('Bild konnte nicht zu Hugging Face hochgeladen werden.');
+    }
+
+    const result = await client.predict('/generate_video', [
+        uploadedImage,
+        null,
+        buildVideoPrompt(prompt),
+        6,
+        'blurry, low quality, chaotic, deformed, watermark, bad anatomy, shaky camera, static, camera pan only, no action',
+        5,
+        3,
+        2,
+        'UniPCMultistep',
+        5,
+        5,
+        createVideoSeed(),
+        true,
+        '16',
+        false,
+        true
+    ]) as any;
+
+    return extractVideoUrl(result);
+}
+
+function getHfSpaceRoot(spaceId: string) {
+    return `https://${spaceId.toLowerCase().replace('/', '-')}.hf.space`;
 }
 
 async function generateAiVideo(imageBase64: string, prompt: string) {
@@ -288,11 +337,19 @@ async function generateAiVideo(imageBase64: string, prompt: string) {
     }
 
     const imageFile = getImageFile(imageBase64);
-    if (AI_PROVIDER === 'wan') {
-        return generateWanVideo(imageFile, prompt);
+    const errors: string[] = [];
+    for (const provider of AI_PROVIDER_CHAIN) {
+        try {
+            if (provider === 'wan') return await generateWanVideo(imageFile, prompt);
+            if (provider === 'wan22') return await generateWan22Video(imageFile, prompt);
+            if (provider === 'ltx') return await generateLtxVideo(imageFile, prompt);
+        } catch (error) {
+            errors.push(`${provider}: ${error instanceof Error ? error.message : 'unbekannter Fehler'}`);
+            console.warn(`[AI] Provider ${provider} fehlgeschlagen. Versuche Fallback...`, error);
+        }
     }
 
-    return generateLtxVideo(imageFile, prompt);
+    throw new Error(`Alle KI-Provider sind fehlgeschlagen. ${errors.join(' | ')}`);
 }
 
 async function persistFinishedRound(roomId: string, room: Room, activeCreator: Player, totalRoundPoints: number) {
