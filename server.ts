@@ -147,13 +147,17 @@ function getConnectedPlayers(room: Room) {
 function broadcastRoomUpdate(roomId: string) {
     const room = rooms[roomId];
     if (!room) return;
+    const activeCreator = getActiveCreator(room);
     io.to(roomId).emit('roomDataUpdate', {
         playerCount: getConnectedPlayers(room).length,
         players: room.players,
         hostId: room.hostId,
         gameState: room.state,
         currentRound: room.currentRound,
-        maxRounds: room.maxRounds
+        maxRounds: room.maxRounds,
+        activeCreatorId: activeCreator?.id,
+        activeCreatorName: activeCreator?.name,
+        currentVideoUrl: room.currentVideoUrl
     });
 }
 
@@ -737,7 +741,7 @@ io.on('connection', (socket: Socket) => {
 
         io.to(formattedRoomId).emit('generationStarted', {
             authorName: activeCreator.name,
-            step: AI_PROVIDER === 'mock' ? 'Mock-Video wird vorbereitet...' : `${AI_PROVIDER.toUpperCase()} erstellt ein Video...`
+            step: AI_PROVIDER === 'mock' ? 'Mock-Video wird vorbereitet...' : 'KI erstellt ein Video...'
         });
 
         try {

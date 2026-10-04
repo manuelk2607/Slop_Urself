@@ -380,7 +380,7 @@ export class RoomDurableObject {
         await this.saveRoom();
         this.broadcast('generationStarted', {
             authorName: activeCreator.name,
-            step: this.env.AI_PROVIDER === 'mock' ? 'Mock-Video wird vorbereitet...' : 'LTX erstellt ein Video...'
+            step: this.env.AI_PROVIDER === 'mock' ? 'Mock-Video wird vorbereitet...' : 'KI erstellt ein Video...'
         });
 
         try {
@@ -576,13 +576,17 @@ export class RoomDurableObject {
     private broadcastRoomUpdate() {
         const room = this.room;
         if (!room) return;
+        const activeCreator = this.getActiveCreator();
         this.broadcast('roomDataUpdate', {
             playerCount: this.getConnectedPlayers().length,
             players: room.players,
             hostId: room.hostId,
             gameState: room.state,
             currentRound: room.currentRound,
-            maxRounds: room.maxRounds
+            maxRounds: room.maxRounds,
+            activeCreatorId: activeCreator?.id,
+            activeCreatorName: activeCreator?.name,
+            currentVideoUrl: room.currentVideoUrl
         });
     }
 

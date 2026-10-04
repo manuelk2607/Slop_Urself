@@ -531,7 +531,55 @@ socket.on('resumeFailed', () => {
     showScreen(screenLobby);
 });
 
-socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string; name: string; score: number }[]; hostId: string; gameState: string; currentRound: number; maxRounds: number }) => {
+function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: string; hostId: string; gameState?: string }) {
+    showScreen(screenCreate);
+    currentHostId = data.hostId;
+    clearImagePreview();
+    uploadButton.disabled = false;
+    uploadButton.innerText = 'KI-Video generieren';
+
+    const isGenerating = data.gameState === 'GENERATING';
+    const isMe = Boolean(data.activeCreatorId) && isCurrentSocket(data.activeCreatorId || '');
+
+    creatorControls.style.display = !isGenerating && isMe ? 'block' : 'none';
+    waitControls.style.display = !isGenerating && !isMe ? 'block' : 'none';
+    loadingSection.style.display = isGenerating ? 'block' : 'none';
+    waitNoticeText.innerText = `${data.activeCreatorName || 'Ein Spieler'} denkt sich gerade ein Meisterwerk aus...`;
+    loadingText.innerText = `⏳ ${data.activeCreatorName || 'Ein Spieler'} generiert gerade ein Video...`;
+}
+
+function showVotingState(data: { videoUrl?: string; authorId?: string; authorName?: string }) {
+    if (!data.videoUrl) return;
+    showScreen(screenVoting);
+    votingVideoPlayer.src = data.videoUrl;
+    votingVideoPlayer.play().catch(() => {});
+
+    const isMe = Boolean(data.authorId) && isCurrentSocket(data.authorId || '');
+
+    if (isMe) {
+        authorNotice.innerText = '🎬 Das ist dein Video! Die anderen bewerten jetzt...';
+        votingActionBox.style.display = 'none';
+        votingWaitingBox.style.display = 'block';
+        votingStatusText.innerText = 'Warte auf Bewertungen...';
+    } else {
+        authorNotice.innerText = `🎬 Video erstellt von: ${data.authorName || 'Spieler'}`;
+        votingActionBox.style.display = 'block';
+        votingWaitingBox.style.display = 'none';
+        voteButtons.forEach(btn => btn.disabled = false);
+    }
+}
+
+socket.on('roomDataUpdate', (data: {
+    playerCount: number;
+    players: { id: string; name: string; score: number }[];
+    hostId: string;
+    gameState: string;
+    currentRound: number;
+    maxRounds: number;
+    activeCreatorId?: string;
+    activeCreatorName?: string;
+    currentVideoUrl?: string;
+}) => {
     playerCount.innerText = data.playerCount.toString();
     roundCounter.innerText = `${data.currentRound}/${data.maxRounds}`;
     currentHostId = data.hostId;
@@ -544,6 +592,14 @@ socket.on('roomDataUpdate', (data: { playerCount: number; players: { id: string;
             : 'Warte darauf, dass der Host die Partie startet.';
         startGameButton.style.display = isHost ? 'block' : 'none';
         showScreen(screenRoomLobby);
+    } else if (data.gameState === 'IDLE' || data.gameState === 'GENERATING') {
+        showCreateState(data);
+    } else if (data.gameState === 'VOTING') {
+        showVotingState({
+            videoUrl: data.currentVideoUrl,
+            authorId: data.activeCreatorId,
+            authorName: data.activeCreatorName
+        });
     }
 });
 
@@ -649,27 +705,7 @@ if (socket.isNativeWebSocket) void resumeStoredSession();
 
 // --- SCREEN 2: ERSTELLEN vs. WARTEN ---
 socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string; hostId: string }) => {
-    showScreen(screenCreate);
-    loadingSection.style.display = 'none';
-    currentHostId = data.hostId;
-
-    // Formular aufräumen
-    clearImagePreview();
-    uploadButton.disabled = false;
-    uploadButton.innerText = 'KI-Video generieren';
-
-    const isMe = isCurrentSocket(data.activeCreatorId);
-
-    if (isMe) {
-        // Dieser Spieler darf erstellen
-        creatorControls.style.display = 'block';
-        waitControls.style.display = 'none';
-    } else {
-        // Alle anderen müssen warten
-        creatorControls.style.display = 'none';
-        waitControls.style.display = 'block';
-        waitNoticeText.innerText = `${data.activeCreatorName} denkt sich gerade ein Meisterwerk aus...`;
-    }
+    showCreateState(data);
 });
 
 imageInput.addEventListener('change', (event: Event) => {
@@ -733,6 +769,7 @@ uploadButton.addEventListener('click', () => {
 });
 
 socket.on('generationStarted', (data: { authorName: string; step: string }) => {
+    showScreen(screenCreate);
     creatorControls.style.display = 'none';
     waitControls.style.display = 'none';
     loadingSection.style.display = 'block';
@@ -745,23 +782,7 @@ socket.on('generationProgress', (data: { step: string }) => {
 
 // --- SCREEN 3: VOTING ---
 socket.on('showVotingScreen', (data: { videoUrl: string; authorId: string; authorName: string }) => {
-    showScreen(screenVoting);
-    votingVideoPlayer.src = data.videoUrl;
-    votingVideoPlayer.play().catch(() => {});
-
-    const isMe = isCurrentSocket(data.authorId);
-
-    if (isMe) {
-        authorNotice.innerText = '🎬 Das ist dein Video! Die anderen bewerten jetzt...';
-        votingActionBox.style.display = 'none';
-        votingWaitingBox.style.display = 'block';
-        votingStatusText.innerText = 'Warte auf Bewertungen...';
-    } else {
-        authorNotice.innerText = `🎬 Video erstellt von: ${data.authorName}`;
-        votingActionBox.style.display = 'block';
-        votingWaitingBox.style.display = 'none';
-        voteButtons.forEach(btn => btn.disabled = false);
-    }
+    showVotingState(data);
 });
 
 socket.on('voteProgress', (data: { voted: number; total: number }) => {
