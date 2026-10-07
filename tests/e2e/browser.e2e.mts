@@ -32,25 +32,37 @@ try {
     const config = await (await host.request.get(`${base}/api/config`)).json();
     assert.equal(config.mockAi, true, 'Browser regression tests require mock mode.');
     await Promise.all(pages.map(p => p.goto(base)));
-    for (const [selector, signature] of [
-        ['link[rel="icon"][href="/favicon.ico"]', '00000100'],
-        ['link[rel="icon"][type="image/png"]', '89504e47'],
-        ['link[rel="apple-touch-icon"]', '89504e47']
-    ]) {
+    for (const [selector, signature, allowedSizes] of [
+        ['link[rel="icon"][type="image/x-icon"]', '00000100', [16, 32, 48]],
+        ['link[rel="icon"][type="image/png"]', '89504e47', [32]],
+        ['link[rel="apple-touch-icon"]', '89504e47', [180]]
+    ] as const) {
         const href = await host.locator(selector).getAttribute('href');
         assert.ok(href);
+        assert.equal(new URL(href, base).searchParams.get('v'), '2');
         const response = await host.request.get(new URL(href, base).href);
         assert.equal(response.status(), 200);
         assert.match(response.headers()['content-type'], /^image\//);
         assert.equal((await response.body()).subarray(0, 4).toString('hex'), signature);
+        const icon = await host.evaluate(async (selector) => {
+            const image = new Image();
+            image.src = (document.querySelector(selector) as HTMLLinkElement).href;
+            await image.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+            const context = canvas.getContext('2d')!;
+            context.drawImage(image, 0, 0);
+            const pixel = context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height * 0.65), 1, 1).data;
+            return { width: image.naturalWidth, height: image.naturalHeight, pixel: [...pixel] };
+        }, selector);
+        assert.ok((allowedSizes as readonly number[]).includes(icon.width), JSON.stringify(icon));
+        assert.equal(icon.width, icon.height);
+        assert.ok(icon.pixel.slice(0, 3).every(value => value > 200), `The white play symbol must decode correctly: ${JSON.stringify(icon)}`);
+        assert.equal(icon.pixel[3], 255);
     }
-    const icon = await host.evaluate(async () => {
-        const image = new Image();
-        image.src = (document.querySelector('link[rel="icon"][type="image/png"]') as HTMLLinkElement).href;
-        await image.decode();
-        return { width: image.naturalWidth, height: image.naturalHeight };
-    });
-    assert.deepEqual(icon, { width: 32, height: 32 });
+    const defaultTouchIcon = await host.request.get(`${base}/apple-touch-icon.png`);
+    assert.equal(defaultTouchIcon.status(), 200);
+    assert.match(defaultTouchIcon.headers()['content-type'], /^image\/png/);
     console.log('PASS: favicon and Safari touch icon are served as images and decode correctly.');
     assert.equal(await host.locator('#screenLobby input[type="number"]').count(), 0);
     assert.equal(await host.locator('#roundLimitHint').count(), 0);

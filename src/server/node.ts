@@ -71,6 +71,7 @@ app.use('/api/videos', async (req, res) => {
 
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'index.html')));
 app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'favicon.ico')));
+app.get('/apple-touch-icon.png', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'apple-touch-icon.png')));
 app.get('/style.css', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'style.css')));
 app.get('/script.js', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'script.js')));
 app.get('/startup.js', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'startup.js')));

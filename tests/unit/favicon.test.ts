@@ -8,17 +8,19 @@ function assertPng(data: Buffer, size: number) {
     assert.equal(data.toString('ascii', 12, 16), 'IHDR');
     assert.equal(data.readUInt32BE(16), size);
     assert.equal(data.readUInt32BE(20), size);
+    assert.equal(data[24], 8);
+    assert.equal(data[25], 6, 'Icons use true-color RGBA, not indexed-color PNG.');
 }
 
 test('favicon assets have valid browser sizes and are linked from the page', () => {
     const root = path.join(__dirname, '../../public');
     const html = readFileSync(path.join(root, 'index.html'), 'utf8');
-    for (const [name, size] of [['favicon-32.png', 32], ['apple-touch-icon.png', 180]] as const) {
-        const file = `/assets/${name}`;
-        assert.ok(html.includes(`href="${file}"`));
+    for (const [file, size] of [['/assets/favicon-32.png', 32], ['/apple-touch-icon.png', 180]] as const) {
+        assert.ok(html.includes(`href="${file}?v=2"`));
         assertPng(readFileSync(path.join(root, file)), size);
     }
-    assert.ok(html.includes('href="/favicon.ico"'));
+    assert.deepEqual(readFileSync(path.join(root, 'apple-touch-icon.png')), readFileSync(path.join(root, 'assets/apple-touch-icon.png')));
+    assert.ok(html.includes('type="image/x-icon" href="/favicon.ico?v=2"'));
     const ico = readFileSync(path.join(root, 'favicon.ico'));
     assert.equal(ico.readUInt16LE(0), 0);
     assert.equal(ico.readUInt16LE(2), 1);
@@ -33,7 +35,18 @@ test('favicon assets have valid browser sizes and are linked from the page', () 
         const bytes = ico.readUInt32LE(entry + 8);
         const offset = ico.readUInt32LE(entry + 12);
         assert.equal(offset, expectedOffset);
-        assertPng(ico.subarray(offset, offset + bytes), size);
+        const dib = ico.subarray(offset, offset + bytes);
+        const pixelBytes = size * size * 4;
+        const maskBytes = Math.ceil(size / 32) * 4 * size;
+        assert.equal(bytes, 40 + pixelBytes + maskBytes);
+        assert.equal(dib.readUInt32LE(0), 40, 'ICO uses a classic BITMAPINFOHEADER.');
+        assert.equal(dib.readInt32LE(4), size);
+        assert.equal(dib.readInt32LE(8), size * 2);
+        assert.equal(dib.readUInt16LE(12), 1);
+        assert.equal(dib.readUInt16LE(14), 32);
+        assert.equal(dib.readUInt32LE(16), 0);
+        for (let pixel = 40; pixel < 40 + pixelBytes; pixel += 4) assert.equal(dib[pixel + 3], 255);
+        assert.ok(dib.subarray(40 + pixelBytes).every(byte => byte === 0));
         expectedOffset += bytes;
     }
     assert.equal(expectedOffset, ico.length);
