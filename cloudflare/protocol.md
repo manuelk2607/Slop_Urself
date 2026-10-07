@@ -1,55 +1,52 @@
 # Realtime protocol
 
-The hosted Cloudflare version uses native WebSockets with JSON messages.
+Native WebSocket clients connect to /ws/ABCD with a four-character room code.
+Messages are JSON objects with type and optional payload.
 
-Each client message:
+## Client messages
 
-```json
-{
-  "type": "createRoom",
-  "payload": {}
-}
-```
+createRoom, joinRoom and resumeRoom establish membership. Subsequent commands
+leaveRoom, refreshQuota, setRoundCount, startGame, sendImage, submitVote,
+startNextRound and extendGame require that membership. Only the host changes the lobby's
+round selection (setRoundCount payload.rounds) or starts games/turns;
+only the current creator uploads; each other player votes once per video.
+At GAME_OVER, extendGame requires payload.completedVideo matching the completed
+videoNumber (or currentRound for legacy games). One complete additional player
+cycle is reserved using fresh shared quota. Replays and duplicate clicks cannot
+append another cycle; disconnected members must reconnect or leave first.
 
-Each server message:
+## Server snapshots
 
-```json
-{
-  "type": "roomCreated",
-  "payload": {}
-}
-```
+roomCreated, joinedSuccess and resumeSuccess return roomId, sessionId and playerId.
+sessionId is a private resume credential. playerId is stable across connections
+and is used for scores, authors and votes. Session credentials and connection IDs
+are never included in public snapshots.
 
-## Event mapping
+roomDataUpdate is the complete UI state: roomId, gameState, players, hostId,
+currentRound, maxRounds, activeCreatorId, activeCreatorName, currentVideoUrl,
+lastResult and votedPlayerIds. New games count one full player cycle as a round;
+videoNumber is the unique persistence sequence, turnNumber/turnCount identify
+the current turn, and nextRound determines whether the next video starts a new
+cycle. Lobby quota includes the actual playerCount, aiRoundLimit,
+availableGenerations and estimated GPU costs per video and per round.
+providers lists the configured five-second generation modes with their costs;
+budgetProvider names the cheapest mode used for reservations and sharedQuota
+indicates that the modes share one HF account budget, rather than additive quotas.
+At GAME_OVER, extensionQuota contains fresh capacity for additional cycles.
+Continuing preserves player IDs, scores and roomId, increments maxRounds by one,
+and resumes IDLE with a new unique videoNumber. Final ranking is cleared in the
+database while playing and saved again at the next end, without another game row.
+It restores LOBBY, IDLE, GENERATING, VOTING,
+RESULTS and GAME_OVER without relying on earlier transition events.
 
-| Current Socket.IO event | Worker WebSocket event | Direction | Notes |
-| --- | --- | --- | --- |
-| `createRoom` | `createRoom` | client -> room | Creates a room in the Durable Object. |
-| `roomCreated` | `roomCreated` | room -> client | Returns room code and session id. |
-| `joinRoom` | `joinRoom` | client -> room | Adds a player before game start. |
-| `joinedSuccess` | `joinedSuccess` | room -> client | Confirms join. |
-| `resumeRoom` | `resumeRoom` | client -> room | Restores a session after reload. |
-| `resumeSuccess` | `resumeSuccess` | room -> client | Confirms resume. |
-| `resumeFailed` | `resumeFailed` | room -> client | Clears local session. |
-| `roomDataUpdate` | `roomDataUpdate` | room -> all | Sends player list, host, state, round count. |
-| `startGame` | `startGame` | client -> room | Host-only. |
-| `showCreateScreen` | `showCreateScreen` | room -> all | Announces active creator. |
-| `sendImage` | `sendImage` | client -> room | Triggers AI generation. |
-| `generationStarted` | `generationStarted` | room -> all | Shows loading UI. |
-| `showVotingScreen` | `showVotingScreen` | room -> all | Sends generated video URL. |
-| `submitVote` | `submitVote` | client -> room | Sends 1-5 points. |
-| `voteProgress` | `voteProgress` | room -> all | Shows vote count. |
-| `showResultsScreen` | `showResultsScreen` | room -> all | Sends round result. |
-| `startNextRound` | `startNextRound` | client -> room | Host-only. |
-| `showGameOverScreen` | `showGameOverScreen` | room -> all | Sends final standings. |
-| `leaveRoom` | `leaveRoom` | client -> room | Removes player. |
-| `leftRoom` | `leftRoom` | room -> client | Confirms leaving. |
-| `errorMsg` | `errorMsg` | room -> client | Displays error. |
+Additional messages: connect, roomCodeConflict, resumeFailed, leftRoom,
+roomNotice, errorMsg and generationProgress.
 
-## Remaining migration tasks
+## Recovery
 
-1. Add a browser realtime adapter in `script.ts`.
-2. Replace Socket.IO calls with adapter calls.
-3. Implement Worker-compatible Hugging Face generation.
-4. Implement Worker-compatible Neon writes with fetch/serverless driver.
-5. Deploy to Cloudflare and set secrets.
+A disconnected session is retained for 15 seconds. A reconnect supplies
+resumeRoom with its private sessionId; the previous connection is replaced.
+Explicit leave removes the player immediately. A departing creator cancels
+their turn, and late generation results cannot overwrite the next turn.
+Voting and generation state changes are serialized; completion cannot score
+a round twice.

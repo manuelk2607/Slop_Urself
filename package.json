@@ -4,20 +4,31 @@
   "description": "",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p cloudflare/tsconfig.json && esbuild script.ts startup.ts --bundle --minify --platform=browser --format=iife --outdir=dist/browser",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:e2e": "node --import tsx tests/browser.e2e.mts",
+    "test:ci": "npm run build && npm test && node --import tsx tests/ci.mts",
+    "test:db": "node --import tsx tests/db.integration.mts",
+    "test:auth": "node --import tsx tests/auth.e2e.mts",
     "dev": "npm run build && node dist/server.js",
     "start": "node dist/server.js",
-    "cf:build": "npm run build && mkdir -p cloudflare/public/assets && cp index.html cloudflare/public/index.html && cp style.css cloudflare/public/style.css && cp dist/script.js cloudflare/public/script.js && cp assets/mock-video.mp4 cloudflare/public/assets/mock-video.mp4",
+    "cf:build": "npm run build && mkdir -p cloudflare/public/assets && cp index.html cloudflare/public/index.html && cp style.css cloudflare/public/style.css && cp dist/browser/script.js cloudflare/public/script.js && cp dist/browser/startup.js cloudflare/public/startup.js && cp assets/mock-video.mp4 cloudflare/public/assets/mock-video.mp4",
     "cf:dev": "npm run cf:build && npx wrangler dev --config cloudflare/wrangler.toml",
     "cf:deploy": "npm run cf:build && npx wrangler deploy --config cloudflare/wrangler.toml",
+    "cf:secrets": "node --import tsx tools/cloudflare-setup.ts upload",
+    "cf:local": "node --import tsx tools/cloudflare-setup.ts local",
+    "invite": "node --import tsx tools/cloudflare-setup.ts invite",
     "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.2",
     "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
     "tsx": "^4.23.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "^4.148.0"
   },
   "private": true,
   "keywords": [],
@@ -25,14 +36,19 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@gradio/client": "^2.5.0",
     "@neon/config": "^1.7.2",
     "@neon/env": "^1.4.3",
     "@neondatabase/serverless": "^1.2.0",
+    "aws4fetch": "^1.0.20",
     "dotenv": "^18.0.1",
     "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.2",
+    "jose": "^6.2.12",
     "pg": "^8.23.0",
     "socket.io": "^4.8.3"
+  },
+  "overrides": {
+    "sharp": "^0.35.5"
   },
   "allowScripts": {
     "esbuild@0.28.1": true

@@ -1,3 +1,10 @@
+create table if not exists user_profiles (
+    id text primary key,
+    name text not null,
+    username_key text not null unique,
+    created_at timestamptz not null default now()
+);
+
 create table if not exists rooms (
     code text primary key,
     host_socket_id text not null,
@@ -48,3 +55,5 @@ create index if not exists votes_voter_socket_id_idx on votes(voter_socket_id);
 alter table rooms add column if not exists winner_socket_id text;
 alter table rooms add column if not exists winner_name text;
 alter table players add column if not exists final_rank integer;
+alter table players add column if not exists account_id text;
+create index if not exists players_account_id_idx on players(account_id);

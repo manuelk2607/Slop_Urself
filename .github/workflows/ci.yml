@@ -1,0 +1,36 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:ci
+        env:
+          TEST_ARTIFACT_DIR: /tmp
+      - name: Upload browser failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures
+          path: |
+            /tmp/slopurself-*failed*.png
+          if-no-files-found: ignore

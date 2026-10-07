@@ -1,6 +1,9 @@
+import { initializeAccount, refreshAccount } from './browser-auth';
+import type { QuotaCapacity } from './quota';
+
 type SocketEventHandler = (data?: any) => void;
 type SocketPayload = Record<string, unknown>;
-type SocketFactory = () => any;
+type SocketFactory = (options?: Record<string, unknown>) => any;
 
 interface SlopWindow extends Window {
     io?: SocketFactory;
@@ -12,6 +15,7 @@ interface RealtimeClient {
     on(event: string, handler: SocketEventHandler): void;
     emit(event: string, payload?: SocketPayload): void;
     connectToRoom(roomId: string): Promise<void>;
+    disconnectFromRoom(): void;
 }
 
 class SocketIoRealtimeClient implements RealtimeClient {
@@ -31,7 +35,16 @@ class SocketIoRealtimeClient implements RealtimeClient {
         this.socketIoClient.emit(event, payload);
     }
 
-    async connectToRoom() {}
+    async connectToRoom() {
+        if (this.socketIoClient.connected) return;
+        await new Promise<void>((resolve, reject) => {
+            const timer = window.setTimeout(() => reject(new Error('Verbindung hat zu lange gedauert.')), 8000);
+            this.socketIoClient.once('connect', () => { window.clearTimeout(timer); resolve(); });
+            this.socketIoClient.once('connect_error', () => { window.clearTimeout(timer); reject(new Error('Bitte melde dich erneut an.')); });
+            this.socketIoClient.connect();
+        });
+    }
+    disconnectFromRoom() { this.socketIoClient.disconnect(); }
 }
 
 class NativeWebSocketRealtimeClient implements RealtimeClient {
@@ -40,89 +53,84 @@ class NativeWebSocketRealtimeClient implements RealtimeClient {
     private socketId = '';
     private activeRoomId = '';
     private openPromise: Promise<void> | null = null;
+    private reconnectTimer: number | undefined;
+    private reconnectAttempts = 0;
     private readonly handlers = new Map<string, SocketEventHandler[]>();
-    private readonly queuedMessages: { type: string; payload?: SocketPayload }[] = [];
 
-    get id() {
-        return this.socketId;
-    }
+    constructor() { window.addEventListener('offline', () => this.socket?.close(1000, 'Offline')); }
 
+    get id() { return this.socketId; }
     on(event: string, handler: SocketEventHandler) {
-        const handlers = this.handlers.get(event) || [];
-        handlers.push(handler);
-        this.handlers.set(event, handlers);
+        this.handlers.set(event, [...(this.handlers.get(event) || []), handler]);
     }
-
     emit(event: string, payload?: SocketPayload) {
-        const message = { type: event, payload };
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(message));
-            return;
-        }
-
-        this.queuedMessages.push(message);
+        if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: event, payload }));
+        else this.dispatch('errorMsg', 'Verbindung unterbrochen. Bitte warte auf die Wiederverbindung.');
     }
-
+    disconnectFromRoom() {
+        if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.activeRoomId = '';
+        const old = this.socket;
+        this.socket = null;
+        this.socketId = '';
+        this.openPromise = null;
+        old?.close();
+    }
     async connectToRoom(roomId: string) {
-        const normalizedRoomId = roomId.trim().toUpperCase();
-        if (!normalizedRoomId) throw new Error('Raumcode fehlt.');
-
-        if (
-            this.socket &&
-            this.activeRoomId === normalizedRoomId &&
-            (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
-        ) {
-            await this.openPromise;
-            return;
+        if (!/^[a-z0-9]{4}$/i.test(roomId)) throw new Error('Bitte gib einen 4-stelligen Raumcode ein.');
+        const code = roomId.toUpperCase();
+        if (this.socket && this.activeRoomId === code && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+            await this.openPromise; return;
         }
-
-        this.socket?.close();
-        this.activeRoomId = normalizedRoomId;
-        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        this.socket = new WebSocket(`${protocol}://${window.location.host}/ws/${encodeURIComponent(normalizedRoomId)}`);
-        this.openPromise = new Promise((resolve, reject) => {
-            const socket = this.socket;
-            if (!socket) {
-                reject(new Error('WebSocket konnte nicht erstellt werden.'));
-                return;
-            }
-
-            socket.addEventListener('open', () => {
-                this.flushQueuedMessages();
-                resolve();
+        this.disconnectFromRoom();
+        this.activeRoomId = code;
+        const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+        const target = new WebSocket(`${protocol}://${location.host}/ws/${code}`);
+        this.socket = target;
+        this.openPromise = new Promise<void>((resolve, reject) => {
+            let connected = false;
+            const timeout = window.setTimeout(() => { reject(new Error('Verbindung zum Raum hat zu lange gedauert.')); target.close(); }, 8000);
+            target.addEventListener('message', event => {
+                if (this.socket !== target) return;
+                try {
+                    const message = JSON.parse(String(event.data));
+                    if (message.type === 'connect') {
+                        this.socketId = message.payload.socketId;
+                        this.reconnectAttempts = 0;
+                        connected = true;
+                        window.clearTimeout(timeout);
+                        resolve();
+                    }
+                    this.dispatch(message.type, message.payload);
+                } catch { this.dispatch('errorMsg', 'Ungueltige Server-Antwort.'); }
+            });
+            target.addEventListener('error', () => {
+                window.clearTimeout(timeout);
+                reject(new Error('Verbindung zum Spielraum fehlgeschlagen.'));
             }, { once: true });
-
-            socket.addEventListener('error', () => {
-                reject(new Error('Verbindung zum Cloudflare-Spielraum fehlgeschlagen.'));
-            }, { once: true });
-
-            socket.addEventListener('message', event => this.handleMessage(event.data));
-            socket.addEventListener('close', () => this.dispatch('disconnect'));
+            target.addEventListener('close', event => {
+                window.clearTimeout(timeout);
+                if (this.socket !== target) return;
+                this.socket = null;
+                if (!connected) reject(new Error('Verbindung zum Spielraum wurde geschlossen.'));
+                if (event.code === 4001) { this.activeRoomId = ''; this.dispatch('sessionReplaced'); return; }
+                this.dispatch('disconnect');
+                if (this.activeRoomId && currentRoomId === this.activeRoomId) this.scheduleReconnect();
+            });
         });
-
         await this.openPromise;
     }
-
-    private flushQueuedMessages() {
-        while (this.queuedMessages.length > 0 && this.socket?.readyState === WebSocket.OPEN) {
-            const message = this.queuedMessages.shift();
-            if (message) this.socket.send(JSON.stringify(message));
-        }
+    private scheduleReconnect() {
+        if (this.reconnectTimer) return;
+        const roomId = this.activeRoomId;
+        this.reconnectTimer = window.setTimeout(() => {
+            this.reconnectTimer = undefined;
+            if (currentRoomId !== roomId) return;
+            void this.connectToRoom(roomId).catch(() => {
+                if (currentRoomId === roomId) { this.activeRoomId = roomId; this.scheduleReconnect(); }
+            });
+        }, Math.min(1000 * 2 ** this.reconnectAttempts++, 5000));
     }
-
-    private handleMessage(data: unknown) {
-        try {
-            const message = JSON.parse(String(data)) as { type?: string; payload?: any };
-            if (!message.type) return;
-            if (message.type === 'connect' && typeof message.payload?.socketId === 'string') {
-                this.socketId = message.payload.socketId;
-            }
-            this.dispatch(message.type, message.payload);
-        } catch {
-            this.dispatch('errorMsg', 'Ungueltige Server-Antwort.');
-        }
-    }
-
     private dispatch(event: string, payload?: any) {
         (this.handlers.get(event) || []).forEach(handler => handler(payload));
     }
@@ -130,7 +138,7 @@ class NativeWebSocketRealtimeClient implements RealtimeClient {
 
 const slopWindow = window as SlopWindow;
 const socket: RealtimeClient = slopWindow.io
-    ? new SocketIoRealtimeClient(slopWindow.io())
+    ? new SocketIoRealtimeClient(slopWindow.io({ autoConnect: false, transports: ['websocket', 'polling'], tryAllTransports: true }))
     : new NativeWebSocketRealtimeClient();
 
 // Header
@@ -138,6 +146,8 @@ const gameHeader = document.getElementById('gameHeader') as HTMLElement;
 const displayRoomCode = document.getElementById('displayRoomCode') as HTMLElement;
 const playerCount = document.getElementById('playerCount') as HTMLElement;
 const roundCounter = document.getElementById('roundCounter') as HTMLElement;
+const turnInfo = document.getElementById('turnInfo') as HTMLElement;
+const turnCounter = document.getElementById('turnCounter') as HTMLElement;
 const copyRoomCodeButton = document.getElementById('copyRoomCodeButton') as HTMLButtonElement;
 const leaveRoomButton = document.getElementById('leaveRoomButton') as HTMLButtonElement;
 const roomNotice = document.getElementById('roomNotice') as HTMLParagraphElement;
@@ -154,6 +164,8 @@ const screenGameOver = document.getElementById('screenGameOver') as HTMLElement;
 // Lobby-Elemente
 const usernameInput = document.getElementById('usernameInput') as HTMLInputElement;
 const roundCountInput = document.getElementById('roundCountInput') as HTMLInputElement;
+const roomRoundCountInput = document.getElementById('roomRoundCountInput') as HTMLInputElement;
+const roomRoundLimitHint = document.getElementById('roomRoundLimitHint') as HTMLElement;
 const roundLimitHint = document.getElementById('roundLimitHint') as HTMLParagraphElement;
 const createRoomButton = document.getElementById('createRoomButton') as HTMLButtonElement;
 const joinRoomButton = document.getElementById('joinRoomButton') as HTMLButtonElement;
@@ -198,21 +210,36 @@ const nextRoundButton = document.getElementById('nextRoundButton') as HTMLButton
 const winnerName = document.getElementById('winnerName') as HTMLElement;
 const finalScoreList = document.getElementById('finalScoreList') as HTMLUListElement;
 const restartButton = document.getElementById('restartButton') as HTMLButtonElement;
+const extendGameButton = document.getElementById('extendGameButton') as HTMLButtonElement;
+const extensionQuotaHint = document.getElementById('extensionQuotaHint') as HTMLElement;
+interface GameOverData {
+    players: { id: string; name: string; score: number; connected?: boolean }[];
+    maxRounds: number;
+    videoNumber?: number;
+    currentRound?: number;
+    extensionQuota?: QuotaCapacity;
+}
+let latestGameOver: GameOverData | undefined;
+let extensionPending = false;
 
 let previewObjectUrl: string | null = null;
 let currentRoomId = '';
 let currentHostId = '';
 let currentSessionId = '';
+let currentPlayerId = '';
+let currentPhaseKey = '';
+let lobbyActionPending = false;
+let pendingRoomCreation: SocketPayload | null = null;
 let aiRoundLimit = 5;
 let noticeTimeout: number | undefined;
-const storedSessionRaw = localStorage.getItem('slopurself-session');
+
 
 function createRoomCode() {
-    return Math.random().toString(36).substring(2, 6).toUpperCase();
+    return createSessionId().replace(/-/g, '').slice(-4).toUpperCase();
 }
 
 function isCurrentSocket(socketId: string) {
-    return socket.id === socketId;
+    return (currentPlayerId || socket.id) === socketId;
 }
 
 async function connectToRoom(roomId: string) {
@@ -267,15 +294,20 @@ function saveSession(roomId: string, sessionId: string) {
     localStorage.setItem('slopurself-session', JSON.stringify({ roomId, sessionId }));
 }
 
-function clearSession() {
+function clearSession(preserveStored = false) {
     currentRoomId = '';
     currentSessionId = '';
-    localStorage.removeItem('slopurself-session');
+    currentPlayerId = '';
+    currentPhaseKey = '';
+    socket.disconnectFromRoom();
+    if (!preserveStored) localStorage.removeItem('slopurself-session');
 }
 
 // --- SCREEN SWITCHER ---
 function showScreen(screenToShow: HTMLElement) {
-    [screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
+    if (screenToShow !== screenVoting) votingVideoPlayer.pause();
+    if (screenToShow !== screenStats) videoStatsList.querySelectorAll('video').forEach(video => video.pause());
+    [document.getElementById('screenStartup')!, document.getElementById('screenAuth')!, screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
     screenToShow.style.display = 'block';
 }
 
@@ -358,7 +390,7 @@ function renderStatsOverview(overview: StatsOverview) {
     const items = [
         { label: 'Spiele', value: overview.gamesPlayed },
         { label: 'Beendet', value: overview.completedGames },
-        { label: 'Runden', value: overview.roundsPlayed },
+        { label: 'Erstellte Videos', value: overview.roundsPlayed },
         { label: 'Votes', value: overview.votesCast },
         { label: 'Videos', value: overview.videosArchived },
         { label: 'Topscore', value: overview.highestScore }
@@ -404,6 +436,7 @@ function renderStats(players: PlayerStats[]) {
         name.innerText = player.name;
 
         const details = document.createElement('span');
+        playerInfo.classList.add('stats-player-info');
         details.className = 'stat-details';
         details.innerText = `${player.gamesPlayed} Spiele · ${player.wins} Siege · ${player.roundsCreated} Videos · Ø ${player.averageReceivedPoints} Pkt./Video · Ø Vote ${player.averageVoteGiven}`;
 
@@ -426,7 +459,7 @@ function renderVideoStats(videos: VideoStats[], videoStorageMode: string) {
     }
 
     videoStatsNotice.innerText = videoStorageMode === 'url'
-        ? 'Videos werden platzsparend als Link zur gespielten Runde gespeichert.'
+        ? 'Video-Links zu gespielten Runden. Die Links koennen spaeter ablaufen.'
         : 'Gespeicherte Videos aus den letzten Runden.';
 
     videos.forEach(video => {
@@ -435,14 +468,20 @@ function renderVideoStats(videos: VideoStats[], videoStorageMode: string) {
 
         const videoElement = document.createElement('video');
         videoElement.controls = true;
-        videoElement.preload = 'metadata';
+        videoElement.preload = 'none';
+        videoElement.playsInline = true;
+        videoElement.addEventListener('error', () => {
+            const unavailable = document.createElement('small');
+            unavailable.innerText = videoStorageMode === 'archive' ? 'Video wurde aus dem Archiv entfernt oder ist vorübergehend nicht erreichbar.' : 'Video-Link ist nicht mehr verfuegbar.';
+            li.appendChild(unavailable);
+        }, { once: true });
         videoElement.src = video.videoUrl;
 
         const meta = document.createElement('div');
         meta.className = 'video-stat-meta';
 
         const title = document.createElement('strong');
-        title.innerText = `${video.creatorName} · Raum ${video.roomCode} · Runde ${video.roundNumber}`;
+        title.innerText = `${video.creatorName} · Raum ${video.roomCode} · Video ${video.roundNumber}`;
 
         const prompt = document.createElement('span');
         prompt.innerText = video.prompt;
@@ -470,71 +509,116 @@ usernameInput.addEventListener('input', () => {
     }
 });
 
+function quotaHint(quota: QuotaCapacity, additional = false) {
+    const limit = quota.aiRoundLimit;
+    if (quota.quotaMode === 'unavailable') return 'Rundenlimit momentan nicht verfügbar.';
+    const roundLabel = `${additional ? 'Zusatzrunde' : 'Runde'}${limit === 1 ? '' : 'n'}`;
+    return `${additional ? 'Noch' : 'Aktuell'} maximal ${limit} ${roundLabel}.`;
+}
+
 async function loadGameConfig() {
     try {
         const response = await fetch('/api/config');
         if (!response.ok) return;
 
-        const config = await response.json() as { aiRoundLimit: number; mockAi: boolean };
-        aiRoundLimit = Math.max(Number(config.aiRoundLimit) || 5, 1);
+        const config = await response.json() as QuotaCapacity & { mockAi: boolean };
+        aiRoundLimit = Math.max(Number(config.aiRoundLimit) || 0, 0);
+        roundCountInput.disabled = aiRoundLimit === 0;
+        roundCountInput.min = aiRoundLimit === 0 ? '0' : '1';
         roundCountInput.max = String(aiRoundLimit);
-        roundCountInput.value = String(Math.min(Number(roundCountInput.value) || aiRoundLimit, aiRoundLimit));
-        roundLimitHint.innerText = `Maximal ${aiRoundLimit} Runden pro Spiel, passend zum aktuellen KI-Limit.`;
+        roundCountInput.value = String(aiRoundLimit ? Math.max(1, Math.min(Number(roundCountInput.value) || aiRoundLimit, aiRoundLimit)) : 0);
+        roundLimitHint.innerText = quotaHint(config);
+        setLobbyPending(lobbyActionPending);
     } catch {
-        roundLimitHint.innerText = 'Maximal 5 Runden pro Spiel.';
+        aiRoundLimit = 0; roundCountInput.disabled = true; createRoomButton.disabled = true;
+        roundLimitHint.innerText = 'Rundenlimit momentan nicht verfügbar.';
     }
 }
 
-void loadGameConfig();
-
-createRoomButton.addEventListener('click', async () => {
-    const username = usernameInput.value.trim();
-    const maxRounds = Math.min(Math.max(Number(roundCountInput.value) || aiRoundLimit, 1), aiRoundLimit);
-    if (!username) return triggerNameError();
-
-    const roomId = socket.isNativeWebSocket ? createRoomCode() : '';
-    if (roomId && !(await connectToRoom(roomId))) return;
-
-    socket.emit('createRoom', { roomId, username, maxRounds, sessionId: createSessionId() });
+function refreshQuota() {
+    if (currentRoomId && (screenRoomLobby.style.display !== 'none' || (screenGameOver.style.display !== 'none' && isCurrentSocket(currentHostId)))) socket.emit('refreshQuota', { roomId: currentRoomId });
+    else if (screenLobby.style.display !== 'none') void loadGameConfig();
+}
+window.setInterval(refreshQuota, 30_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshQuota(); void refreshAccount(); } });
+roundCountInput.addEventListener('change', () => { roundCountInput.value = String(aiRoundLimit ? Math.max(1, Math.min(aiRoundLimit, Math.floor(Number(roundCountInput.value) || 1))) : 0); });
+roomRoundCountInput.addEventListener('change', () => {
+    if (currentRoomId && !roomRoundCountInput.disabled) socket.emit('setRoundCount', { roomId: currentRoomId, rounds: Number(roomRoundCountInput.value) });
 });
 
+function setLobbyPending(pending: boolean) {
+    lobbyActionPending = pending;
+    createRoomButton.disabled = pending || aiRoundLimit === 0;
+    joinRoomButton.disabled = pending;
+}
+async function requestCreateRoom() {
+    if (!pendingRoomCreation) return;
+    const roomId = socket.isNativeWebSocket ? createRoomCode() : '';
+    if (!(await connectToRoom(roomId))) { setLobbyPending(false); return; }
+    socket.emit('createRoom', { ...pendingRoomCreation, roomId });
+}
+createRoomButton.addEventListener('click', async () => {
+    if (lobbyActionPending) return;
+    await loadGameConfig();
+    if (aiRoundLimit < 1) return;
+    const username = usernameInput.value.trim();
+    if (!username) return triggerNameError();
+    clearSession();
+    pendingRoomCreation = { username, maxRounds: Math.floor(Math.min(Math.max(Number(roundCountInput.value) || aiRoundLimit, 1), aiRoundLimit)), sessionId: createSessionId() };
+    setLobbyPending(true);
+    await requestCreateRoom();
+});
+socket.on('roomCodeConflict', () => { void requestCreateRoom(); });
 joinRoomButton.addEventListener('click', async () => {
+    if (lobbyActionPending) return;
     const username = usernameInput.value.trim();
     const code = roomCodeInput.value.trim().toUpperCase();
     if (!username) return triggerNameError();
-    if (!code) {
-        lobbyError.innerText = '⚠️ Bitte gib einen 4-stelligen Raumcode ein!';
-        roomCodeInput.classList.add('input-error');
-        roomCodeInput.focus();
-        return;
+    if (!/^[A-Z0-9]{4}$/.test(code)) {
+        lobbyError.innerText = 'Bitte gib einen 4-stelligen Raumcode ein.';
+        roomCodeInput.focus(); return;
     }
-    if (!(await connectToRoom(code))) return;
+    clearSession();
+    setLobbyPending(true);
+    if (!(await connectToRoom(code))) { setLobbyPending(false); return; }
     socket.emit('joinRoom', { roomId: code, username, sessionId: createSessionId() });
 });
 
-function enterRoom(roomId: string, sessionId: string) {
+function enterRoom(roomId: string, sessionId: string, playerId?: string) {
+    setLobbyPending(false);
+    pendingRoomCreation = null;
+    currentPlayerId = playerId || socket.id;
     saveSession(roomId, sessionId);
     displayRoomCode.innerText = roomId;
     gameHeader.style.display = 'block';
     showScreen(screenRoomLobby);
 }
-
-socket.on('roomCreated', (data: { roomId: string; sessionId: string }) => enterRoom(data.roomId, data.sessionId));
-socket.on('joinedSuccess', (data: { roomId: string; sessionId: string }) => enterRoom(data.roomId, data.sessionId));
-socket.on('resumeSuccess', (data: { roomId: string; sessionId: string; gameState: string }) => {
-    enterRoom(data.roomId, data.sessionId);
+socket.on('roomCreated', data => enterRoom(data.roomId, data.sessionId, data.playerId));
+socket.on('joinedSuccess', data => enterRoom(data.roomId, data.sessionId, data.playerId));
+socket.on('resumeSuccess', data => {
+    enterRoom(data.roomId, data.sessionId, data.playerId);
     showRoomNotice('Verbindung wiederhergestellt.');
 });
 socket.on('resumeFailed', () => {
-    clearSession();
+    clearSession(); setLobbyPending(false);
     gameHeader.style.display = 'none';
     showScreen(screenLobby);
+    lobbyError.innerText = 'Deine vorige Sitzung ist nicht mehr verfuegbar.';
+});
+socket.on('sessionReplaced', () => {
+    clearSession(true); gameHeader.style.display = 'none'; showScreen(screenLobby);
+    lobbyError.innerText = 'Diese Sitzung wurde in einem anderen Tab geoeffnet.';
+});
+socket.on('disconnect', () => {
+    extensionPending = false;
+    extendGameButton.disabled = true;
+    if (currentRoomId) showRoomNotice('Verbindung unterbrochen. Verbinde erneut...');
 });
 
-function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: string; hostId: string; gameState?: string }) {
+function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: string; hostId: string; gameState?: string; reset?: boolean }) {
     showScreen(screenCreate);
     currentHostId = data.hostId;
-    clearImagePreview();
+    if (data.reset) { clearImagePreview(); promptInput.value = ''; }
     uploadButton.disabled = false;
     uploadButton.innerText = 'KI-Video generieren';
 
@@ -548,19 +632,24 @@ function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: s
     loadingText.innerText = `⏳ ${data.activeCreatorName || 'Ein Spieler'} generiert gerade ein Video...`;
 }
 
-function showVotingState(data: { videoUrl?: string; authorId?: string; authorName?: string }) {
+function showVotingState(data: { videoUrl?: string; authorId?: string; authorName?: string; hasVoted?: boolean; voted?: number; total?: number }) {
     if (!data.videoUrl) return;
+    const entering = screenVoting.style.display === 'none';
     showScreen(screenVoting);
-    votingVideoPlayer.src = data.videoUrl;
-    votingVideoPlayer.play().catch(() => {});
+    const newVideo = votingVideoPlayer.getAttribute('src') !== data.videoUrl;
+    if (newVideo) votingVideoPlayer.src = data.videoUrl;
+    if (entering || newVideo) {
+        votingVideoPlayer.currentTime = 0;
+        votingVideoPlayer.play().catch(() => {});
+    }
 
     const isMe = Boolean(data.authorId) && isCurrentSocket(data.authorId || '');
 
-    if (isMe) {
-        authorNotice.innerText = '🎬 Das ist dein Video! Die anderen bewerten jetzt...';
+    if (isMe || data.hasVoted) {
+        authorNotice.innerText = isMe ? 'Das ist dein Video!' : `Video von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'none';
         votingWaitingBox.style.display = 'block';
-        votingStatusText.innerText = 'Warte auf Bewertungen...';
+        votingStatusText.innerText = data.total === 0 ? 'Solo-Test: Vorschau, danach Ergebnis ohne Bewertung.' : `${data.hasVoted ? 'Bewertung gespeichert. ' : ''}Stimmen: ${data.voted || 0}/${data.total || 0}`;
     } else {
         authorNotice.innerText = `🎬 Video erstellt von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'block';
@@ -571,17 +660,33 @@ function showVotingState(data: { videoUrl?: string; authorId?: string; authorNam
 
 socket.on('roomDataUpdate', (data: {
     playerCount: number;
-    players: { id: string; name: string; score: number }[];
+    players: { id: string; name: string; score: number; connected?: boolean }[];
     hostId: string;
     gameState: string;
     currentRound: number;
     maxRounds: number;
+    turnNumber?: number;
+    turnCount?: number;
+    nextRound?: number;
+    quota?: QuotaCapacity;
+    extensionQuota?: QuotaCapacity;
+    videoNumber?: number;
     activeCreatorId?: string;
     activeCreatorName?: string;
     currentVideoUrl?: string;
+    roomId?: string;
+    votedPlayerIds?: string[];
+    lastResult?: { authorName: string; roundPoints: number };
 }) => {
+    if (!currentRoomId || (data.roomId && data.roomId !== currentRoomId)) return;
+    const phaseKey = `${currentRoomId}:${data.currentRound}:${data.activeCreatorId}`;
+    const phaseChanged = phaseKey !== currentPhaseKey;
+    currentPhaseKey = phaseKey;
     playerCount.innerText = data.playerCount.toString();
-    roundCounter.innerText = `${data.currentRound}/${data.maxRounds}`;
+    roundCounter.innerText = data.gameState === 'LOBBY' ? String(data.maxRounds) : `${data.currentRound}/${data.maxRounds}`;
+    turnInfo.style.display = data.turnCount ? '' : 'none';
+    turnCounter.innerText = `${data.turnNumber || 1}/${data.turnCount || 1}`;
+    if (currentHostId !== data.hostId || data.gameState !== 'GAME_OVER') extensionPending = false;
     currentHostId = data.hostId;
 
     if (data.gameState === 'LOBBY') {
@@ -591,19 +696,35 @@ socket.on('roomDataUpdate', (data: {
             ? 'Alle bereit? Starte die Partie, sobald genug Spieler im Raum sind.'
             : 'Warte darauf, dass der Host die Partie startet.';
         startGameButton.style.display = isHost ? 'block' : 'none';
+        startGameButton.disabled = !data.quota?.aiRoundLimit;
+        roomRoundCountInput.disabled = !isHost || !data.quota?.aiRoundLimit;
+        roomRoundCountInput.min = data.quota?.aiRoundLimit ? '1' : '0';
+        roomRoundCountInput.max = String(data.quota?.aiRoundLimit || 0);
+        roomRoundCountInput.value = String(data.maxRounds);
+        roomRoundLimitHint.innerText = data.quota ? quotaHint(data.quota) : 'Rundenlimit wird geprüft.';
         showScreen(screenRoomLobby);
     } else if (data.gameState === 'IDLE' || data.gameState === 'GENERATING') {
-        showCreateState(data);
+        showCreateState({ ...data, reset: phaseChanged && data.gameState === 'IDLE' });
     } else if (data.gameState === 'VOTING') {
         showVotingState({
             videoUrl: data.currentVideoUrl,
             authorId: data.activeCreatorId,
-            authorName: data.activeCreatorName
+            authorName: data.activeCreatorName,
+            hasVoted: data.votedPlayerIds?.includes(currentPlayerId),
+            voted: data.votedPlayerIds?.length || 0,
+            total: data.players.length - 1
         });
+    } else if (data.gameState === 'RESULTS') {
+        showResultsState({ ...data, authorName: data.lastResult?.authorName || data.activeCreatorName || 'Spieler', roundPoints: data.lastResult?.roundPoints || 0, isFinalRound: false });
+    } else if (data.gameState === 'GAME_OVER') {
+        showGameOverState({ ...data, players: [...data.players].sort((a, b) => b.score - a.score) });
     }
 });
 
 socket.on('errorMsg', (msg: string) => {
+    setLobbyPending(false);
+    extensionPending = false;
+    if (latestGameOver && screenGameOver.style.display !== 'none') showGameOverState(latestGameOver);
     if (screenLobby.style.display !== 'none') {
         lobbyError.innerText = msg;
     } else {
@@ -636,16 +757,18 @@ statsButton.addEventListener('click', async () => {
             players: PlayerStats[];
             recentVideos: VideoStats[];
             videoStorageMode: string;
+            archive?: { usedBytes: number; maxBytes: number; videoCount: number };
         };
 
         if (!data.databaseEnabled) {
-            statsNotice.innerText = 'Keine Datenbank verbunden. Setze DATABASE_URL, um Statistiken zu speichern.';
+            statsNotice.innerText = 'Statistiken sind momentan nicht verfuegbar.';
             return;
         }
 
         renderStatsOverview(data.overview);
         renderStats(data.players);
         renderVideoStats(data.recentVideos, data.videoStorageMode);
+        document.getElementById('archiveUsage')!.innerText = data.archive ? `${data.archive.videoCount} archivierte Videos · ${(data.archive.usedBytes / 1024 / 1024).toFixed(1)} / ${Math.round(data.archive.maxBytes / 1024 / 1024)} MB` : '';
     } catch {
         statsNotice.innerText = 'Statistiken konnten nicht geladen werden.';
     }
@@ -676,7 +799,7 @@ socket.on('leftRoom', () => {
     clearSession();
     gameHeader.style.display = 'none';
     showScreen(screenLobby);
-    showRoomNotice('');
+    roomNotice.style.display = 'none';
 });
 
 socket.on('roomNotice', (message: string) => {
@@ -684,35 +807,40 @@ socket.on('roomNotice', (message: string) => {
 });
 
 async function resumeStoredSession() {
-    if (!storedSessionRaw) return;
-
     try {
-        const storedSession = JSON.parse(storedSessionRaw) as { roomId?: string; sessionId?: string };
-        if (storedSession.roomId && storedSession.sessionId) {
-            if (socket.isNativeWebSocket && !(await connectToRoom(storedSession.roomId))) return;
-            socket.emit('resumeRoom', storedSession);
-        }
-    } catch {
-        clearSession();
-    }
+        const stored = JSON.parse(localStorage.getItem('slopurself-session') || 'null') as { roomId?: string; sessionId?: string } | null;
+        if (!stored?.roomId || !stored.sessionId) return;
+        currentRoomId = stored.roomId;
+        currentSessionId = stored.sessionId;
+        if (socket.isNativeWebSocket) { await connectToRoom(stored.roomId); }
+        else socket.emit('resumeRoom', { roomId: stored.roomId, sessionId: stored.sessionId });
+    } catch { clearSession(); }
 }
-
 socket.on('connect', () => {
-    if (!socket.isNativeWebSocket) void resumeStoredSession();
+    if (socket.isNativeWebSocket) {
+        if (currentRoomId && currentSessionId) socket.emit('resumeRoom', { roomId: currentRoomId, sessionId: currentSessionId });
+    } else void resumeStoredSession();
 });
-
-if (socket.isNativeWebSocket) void resumeStoredSession();
+// Session restoration starts only after the account cookie is available.
 
 // --- SCREEN 2: ERSTELLEN vs. WARTEN ---
 socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string; hostId: string }) => {
     showCreateState(data);
 });
 
+customButton.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); imageInput.click(); }
+});
+
+votingVideoPlayer.addEventListener('error', () => {
+    if (votingVideoPlayer.getAttribute('src')) showRoomNotice('Das Video konnte nicht geladen werden. Der Video-Link ist eventuell abgelaufen.');
+});
+
 imageInput.addEventListener('change', (event: Event) => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0];
     if (file) {
-        if (!file.type.startsWith('image/')) {
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
             alert('Bitte wähle eine Bilddatei aus.');
             clearImagePreview();
             return;
@@ -739,7 +867,7 @@ uploadButton.addEventListener('click', () => {
     const promptText = promptInput.value.trim();
 
     if (!file) return alert('Bitte wähle zuerst ein Bild aus!');
-    if (!file.type.startsWith('image/') || file.size > 8 * 1024 * 1024) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
         alert('Bitte wähle ein gültiges Bild bis maximal 8 MB aus.');
         return;
     }
@@ -751,12 +879,15 @@ uploadButton.addEventListener('click', () => {
 
     uploadButton.disabled = true;
     uploadButton.innerText = 'Wird hochgeladen...';
+    const uploadRoomId = currentRoomId;
+    const uploadTurnKey = currentPhaseKey;
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
+        if (currentRoomId !== uploadRoomId || currentPhaseKey !== uploadTurnKey) return;
         socket.emit('sendImage', {
-            roomId: displayRoomCode.innerText,
+            roomId: uploadRoomId,
             imageBase64: reader.result as string,
             prompt: promptText
         });
@@ -794,6 +925,7 @@ voteButtons.forEach(btn => {
         const points = parseInt(btn.getAttribute('data-points') || '0', 10);
         socket.emit('submitVote', { roomId: displayRoomCode.innerText, points });
 
+        voteButtons.forEach(button => button.disabled = true);
         votingActionBox.style.display = 'none';
         votingWaitingBox.style.display = 'block';
         votingStatusText.innerText = `Du hast ${points} Sterne gegeben! Warte auf die anderen...`;
@@ -801,41 +933,71 @@ voteButtons.forEach(btn => {
 });
 
 // SCREEN 4: ERGEBNISSE & HIGHSCORE
-socket.on('showResultsScreen', (data: { authorName: string; roundPoints: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; isFinalRound: boolean }) => {
+function showResultsState(data: { authorName: string; roundPoints: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; nextRound?: number; isFinalRound: boolean }) {
     showScreen(screenResult);
     const isHost = isCurrentSocket(currentHostId);
 
     resultAuthorName.innerText = `Video von ${data.authorName}`;
-    resultPointsSummary.innerText = `+${data.roundPoints} Punkte in dieser Runde`;
+    resultPointsSummary.innerText = `+${data.roundPoints} Punkte für dieses Video`;
     nextRoundButton.style.display = !data.isFinalRound && isHost ? 'block' : 'none';
-    nextRoundButton.innerText = `Runde ${data.currentRound + 1} starten`;
+    nextRoundButton.innerText = data.nextRound === data.currentRound ? 'Nächstes Video' : `Runde ${data.nextRound || data.currentRound + 1} starten`;
     if (!data.isFinalRound && !isHost) {
         showRoomNotice('Warte darauf, dass der Host die nächste Runde startet.');
     }
 
     renderScoreList(scoreList, data.players);
-});
+}
+socket.on('showResultsScreen', showResultsState);
 
 // Nächste Runde triggern (jeder Spieler kann den Button klicken)
 nextRoundButton.addEventListener('click', () => {
     socket.emit('startNextRound', { roomId: displayRoomCode.innerText });
 });
 
-socket.on('showGameOverScreen', (data: { players: { id: string; name: string; score: number }[]; maxRounds: number }) => {
+function showGameOverState(data: GameOverData) {
+    latestGameOver = data;
+    if (roomNotice.innerText === 'Warte darauf, dass der Host die nächste Runde startet.') roomNotice.style.display = 'none';
     showScreen(screenGameOver);
     const winner = data.players[0];
-    winnerName.innerText = winner ? `${winner.name} gewinnt mit ${winner.score} Punkten` : 'Keine Wertung vorhanden';
+    const winners = data.players.filter(player => player.score === winner?.score);
+    winnerName.innerText = winner ? `${winners.map(p => p.name).join(', ')} ${winners.length > 1 ? 'teilen den Sieg' : 'gewinnt'} mit ${winner.score} Punkten` : 'Keine Wertung vorhanden';
     renderScoreList(finalScoreList, data.players);
+    const isHost = isCurrentSocket(currentHostId);
+    const quota = data.extensionQuota;
+    const disconnected = data.players.some(player => player.connected === false);
+    extendGameButton.style.display = isHost ? 'block' : 'none';
+    extendGameButton.disabled = extensionPending || !quota?.aiRoundLimit || disconnected;
+    extendGameButton.innerText = extensionPending ? 'Bitte warten...' : 'Zusatzrunde spielen';
+    extensionQuotaHint.innerText = !quota ? 'Rundenlimit wird geprüft.'
+        : disconnected ? 'Warte auf die Wiederverbindung aller Spieler.' : quotaHint(quota, true);
+}
+socket.on('showGameOverScreen', showGameOverState);
+
+extendGameButton.addEventListener('click', () => {
+    if (!latestGameOver || extendGameButton.disabled || !currentRoomId) return;
+    extensionPending = true;
+    showGameOverState(latestGameOver);
+    socket.emit('extendGame', { roomId: currentRoomId, completedVideo: latestGameOver.videoNumber || latestGameOver.currentRound });
 });
 
 restartButton.addEventListener('click', () => {
     if (currentRoomId) {
         socket.emit('leaveRoom', { roomId: currentRoomId });
     }
-    clearSession();
-    displayRoomCode.innerText = '----';
-    playerCount.innerText = '1';
-    roundCounter.innerText = '1/1';
-    gameHeader.style.display = 'none';
-    showScreen(screenLobby);
+});
+
+socket.on('authExpired', () => { void refreshAccount(); showRoomNotice('Anmeldung wird erneuert. Bitte die Aktion erneut ausführen.'); });
+void initializeAccount({
+    signedIn: async name => {
+        if (name) usernameInput.value = name.slice(0, 15);
+        usernameInput.type = name ? 'hidden' : 'text';
+        showScreen(screenLobby); await loadGameConfig();
+        if (socket.isNativeWebSocket) await resumeStoredSession(); else await socket.connectToRoom('');
+    },
+    signedOut: async () => {
+        if (currentRoomId) { socket.emit('leaveRoom', { roomId: currentRoomId }); await new Promise(resolve => setTimeout(resolve, 200)); }
+        clearSession(); gameHeader.style.display = 'none';
+    },
+    showAuth: () => showScreen(document.getElementById('screenAuth')!),
+    refreshToken: token => { if (socket.id) socket.emit('refreshAuth', { token }); }
 });

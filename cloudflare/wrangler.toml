@@ -1,34 +1,51 @@
 name = "slopurself"
 main = "src/worker.ts"
 compatibility_date = "2026-10-03"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false
 
 [assets]
 directory = "public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/ws/*"]
+run_worker_first = ["/api/*", "/ws/*", "/socket.io/*"]
 
 [[durable_objects.bindings]]
 name = "ROOMS"
 class_name = "RoomDurableObject"
 
+[[durable_objects.bindings]]
+name = "SERVICES"
+class_name = "ServiceDurableObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RoomDurableObject"]
 
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["ServiceDurableObject"]
+
 [vars]
-AI_PROVIDER = "wan"
-AI_PROVIDER_CHAIN = "wan,wan22,ltx"
+AI_PROVIDER = "wan22"
+AI_PROVIDER_CHAIN = "wan22,wan22-fast,ltx"
 HF_SPACE_ID = "Lightricks/ltx-video-distilled"
 HF_PREDICT_ENDPOINT = "/image_to_video"
 AI_ROUND_LIMIT = "5"
+AI_GPU_SECONDS_PER_ROUND = "0"
+VIDEO_BUCKET = "slopurself-videos"
+VIDEO_ARCHIVE_MB = "512"
+AWS_REGION = "eu-central-1"
+AWS_ENDPOINT_URL_S3 = "https://br-soft-math-b1efy5s0.storage.c-5.eu-central-1.aws.neon.tech"
 LTX_DURATION = "5"
 LTX_HEIGHT = "512"
 LTX_WIDTH = "704"
-LTX_FRAMES = "121"
-LTX_GUIDANCE = "2.5"
-LTX_ENHANCE_PROMPT = "false"
+LTX_GUIDANCE = "1"
 
-# Set these with Wrangler secrets, never in this file:
-# npx wrangler secret put HF_TOKEN --config cloudflare/wrangler.toml
-# npx wrangler secret put DATABASE_URL --config cloudflare/wrangler.toml
+# Upload the ignored .env.local secrets with npm run cf:secrets.

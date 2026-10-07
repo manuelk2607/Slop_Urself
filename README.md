@@ -1,158 +1,268 @@
 # Slop Urself
 
+Das Spiel laeuft auf Cloudflare Workers mit statischen Assets, nativen WebSockets
+und einem Durable Object pro Raum. Neon speichert Spieler, Punkte, Runden und
+Bewertungen. Der Mac muss fuer die veroeffentlichte Version nicht laufen.
+
 ## Lokal starten
 
 ```bash
-npm install
-npm run dev
+npm ci
+AI_PROVIDER=mock AUTH_MODE=disabled npm run dev
 ```
 
-Die App laeuft dann lokal unter:
+URL: http://127.0.0.1:3000. Ist der Port belegt, z. B. mit
+`PORT=3001 AI_PROVIDER=mock AUTH_MODE=disabled npm run dev` starten.
+Der lokale Server verwendet Socket.IO und dieselbe Spiellogik und KI-Anbindung
+wie Cloudflare. Ohne DATABASE_URL gibt es keine dauerhafte Statistik.
 
-```text
-http://127.0.0.1:3000
-```
-
-Standardmaessig nutzt das Projekt die echte LTX-Video-Anbindung ueber Hugging Face. Wenn du beim Entwickeln keine KI-Aufrufe verbrauchen willst, starte lokal mit `AI_PROVIDER=mock npm run dev`.
-
-Die maximale Rundenzahl orientiert sich am KI-Kontingent und liegt standardmaessig bei 5 Runden. Du kannst sie beim Start anpassen:
+## Cloudflare
 
 ```bash
-AI_ROUND_LIMIT=5 npm run dev
-```
-
-## Postgres-Statistiken speichern
-
-Das Spiel funktioniert auch ohne Datenbank. Wenn du eine Postgres-Datenbank verbindest, speichert es Raeume, Spieler, gespielte Runden und Votes fuer die Statistikseite.
-
-Empfohlen: Neon Postgres Free Plan.
-
-1. Erstelle eine Neon-Datenbank.
-2. Kopiere die Connection-URL.
-3. Starte die App mit `DATABASE_URL`:
-
-```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require" npm run dev
-```
-
-Beim Start legt der Server die benoetigten Tabellen automatisch an. Das Schema liegt zusaetzlich in `db/schema.sql`.
-
-Fuer echte KI plus Statistik:
-
-```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require" HF_TOKEN=dein_token AI_ROUND_LIMIT=5 npm run dev
-```
-
-## Mit Freunden per Cloudflare Quick Tunnel spielen
-
-Cloudflare Quick Tunnel erstellt eine temporaere HTTPS-URL, die auf deinen lokalen Server zeigt. Du brauchst keine eigene Domain, kein Port-Forwarding und keinen bezahlten Account.
-
-1. Starte die App in Terminal 1:
-
-```bash
-npm run dev
-```
-
-2. Starte den Tunnel in Terminal 2:
-
-```bash
-npm run tunnel
-```
-
-3. Kopiere die angezeigte URL mit `trycloudflare.com` und schicke sie deinen Freunden.
-
-Wichtig:
-
-- Die URL funktioniert nur, solange beide Terminals laufen.
-- Wenn du den Tunnel neu startest, bekommst du eine neue URL.
-- Der Server muss auf Port `3000` laufen, damit `npm run tunnel` direkt funktioniert.
-- Teile die URL nur mit Leuten, die mitspielen sollen.
-
-## Ohne laufenden Mac hosten
-
-Quick Tunnel ist gut fuer schnelle Tests, aber dein Mac muss dabei laufen. Fuer eine dauerhaft gehostete Version ist eine Cloudflare-Worker-Architektur vorbereitet:
-
-- statische Assets ueber Cloudflare
-- native WebSockets statt Socket.IO
-- ein Durable Object pro Spielraum
-- Hugging-Face-Token und Neon-URL als Cloudflare Secrets
-
-Die Vorbereitungen liegen in `cloudflare/`.
-
-```bash
-npm run cf:dev
+npm run cf:local
+npm run cf:dev -- --var AI_PROVIDER:mock --var AUTH_MODE:disabled
+npm run cf:secrets
 npm run cf:deploy
 ```
 
-Vor einem Deploy muessen Secrets gesetzt werden:
+Fuer lokale Cloudflare-Tests direkt:
+`npx wrangler dev --config cloudflare/wrangler.toml --var AI_PROVIDER:mock --var AUTH_MODE:disabled`
+(nach `npm run cf:build`).
 
-```bash
-npx wrangler secret put HF_TOKEN --config cloudflare/wrangler.toml
-npx wrangler secret put DATABASE_URL --config cloudflare/wrangler.toml
+`npm run cf:secrets` uebertraegt die benoetigten Secrets aus der ignorierten
+.env.local ohne sie im Terminal auszugeben. `npm run cf:local` erzeugt die
+ebenfalls ignorierte cloudflare/.dev.vars fuer lokale Worker-Tests.
+
+Lokale .env.local-Werte werden nicht automatisch zu Cloudflare uebertragen.
+Die Assets kommen ausschliesslich aus cloudflare/public; .env-Dateien werden
+nicht mit hochgeladen. Der Link fuer Freunde lautet:
+https://slopurself.jsbk9gv78n.workers.dev. `npm run invite` zeigt denselben
+Spiellink. Der Host teilt zusaetzlich den vierstelligen Raumcode.
+
+## Einstieg mit Benutzername
+
+Ein Feld fuer den Benutzernamen (1 bis 15 sichtbare Zeichen) und "Los geht's".
+Neue Namen werden in user_profiles gespeichert; ein eindeutiger Datenbankindex
+verhindert doppelte Namen auch bei gleichzeitiger Erstellung. Gross-/Kleinschreibung,
+Leerzeichen am Rand und gleichwertige Unicode-Schreibweisen zaehlen als derselbe Name.
+"Vorhandenen Namen verwenden" setzt ein bestehendes Profil ohne Passwort fort.
+Die Lobby fragt nicht erneut nach einem Namen.
+
+Eine signierte HTTP-only-Browsersitzung bleibt fuer 30 Tage erhalten und wird
+erneuert. AUTH_COOKIE_SECRET wird dafuer als Cloudflare-Secret benoetigt.
+Neon Auth, Mail-Adressen, Passwoerter und ein zusaetzlicher Spiel-Zugangscode
+werden nicht mehr verwendet. Ohne Datenbank sind lokale Testprofile nur im
+Arbeitsspeicher vorhanden; mit Neon bleiben Profil und Statistik-ID gespeichert.
+
+Das ist bewusst keine geschuetzte Anmeldung: Jeder, der einen bestehenden
+Benutzernamen kennt, kann dieses Profil verwenden. Die Seite ist damit nicht
+auf Freunde beschraenkt. Vorhandene Neon-Auth-Daten und Spielhistorie werden
+nicht geloescht. AUTH_MODE=disabled ist nur mit AI_PROVIDER=mock wirksam und
+dient ausschliesslich lokalen Tests.
+
+## Kostenlose KI
+
+Standard: `wan22,wan22-fast,ltx`, ueber kostenlose Hugging-Face-Spaces.
+
+- Wan 2.2: Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom
+- `wan22-fast`: nativer 4-Schritte-Modus desselben Wan-2.2-Spaces.
+- LTX: Lightricks/ltx-video-distilled
+- Optional `wan`: multimodalart/wan2-1-fast. Dieser Space unterstuetzt derzeit
+  nur bis zu 3,4 Sekunden und wird bei der Mindestdauer von 5 Sekunden uebersprungen.
+
+Die Host-Adresse und Parameterreihenfolge werden aus der aktuellen Space-API
+gelesen. Parameter werden ueber Namen zugeordnet, gegen Wertebereiche geprueft
+und erst dann wird das Bild hochgeladen. Fehler und Zeitueberschreitungen fuehren
+zum naechsten Provider. Es wird kein kostenpflichtiger Inference-Dienst benutzt.
+
+Lokale Konfiguration in der ignorierten .env.local:
+
+```dotenv
+AI_PROVIDER=wan22
+AI_PROVIDER_CHAIN=wan22,wan22-fast,ltx
+HF_TOKEN=DEIN_GUELTIGER_HF_READ_TOKEN
+AI_ROUND_LIMIT=5
+AI_GPU_SECONDS_PER_ROUND=0
+LTX_DURATION=5
+LTX_HEIGHT=512
+LTX_WIDTH=704
+LTX_GUIDANCE=1
+DATABASE_URL=DEINE_NEON_POSTGRES_URL
 ```
 
-Wichtig: Die lokale Express/Socket.IO-Version bleibt weiterhin der stabile Spielserver. Der Cloudflare-Ordner ist die vorbereitete Migration, damit das Spiel spaeter ohne laufenden Mac betrieben werden kann.
+Wan 2.2 nutzt bevorzugt 8 Schritte. Reicht das Budget unter Beruecksichtigung
+aller reservierten Videos nicht, folgt der native 4-Schritte-Sparmodus, danach
+LTX. Weniger Schritte koennen die Qualitaet verringern; alle Modi erzeugen
+mindestens 5 Sekunden. Wan verwendet Guidance 1 und keine Frame-Interpolation,
+LTX Guidance 1 und Texture-Verbesserung. Die LTX-Option ui_frames_to_use betrifft
+Eingabevideos und bestimmt bei Image-to-Video nicht die Ausgabelaenge.
 
-## KI konfigurieren
+Die Rundengrenze wird aus dem echten Restkontingent unter
+https://huggingface.co/api/spaces/zero-gpu/quota berechnet: verbleibende
+GPU-Zeit und verbleibende Aufrufe, abzüglich Budgets laufender Partien.
+Eine Runde ist ein vollstaendiger Durchgang: jeder Spieler erstellt ein Video.
+Die Kostenberechnung ist fuer Generierung und Rundenauswahl identisch:
+Wan 2.2 mit 8 Schritten benoetigt konservativ 154 GPU-Sekunden, der
+4-Schritte-Modus 92 und LTX 120. Grundlage ist die GPU-Dauer im jeweiligen
+Space-Quellcode, einschliesslich maximalem Bildformat und 2x-Kosten fuer xlarge.
+Reserviert wird der guenstigste konfigurierte Modus mit mindestens 5 Sekunden.
+Die Grenze ist `floor(verfuegbare Videos / Spielerzahl)`;
+die verfuegbaren Videos ergeben sich aus GPU-Zeit, Aufrufen und Reservierungen.
+Bei 185 GPU-Sekunden passen zwei Videos im 4-Schritte-Modus ins Budget:
+eine vollstaendige Runde fuer zwei Spieler (184 GPU-Sekunden). Fuer drei
+Spieler sind mindestens 276 GPU-Sekunden erforderlich. Die UI zeigt nur die
+aktuell maximale Rundenzahl. Acht Schritte werden nur versucht, wenn sie die
+noch ausstehenden Videos nicht gefaehrden.
+Laengere Videos erhoehen das Budget automatisch.
+AI_GPU_SECONDS_PER_ROUND ist trotz des historischen Namens eine optionale
+Untergrenze je Video: 0 nutzt die modellabhaengigen Kosten, ein hoeherer Wert
+erhoeht sie. AI_ROUND_LIMIT gilt nur im Mock-Modus.
 
-Die echte Hugging-Face-Generierung ist der Standard. Empfohlen fuer den Test mit Freunden:
+Die Auswahl wird regelmaessig und vor dem Erstellen aktualisiert. In der
+Raum-Lobby richtet sich die Grenze nach der tatsaechlichen Spielerzahl; der
+Host kann die Runden dort anpassen. Zwei Runden mit drei Spielern ergeben
+sechs Videos. Verlassen Spieler die Partie, entfallen ihre ausstehenden
+Erstellungen und deren Reservierungen. Bereits gestartete KI-Jobs bleiben
+bis zum Abschluss reserviert. Bei laufenden Spielen nach altem Format bleibt
+die alte Einzelvideo-Rundenzaehlung erhalten; neue Partien verwenden Durchgaenge.
+Nach dem letzten geplanten Durchgang liest das Spiel das echte Restkontingent
+erneut. Reicht es fuer alle verbleibenden Spieler, kann der Host am Endbildschirm
+eine Zusatzrunde starten. Jeder erstellt genau ein weiteres Video. Vor jedem
+Start werden GPU-Zeit und Aufruflimit erneut geprueft und global reserviert;
+das funktioniert auch nach einem Reload oder Kontingent-Reset. Die Anzahl
+vorab reservierbarer Runden ist deshalb nicht die absolute Zahl moeglicher Videos.
+Die Reserve ist konservativ; schneller beendete Jobs koennen weiteres Budget
+fuer Zusatzrunden lassen. Ein bestimmter tatsaechlicher Verbrauch wird nicht versprochen.
+Punkte und Videozaehlung laufen in derselben Partie weiter. Die Datenbank entfernt
+beim Fortsetzen die bisherige Endwertung und setzt sie am naechsten Ende erneut,
+ohne Spiele, Punkte oder Siege doppelt zu zaehlen. Auf Cloudflare bleibt dieser
+Wiederaufnahme-Schreibvorgang mit den Rundenwrites in der dauerhaften Retry-Queue.
+Bei getrennten Spielern wird bis zur Wiederverbindung oder deren Ausscheiden gewartet.
+Beim Start wird serverseitig erneut geprueft und global reserviert; parallele Raeume
+koennen nicht dasselbe Kontingent einplanen. Bei unbekanntem oder aufgebrauchtem
+Kontingent sind keine neuen Spiele moeglich. Fallbacks duerfen das Budget
+anderer oder spaeterer Runden nicht verbrauchen.
+Aufwendigere laufende Versuche bleiben bis zum Abschluss reserviert, auch
+bevor Hugging Face einen wartenden Job im Restkontingent abgezogen hat.
+Wiederholungen muessen erneut genug Budget fuer alle noch ausstehenden Videos
+haben, damit sie das Kontingent des naechsten Spielers nicht verbrauchen.
+Es werden keine kostenpflichtigen
+Overquota-Credits aktiviert. HF kann sein Limit aendern, und Nutzung desselben
+Accounts ausserhalb des Spiels oder verbrauchte Fehlversuche koennen das Budget
+trotzdem reduzieren. ZeroGPU-Limits gelten fuer den HF-Account; mehrere Spaces
+vervielfachen dieses Kontingent nicht. Warteschlangen und fremde Space-Ausfaelle
+koennen die Generierung blockieren. Bild und Prompt werden an externe Spaces
+uebertragen; deren Loeschfristen kann die App nicht erzwingen.
+
+## KI-Wiederaufnahme und Diagnose
+
+Cloudflare speichert den Provider, die externe Event-ID, Parameter und den
+Auftragsstatus im Durable Object. Originalbilder werden dafuer nicht gespeichert.
+Nach einem Worker-Neustart oder unterbrochenem Ergebnisstream wird derselbe
+Auftrag erneut abgefragt, ohne einen weiteren GPU-Auftrag zu starten. Ergebnisse
+verlassener Spieler werden nicht angezeigt oder archiviert; deren Jobs werden
+im Hintergrund abgefragt, um abgeschlossene Budgetreservierungen freizugeben.
+Auch fehlgeschlagene Budgetfreigaben werden dauerhaft wiederholt.
+
+Nur ein ausdruecklich fehlgeschlagener Provider-Auftrag erlaubt einen neuen
+Fallback. Geht die Antwort auf das Start-POST verloren, ist die externe Job-ID
+unbekannt: Es wird kein zweiter Auftrag auf Verdacht gesendet. Nach 15 Minuten
+erhaelt der Ersteller eine Fehlermeldung. Fuer ungeklaerte Auftraege bleibt die
+konservative Reservierung bis zu ihrem bestehenden Zwei-Stunden-TTL geschuetzt.
+Eine externe Space-Loeschung oder ein aus dem HF-Cache entferntes Ergebnis
+kann die App nicht reparieren. Beim lokalen Node-Server funktioniert die
+Wiederaufnahme nach Verbindungsabbruechen, nicht nach einem Prozessneustart.
+
+Serverlogs enthalten strukturierte JSON-Ereignisse mit Provider, Schritten,
+Videodauer, Laufzeit, Fallback-Versuchen und technischen Fehlerkategorien.
+Bilder, Prompts, HF-URLs, Tokens und Benutzernamen werden dabei nicht geloggt.
+Lokal erscheinen die Ereignisse im Terminal; auf Cloudflare sind Worker Logs
+aktiviert. Alternativ: `npx wrangler tail --config cloudflare/wrangler.toml`.
+Die GPU-Kosten bleiben Schaetzwerte; es wird keine genaue Verbrauchsmessung
+je Video behauptet.
+
+## Anfragebegrenzung
+
+Der Einstieg bleibt ohne Passwort, per Benutzername und Raumcode. Der Link
+allein ist kein privater Zugangsschutz; bekannte Namen koennen weiterhin
+uebernommen werden. Schnelle Mehrfachanfragen werden serverseitig begrenzt:
+60 Namensaktionen und 120 Konfigurations-/Statistikanfragen je Minute und IP,
+120 Spielnachrichten je Minute und Spieler. HTTP-Antworten bei Ueberschreitung
+enthalten Status 429 und `Retry-After`. IPs liegen in Cloudflare-Rate-Buckets
+nur als mit dem Sitzungsschluessel gesalzene Hashes vor. Abgelaufene Buckets
+werden bei der naechsten Anfrage verworfen und die Anzahl ist begrenzt. Das ist ein leichter Schutz fuer eine
+Freundesgruppe, kein vollstaendiger Missbrauchsschutz.
+
+Anonyme Seitenaufrufe lesen kein HF-Kontingent. Die Anzeige wird fuer maximal
+fuenf Sekunden zwischengespeichert; Spielstart und Generierung pruefen weiterhin
+frisch und autoritativ. Das UI zeigt weiterhin nur die maximale Rundenzahl.
+
+## Speicherung
+
+Das Schema liegt in db/schema.sql und wird beim ersten Datenbankzugriff angelegt.
+Spieler behalten ihre ID bei einem Reload. Neue Statistikwerte werden anhand
+der verifizierten Konto-ID zusammengefasst: Namensaenderungen behalten die
+Punkte, gleiche Namen anderer Konten werden nicht vermischt. Alte namenbasierte
+Eintraege bleiben als Legacy-Statistik erhalten und werden nicht automatisch
+einem neuen Konto zugeordnet.
+
+Runde, Stimmen, Punktestand und gegebenenfalls Endwertung werden in einer
+Transaktion gespeichert. Auf Cloudflare liegen fehlgeschlagene Rundenwrites
+zusaetzlich im Durable-Object-Speicher und werden wiederholt. Die lokale
+Entwicklungsversion protokolliert DB-Fehler, hat aber keine dauerhafte Wiederholung.
+
+Generierte MP4-Dateien werden in einem privaten Neon-Object-Storage-Bucket
+archiviert und ueber die angemeldete App gestreamt (einschliesslich Byte-Ranges).
+VIDEO_ARCHIVE_MB=512 begrenzt das Archiv; bevor es voll wird, werden die aeltesten
+Videos geloescht. Punkte und Runden bleiben dabei in Postgres erhalten.
+Ein Video darf hoechstens 15 MB gross sein; das Archivlimit ist auf 1 GB gedeckelt.
+Die Statistik zeigt Archivgroesse und Videohistorie.
+Bei einem Archiv-Ausfall bleibt ein temporaerer HF-Link mit Warnung erhalten.
+Bereits abgelaufene alte HF-Links koennen nicht nachtraeglich gerettet werden.
+Originalbilder werden nicht in Neon gespeichert.
+
+## Tests
 
 ```bash
-HF_TOKEN=dein_token npm run dev
+npm run build
+npm test
+npx playwright install chromium webkit
+npm run test:ci
+npm audit
 ```
 
-Ohne `HF_TOKEN` versucht die App den oeffentlichen Hugging-Face-Space. Wenn der Space Login oder ZeroGPU-Zugriff verlangt, hinterlege einen kostenlosen Hugging-Face-Token.
+`.github/workflows/ci.yml` fuehrt bei Push und Pull Request Build, Unit-Tests
+und Browser-Tests in Chromium und WebKit aus. `test:ci` startet und beendet
+isolierte Mock-Server selbst. Weder produktive DB-/Storage-Zugangsdaten noch
+ein echter HF-Token sind notwendig; es wird keine GPU-Zeit verbraucht.
+Browser-Screenshots liegen im System-Tempverzeichnis oder in `TEST_ARTIFACT_DIR`.
 
-Wenn du wieder ohne echte KI testen willst:
+Browser-Test gegen einen separat gestarteten Mock-Server:
 
 ```bash
-AI_PROVIDER=mock npm run dev
+npm run test:e2e -- http://127.0.0.1:3000
+TEST_BROWSER_ENGINE=webkit npm run test:e2e -- http://127.0.0.1:3000
 ```
 
-Empfohlene echte KI-Konfiguration mit kostenloser Fallback-Kette:
+Fuer Cloudflare zuerst `npm run cf:build`, dann
+`npx wrangler dev --config cloudflare/wrangler.toml --port 3311 --var AI_PROVIDER:mock --var AUTH_MODE:disabled`
+und `npm run test:e2e -- http://127.0.0.1:3311`.
+Der Browsertest prueft die automatische Cloudflare-Wiederverbindung zusaetzlich.
 
-```bash
-HF_TOKEN=dein_token \
-AI_PROVIDER=wan \
-AI_PROVIDER_CHAIN=wan,wan22,ltx \
-AI_ROUND_LIMIT=5 \
-npm run dev
-```
+`npm run test:db` nutzt die Neon-URL aus .env.local, arbeitet ausschliesslich
+mit temporaeren Tabellen auf einer direkten (ungepoolten) Verbindung und
+veraendert keine vorhandenen Spieldaten.
 
-Die Provider-Kette versucht nacheinander:
-
-- `wan`: `multimodalart/wan2-1-fast`
-- `wan22`: `Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom`
-- `ltx`: `Lightricks/ltx-video-distilled`
-
-Wenn ein Provider wegen Limit, Queue, Space-Fehler oder API-Fehler scheitert, wird automatisch der naechste versucht.
-
-Die LTX-Anbindung nutzt das Originalbild direkt als Image-to-Video-Eingabe. Der Server erweitert kurze Spieler-Prompts zu einem knappen Action-Prompt, damit die sichtbare Handlung wichtiger ist als ein reiner Kameraschwenk.
-
-Aktuelle LTX-Parameter im Server:
-
-- Prompt: Spieler-Prompt plus Action-Template
-- Negative Prompt: blockiert unter anderem `camera pan only`, `zoom only`, `no action` und `motionless subject`
-- Aufloesung: `512 x 704`
-- Dauer: `5`
-- Frames: `9`
-- Guidance: `2.5`
-- Seed: randomisiert
-- Prompt-Enhancer: aus
-
-Diese Werte koennen lokal angepasst werden:
-
-```bash
-LTX_DURATION=5 LTX_FRAMES=121 LTX_GUIDANCE=2.5 LTX_ENHANCE_PROMPT=false LTX_HEIGHT=512 LTX_WIDTH=704 npm run dev
-```
-
-Alternative zum Experimentieren:
-
-```bash
-HF_TOKEN=dein_token \
-AI_PROVIDER=wan \
-AI_PROVIDER_CHAIN=wan,ltx \
-npm run dev
-```
-
-Wan-Spaces koennen ihre Gradio-Parameter aendern. Wenn ein Wan-Provider fehlschlaegt, faellt die App automatisch auf den naechsten Provider in `AI_PROVIDER_CHAIN` zurueck.
+`node --import tsx tests/startup.e2e.mts http://127.0.0.1:3000` prueft
+Ladefehler und die dynamische Rundenauswahl gegen einen Mock-Testserver.
+`node --import tsx tests/quota.e2e.mts` startet einen isolierten Testserver
+auf Port 3315 und prueft die spielerabhaengige Begrenzung mit simuliertem
+HF-Kontingent. Es werden keine echten Videos erzeugt oder Produktivdaten gespeichert.
+`node --import tsx tests/extension.e2e.mts` prueft auf Port 3316 freiwillige
+Zusatzrunden mit zwei Spielern, sechs simulierten Videos, gemeinsamen Punkten,
+Reload und erschoepftem Kontingent. Auch dieser Test verbraucht keine GPU-Zeit.
+`npm run test:auth` prueft einen lokalen Server auf Port 3312 mit aktivem
+Profileinstieg, Mock-KI und ohne Datenbank. `TEST_PROFILE_DB=true` aktiviert
+einen gezielten Datenbank-Test gegen einen solchen Server mit Neon: Dabei
+werden keine Raeume angelegt, nur das exakt neu erstellte Testprofil wird
+danach entfernt. DATABASE_URL_UNPOOLED wird fuer diese Bereinigung benoetigt.

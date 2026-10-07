@@ -1,6 +1,19 @@
 import { Pool } from 'pg';
+import { ProfileStore, sqlProfiles, storedProfiles, PROFILE_SCHEMA } from './profiles';
 
 let pool: Pool | null = null;
+let profiles: ProfileStore | undefined;
+const localProfiles = new Map<string, unknown>();
+
+export function getProfiles() {
+    if (profiles) return profiles;
+    const database = getPool();
+    profiles = database ? sqlProfiles(async (sql, values) => (await database.query(sql, values)).rows) : storedProfiles({
+        get: async <T>(key: string) => structuredClone(localProfiles.get(key)) as T | undefined,
+        put: async (key, value) => { localProfiles.set(key, structuredClone(value)); }
+    });
+    return profiles;
+}
 
 function getPool() {
     if (pool) return pool;
@@ -10,9 +23,9 @@ function getPool() {
 
     pool = new Pool({
         connectionString: databaseUrl,
-        ssl: databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1')
-            ? false
-            : { rejectUnauthorized: false }
+        max: 5,
+        connectionTimeoutMillis: 10_000,
+        idleTimeoutMillis: 30_000
     });
 
     return pool;
@@ -21,6 +34,7 @@ function getPool() {
 export interface PersistPlayerInput {
     roomCode: string;
     playerSocketId: string;
+    accountId?: string;
     name: string;
     score: number;
     isHost: boolean;
@@ -41,6 +55,9 @@ export interface PersistRoundInput {
     videoUrl: string;
     roundPoints: number;
     votes: { voterSocketId: string; points: number }[];
+    players?: { id: string; accountId?: string; name: string; score: number }[];
+    hostId?: string;
+    standings?: FinalStandingInput[];
 }
 
 export interface PlayerStats {
@@ -78,6 +95,7 @@ export async function ensureDatabaseSchema() {
     const pool = getPool();
     if (!pool) return;
 
+    await pool.query(PROFILE_SCHEMA);
     await pool.query(`
         create table if not exists rooms (
             code text primary key,
@@ -129,6 +147,8 @@ export async function ensureDatabaseSchema() {
         alter table rooms add column if not exists winner_socket_id text;
         alter table rooms add column if not exists winner_name text;
         alter table players add column if not exists final_rank integer;
+        alter table players add column if not exists account_id text;
+        create index if not exists players_account_id_idx on players(account_id);
     `);
 }
 
@@ -143,12 +163,17 @@ export async function saveRoom(code: string, hostSocketId: string, maxRounds: nu
     await pool.query(
         `insert into rooms (code, host_socket_id, max_rounds, status)
          values ($1, $2, $3, 'LOBBY')
-         on conflict (code) do update
-         set host_socket_id = excluded.host_socket_id,
-             max_rounds = excluded.max_rounds,
-             status = excluded.status`,
+         on conflict (code) do update set max_rounds = excluded.max_rounds
+         where rooms.started_at is null`,
         [code, hostSocketId, maxRounds]
     );
+}
+
+export async function roomExists(code: string) {
+    const pool = getPool();
+    if (!pool) return false;
+    const result = await pool.query('select code from rooms where code = $1', [code]);
+    return result.rowCount !== 0;
 }
 
 export async function savePlayer(player: PersistPlayerInput) {
@@ -156,13 +181,14 @@ export async function savePlayer(player: PersistPlayerInput) {
     if (!pool) return;
 
     await pool.query(
-        `insert into players (room_code, socket_id, name, score, is_host)
-         values ($1, $2, $3, $4, $5)
+        `insert into players (room_code, socket_id, name, score, is_host, account_id)
+         values ($1, $2, $3, $4, $5, $6)
          on conflict (room_code, socket_id) do update
          set name = excluded.name,
              score = excluded.score,
-             is_host = excluded.is_host`,
-        [player.roomCode, player.playerSocketId, player.name, player.score, player.isHost]
+             is_host = excluded.is_host,
+             account_id = coalesce(players.account_id, excluded.account_id)`,
+        [player.roomCode, player.playerSocketId, player.name, player.score, player.isHost, player.accountId ?? null]
     );
 }
 
@@ -172,7 +198,7 @@ export async function markRoomStarted(roomCode: string) {
 
     await pool.query(
         `update rooms
-         set status = 'PLAYING',
+         set status = case when ended_at is null then 'PLAYING' else status end,
              started_at = coalesce(started_at, now())
          where code = $1`,
         [roomCode]
@@ -218,6 +244,20 @@ export async function markRoomFinished(roomCode: string, standings: FinalStandin
     }
 }
 
+export async function reopenRoom(roomCode: string, maxRounds: number, hostId: string) {
+    const pool = getPool();
+    if (!pool) return;
+    const client = await pool.connect();
+    try {
+        await client.query('begin');
+        await client.query(`update rooms set status = 'PLAYING', max_rounds = $2, host_socket_id = $3,
+            ended_at = null, winner_socket_id = null, winner_name = null where code = $1`, [roomCode, maxRounds, hostId]);
+        await client.query('update players set final_rank = null, is_host = (socket_id = $2) where room_code = $1', [roomCode, hostId]);
+        await client.query('commit');
+    } catch (error) { await client.query('rollback'); throw error; }
+    finally { client.release(); }
+}
+
 export async function saveRound(input: PersistRoundInput) {
     const pool = getPool();
     if (!pool) return;
@@ -225,6 +265,17 @@ export async function saveRound(input: PersistRoundInput) {
     const client = await pool.connect();
     try {
         await client.query('begin');
+        for (const player of input.players || []) {
+            await client.query(
+                `insert into players (room_code, socket_id, name, score, is_host, final_rank, account_id)
+                 values ($1, $2, $3, $4, $5, $6, $7)
+                 on conflict (room_code, socket_id) do update
+                 set score = excluded.score, is_host = excluded.is_host, final_rank = excluded.final_rank,
+                     account_id = coalesce(players.account_id, excluded.account_id)`,
+                [input.roomCode, player.id, player.name, player.score, player.id === input.hostId,
+                    input.standings?.find(s => s.playerSocketId === player.id)?.finalRank ?? null, player.accountId ?? null]
+            );
+        }
         const roundResult = await client.query<{ id: string }>(
             `insert into rounds (room_code, round_number, creator_socket_id, prompt, video_url, round_points)
              values ($1, $2, $3, $4, $5, $6)
@@ -255,6 +306,15 @@ export async function saveRound(input: PersistRoundInput) {
             );
         }
 
+        if (input.standings) {
+            const winner = input.standings[0];
+            await client.query(
+                `update rooms set status = 'GAME_OVER', ended_at = coalesce(ended_at, now()),
+                 winner_socket_id = $2, winner_name = $3 where code = $1`,
+                [input.roomCode, winner?.playerSocketId ?? null, winner?.name ?? null]
+            );
+        }
+
         await client.query('commit');
     } catch (error) {
         await client.query('rollback');
@@ -264,13 +324,14 @@ export async function saveRound(input: PersistRoundInput) {
     }
 }
 
-export async function saveScores(roomCode: string, players: { id: string; name: string; score: number }[], hostId: string) {
+export async function saveScores(roomCode: string, players: { id: string; accountId?: string; name: string; score: number }[], hostId: string) {
     const pool = getPool();
     if (!pool) return;
 
     await Promise.all(players.map(player => savePlayer({
         roomCode,
         playerSocketId: player.id,
+        accountId: player.accountId,
         name: player.name,
         score: player.score,
         isHost: player.id === hostId
@@ -300,7 +361,7 @@ export async function getStats(): Promise<{
 
     const overviewResult = await pool.query<StatsOverview>(`
         select
-            count(*)::int as "gamesPlayed",
+            count(*) filter (where started_at is not null)::int as "gamesPlayed",
             count(*) filter (where status = 'GAME_OVER')::int as "completedGames",
             (select count(*)::int from rounds) as "roundsPlayed",
             (select count(*)::int from votes) as "votesCast",
@@ -312,29 +373,30 @@ export async function getStats(): Promise<{
     const playersResult = await pool.query<PlayerStats>(`
         with player_totals as (
             select
-                lower(name) as player_key,
+                coalesce(account_id, 'legacy:' || lower(name)) as player_key,
                 max(name) as name,
                 count(distinct room_code) as "gamesPlayed",
                 count(*) filter (where final_rank = 1)::int as wins,
                 coalesce(sum(score), 0)::int as "totalScore",
                 coalesce(avg(score), 0)::float as "averageScore"
             from players
-            group by lower(name)
+            where room_code in (select code from rooms where started_at is not null)
+            group by coalesce(account_id, 'legacy:' || lower(name))
         ),
         created_rounds as (
             select
-                lower(p.name) as player_key,
+                coalesce(p.account_id, 'legacy:' || lower(p.name)) as player_key,
                 count(r.id)::int as "roundsCreated",
                 coalesce(avg(r.round_points), 0)::float as "averageReceivedPoints"
             from rounds r
             join players p
               on p.room_code = r.room_code
              and p.socket_id = r.creator_socket_id
-            group by lower(p.name)
+            group by coalesce(p.account_id, 'legacy:' || lower(p.name))
         ),
         given_votes as (
             select
-                lower(p.name) as player_key,
+                coalesce(p.account_id, 'legacy:' || lower(p.name)) as player_key,
                 count(v.points)::int as "votesGiven",
                 coalesce(avg(v.points), 0)::float as "averageVoteGiven"
             from votes v
@@ -342,7 +404,7 @@ export async function getStats(): Promise<{
             join players p
               on p.room_code = r.room_code
              and p.socket_id = v.voter_socket_id
-            group by lower(p.name)
+            group by coalesce(p.account_id, 'legacy:' || lower(p.name))
         )
         select
             pt.name,
