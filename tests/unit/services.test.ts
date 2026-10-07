@@ -263,6 +263,19 @@ test('archive reads real MP4 bytes and serves byte ranges through signed private
         assert.ok(requests.find(request => request.method === 'PUT')?.headers.get('authorization')?.startsWith('AWS4-HMAC-SHA256'));
     } finally { globalThis.fetch = original; }
 });
+test('sessions reject missing or short signing keys before accessing profiles', async () => {
+    let profileCalls = 0;
+    const profiles = { create: async () => { profileCalls++; return undefined; }, find: async () => { profileCalls++; return undefined; } };
+    const request = () => new Request('https://game.test/api/session', { method: 'POST', headers: { origin: 'https://game.test' }, body: JSON.stringify({ mode: 'refresh' }) });
+    for (const AUTH_COOKIE_SECRET of [undefined, '', 'x'.repeat(31)]) {
+        const response = await sessionResponse(request(), { AUTH_COOKIE_SECRET }, profiles);
+        assert.equal(response.status, 503);
+        assert.deepEqual(await response.json(), { error: 'Die Browsersitzung ist noch nicht eingerichtet.' });
+    }
+    assert.equal((await sessionResponse(request(), { AUTH_COOKIE_SECRET: 'x'.repeat(32) }, profiles)).status, 401);
+    assert.equal(profileCalls, 0);
+});
+
 test('username profiles reject duplicates, resume the same ID and verify browser sessions', async () => {
     const data = new Map<string, any>();
     const profiles = storedProfiles({ get: async key => data.get(key), put: async (key, value) => { data.set(key, value); } });

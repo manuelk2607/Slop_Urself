@@ -58,6 +58,12 @@ Fuer lokale Cloudflare-Tests direkt:
 ebenfalls ignorierte cloudflare/.dev.vars fuer lokale Worker-Tests.
 
 Lokale .env.local-Werte werden nicht automatisch zu Cloudflare uebertragen.
+Bei "Die Browsersitzung ist noch nicht eingerichtet." fehlt der
+AUTH_COOKIE_SECRET im Worker oder er ist kuerzer als 32 Zeichen. Ein vorhandener
+lokaler Schluessel kann gezielt mit `npm run cf:secrets -- AUTH_COOKIE_SECRET`
+uebertragen werden, ohne andere Secrets zu ersetzen. Der Upload prueft die
+Schluessellaenge. Ein Austausch eines bereits verwendeten Schluessels meldet
+Browser ab, loescht aber keine Profile oder Statistiken.
 Die Assets kommen ausschliesslich aus cloudflare/public; .env-Dateien werden
 nicht mit hochgeladen. Der Link fuer Freunde lautet:
 https://slopurself.jsbk9gv78n.workers.dev. `npm run invite` zeigt denselben

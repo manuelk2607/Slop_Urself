@@ -32,6 +32,26 @@ try {
     const config = await (await host.request.get(`${base}/api/config`)).json();
     assert.equal(config.mockAi, true, 'Browser regression tests require mock mode.');
     await Promise.all(pages.map(p => p.goto(base)));
+    for (const [selector, signature] of [
+        ['link[rel="icon"][href="/favicon.ico"]', '00000100'],
+        ['link[rel="icon"][type="image/png"]', '89504e47'],
+        ['link[rel="apple-touch-icon"]', '89504e47']
+    ]) {
+        const href = await host.locator(selector).getAttribute('href');
+        assert.ok(href);
+        const response = await host.request.get(new URL(href, base).href);
+        assert.equal(response.status(), 200);
+        assert.match(response.headers()['content-type'], /^image\//);
+        assert.equal((await response.body()).subarray(0, 4).toString('hex'), signature);
+    }
+    const icon = await host.evaluate(async () => {
+        const image = new Image();
+        image.src = (document.querySelector('link[rel="icon"][type="image/png"]') as HTMLLinkElement).href;
+        await image.decode();
+        return { width: image.naturalWidth, height: image.naturalHeight };
+    });
+    assert.deepEqual(icon, { width: 32, height: 32 });
+    console.log('PASS: favicon and Safari touch icon are served as images and decode correctly.');
     assert.equal(await host.locator('#screenLobby input[type="number"]').count(), 0);
     assert.equal(await host.locator('#roundLimitHint').count(), 0);
     await host.locator('#usernameInput').fill('Host');
