@@ -1,16 +1,16 @@
 {
   "compilerOptions": {
-        "target": "ES2022",
-        "module": "NodeNext",
-        "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": ".",
+    "rootDir": "src",
     "noEmitOnError": true
   },
-    "include": ["ai.ts", "auth.ts", "quota.ts", "archive.ts", "game.ts", "db.ts", "script.ts", "server.ts"],
-  "exclude": ["dist", "node_modules", "neon.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/server/cloudflare", "dist", "node_modules"]
 }

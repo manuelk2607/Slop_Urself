@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "../ai.ts", "../game.ts"]
+  "include": ["../src/server/cloudflare/**/*.ts"]
 }

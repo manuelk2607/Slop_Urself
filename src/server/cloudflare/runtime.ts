@@ -1,0 +1,22 @@
+import type { Env } from './types';
+import { roundLimit } from '../../game/rules';
+
+export async function service(env: Env, path: string, payload?: unknown) {
+    if (!env.SERVICES && env.AI_PROVIDER === 'mock') return { aiRoundLimit: getAiRoundLimit(env), playerCount: (payload as { players?: number })?.players || 1, quotaMode: 'mock' };
+    if (!env.SERVICES) throw new Error('Cloudflare SERVICES-Binding fehlt.');
+    const response = await env.SERVICES.get(env.SERVICES.idFromName('global')).fetch(new Request(`https://internal${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload || {}) }));
+    const result = await response.json() as Record<string, any>;
+    if (!response.ok) throw new Error(result.error || 'KI- oder Videospeicher nicht erreichbar.');
+    return result;
+}
+
+export function json(body: unknown, init?: ResponseInit) {
+    const headers = new Headers(init?.headers);
+    headers.set('content-type', 'application/json');
+    return new Response(JSON.stringify(body), {
+        ...init,
+        headers
+    });
+}
+
+export function getAiRoundLimit(env: Env) { return roundLimit(env.AI_ROUND_LIMIT); }

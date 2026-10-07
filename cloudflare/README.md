@@ -5,6 +5,13 @@ native WebSockets mit automatischer Wiederverbindung und einen Durable Object
 pro Raum. Hibernation erlaubt dem Raum, zwischen Nachrichten zu schlafen.
 Sitzungen und Spielzustand werden im Durable-Object-Speicher gesichert.
 
+Der Einstieg liegt in src/server/cloudflare/worker.ts. HTTP-Routing, Raum-Object
+und globales Service-Object sind getrennte Module. Gemeinsame Spielregeln,
+KI-Anbindung und Datenbankabfragen liegen unter src und werden auch vom
+Node-Server verwendet. Die Ordnerstruktur ist in
+[../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) beschrieben, die Spielnachrichten
+in [../docs/websocket-protocol.md](../docs/websocket-protocol.md).
+
 Neon speichert die langfristigen Statistiken. Fehlgeschlagene Rundenwrites bleiben
 als ausstehende Eintraege gespeichert; Alarms wiederholen sie nach 30 Sekunden.
 Alarms bearbeiten auch getrennte Sitzungen nach 15 Sekunden und die

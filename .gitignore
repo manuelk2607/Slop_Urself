@@ -2,6 +2,8 @@
 .env
 .env.local
 dist/
+public/script.js
+public/startup.js
 node_modules/
 cloudflare/.wrangler/
 cloudflare/.dev.vars

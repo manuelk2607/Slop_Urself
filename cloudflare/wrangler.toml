@@ -1,5 +1,5 @@
 name = "slopurself"
-main = "src/worker.ts"
+main = "../src/server/cloudflare/worker.ts"
 compatibility_date = "2026-10-03"
 workers_dev = true
 preview_urls = false

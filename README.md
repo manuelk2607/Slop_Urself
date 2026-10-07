@@ -4,6 +4,30 @@ Das Spiel laeuft auf Cloudflare Workers mit statischen Assets, nativen WebSocket
 und einem Durable Object pro Raum. Neon speichert Spieler, Punkte, Runden und
 Bewertungen. Der Mac muss fuer die veroeffentlichte Version nicht laufen.
 
+## Projektstruktur
+
+```text
+src/client/             Browser, Statistikanzeige und Echtzeitverbindungen
+src/server/             Node-Server und Cloudflare-Einstieg mit Durable Objects
+src/game/               Gemeinsame Spielregeln und Rundenspeicherung
+src/ai/                 Generierung, Provider, Kontingent und Diagnose
+src/auth/               Benutzerprofile und Browsersitzungen
+src/database/           Gemeinsames Schema, Abfragen und Node-/Neon-Treiber
+src/storage/            Videoarchiv
+src/security/           Anfragebegrenzung
+public/                HTML, CSS und statische Medien
+tests/                 Unit-, Browser- und Datenbanktests
+tools/                 Build und Cloudflare-Einrichtung
+cloudflare/            Deployment-Konfiguration und erzeugte Assets
+docs/                  Architektur, Protokoll und bisheriger Audit
+```
+
+Details zu Modulgrenzen und gemeinsamen Datenbankzugriffen stehen in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+`npm run build` erzeugt den Node-Code in dist und Browser-Bundles in public
+und kopiert die oeffentlichen Assets nach cloudflare/public. Generierte
+JavaScript-Dateien werden nicht von Hand bearbeitet oder eingecheckt.
+
 ## Lokal starten
 
 ```bash
@@ -41,11 +65,15 @@ Spiellink. Der Host teilt zusaetzlich den vierstelligen Raumcode.
 
 ## Einstieg mit Benutzername
 
-Ein Feld fuer den Benutzernamen (1 bis 15 sichtbare Zeichen) und "Los geht's".
+Ein Feld fuer den Benutzernamen (1 bis 15 sichtbare Zeichen) und zwei klar
+getrennte Aktionen: "Neuen Benutzer registrieren" fuer neue Namen und
+"Vorhandenen Benutzer anmelden" fuer bereits registrierte Namen.
 Neue Namen werden in user_profiles gespeichert; ein eindeutiger Datenbankindex
 verhindert doppelte Namen auch bei gleichzeitiger Erstellung. Gross-/Kleinschreibung,
 Leerzeichen am Rand und gleichwertige Unicode-Schreibweisen zaehlen als derselbe Name.
-"Vorhandenen Namen verwenden" setzt ein bestehendes Profil ohne Passwort fort.
+Die Anmeldung setzt ein bestehendes Profil ohne Passwort fort. Ein unbekannter
+Name wird dabei nicht automatisch registriert; die Fehlermeldung verweist auf
+die Registrierung. Bei einem vergebenen Namen wird auf die Anmeldung verwiesen.
 Die Lobby fragt nicht erneut nach einem Namen.
 
 Eine signierte HTTP-only-Browsersitzung bleibt fuer 30 Tage erhalten und wird
@@ -118,9 +146,10 @@ AI_GPU_SECONDS_PER_ROUND ist trotz des historischen Namens eine optionale
 Untergrenze je Video: 0 nutzt die modellabhaengigen Kosten, ein hoeherer Wert
 erhoeht sie. AI_ROUND_LIMIT gilt nur im Mock-Modus.
 
-Die Auswahl wird regelmaessig und vor dem Erstellen aktualisiert. In der
-Raum-Lobby richtet sich die Grenze nach der tatsaechlichen Spielerzahl; der
-Host kann die Runden dort anpassen. Zwei Runden mit drei Spielern ergeben
+Die Rundenzahl wird ausschliesslich in der Raum-Lobby eingestellt; neue Raeume
+starten mit einer Runde. Die Grenze wird dort regelmaessig und bei Beitritt oder
+Verlassen aktualisiert und richtet sich nach der tatsaechlichen Spielerzahl.
+Nur der Host kann die Runden anpassen. Zwei Runden mit drei Spielern ergeben
 sechs Videos. Verlassen Spieler die Partie, entfallen ihre ausstehenden
 Erstellungen und deren Reservierungen. Bereits gestartete KI-Jobs bleiben
 bis zum Abschluss reserviert. Bei laufenden Spielen nach altem Format bleibt
@@ -199,7 +228,9 @@ frisch und autoritativ. Das UI zeigt weiterhin nur die maximale Rundenzahl.
 
 ## Speicherung
 
-Das Schema liegt in db/schema.sql und wird beim ersten Datenbankzugriff angelegt.
+Das gemeinsame Schema liegt in src/database/schema.ts und wird beim ersten
+Datenbankzugriff angelegt. Node und Cloudflare verwenden denselben Repository-Code
+fuer Runden, Stimmen, Punktestaende und Statistiken; nur die SQL-Treiber unterscheiden sich.
 Spieler behalten ihre ID bei einem Reload. Neue Statistikwerte werden anhand
 der verifizierten Konto-ID zusammengefasst: Namensaenderungen behalten die
 Punkte, gleiche Namen anderer Konten werden nicht vermischt. Alte namenbasierte
@@ -253,12 +284,13 @@ Der Browsertest prueft die automatische Cloudflare-Wiederverbindung zusaetzlich.
 mit temporaeren Tabellen auf einer direkten (ungepoolten) Verbindung und
 veraendert keine vorhandenen Spieldaten.
 
-`node --import tsx tests/startup.e2e.mts http://127.0.0.1:3000` prueft
-Ladefehler und die dynamische Rundenauswahl gegen einen Mock-Testserver.
-`node --import tsx tests/quota.e2e.mts` startet einen isolierten Testserver
+`node --import tsx tests/e2e/startup.e2e.mts http://127.0.0.1:3000` prueft
+Ladefehler, die Startseite ohne Rundenauswahl und die begrenzte Rundenauswahl
+innerhalb des Raums gegen einen Mock-Testserver.
+`node --import tsx tests/e2e/quota.e2e.mts` startet einen isolierten Testserver
 auf Port 3315 und prueft die spielerabhaengige Begrenzung mit simuliertem
 HF-Kontingent. Es werden keine echten Videos erzeugt oder Produktivdaten gespeichert.
-`node --import tsx tests/extension.e2e.mts` prueft auf Port 3316 freiwillige
+`node --import tsx tests/e2e/extension.e2e.mts` prueft auf Port 3316 freiwillige
 Zusatzrunden mit zwei Spielern, sechs simulierten Videos, gemeinsamen Punkten,
 Reload und erschoepftem Kontingent. Auch dieser Test verbraucht keine GPU-Zeit.
 `npm run test:auth` prueft einen lokalen Server auf Port 3312 mit aktivem
