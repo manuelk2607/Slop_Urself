@@ -16,11 +16,12 @@ test('favicon assets have valid browser sizes and are linked from the page', () 
     const root = path.join(__dirname, '../../public');
     const html = readFileSync(path.join(root, 'index.html'), 'utf8');
     for (const [file, size] of [['/assets/favicon-32.png', 32], ['/apple-touch-icon.png', 180]] as const) {
-        assert.ok(html.includes(`href="${file}?v=2"`));
+        assert.ok(html.includes(`href="${file}?v=3"`));
         assertPng(readFileSync(path.join(root, file)), size);
     }
     assert.deepEqual(readFileSync(path.join(root, 'apple-touch-icon.png')), readFileSync(path.join(root, 'assets/apple-touch-icon.png')));
-    assert.ok(html.includes('type="image/x-icon" href="/favicon.ico?v=2"'));
+    assert.ok(html.includes('type="image/x-icon" href="/favicon.ico?v=3"'));
+    assert.ok(html.includes('rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png?v=3"'));
     const ico = readFileSync(path.join(root, 'favicon.ico'));
     assert.equal(ico.readUInt16LE(0), 0);
     assert.equal(ico.readUInt16LE(2), 1);
@@ -50,4 +51,9 @@ test('favicon assets have valid browser sizes and are linked from the page', () 
         expectedOffset += bytes;
     }
     assert.equal(expectedOffset, ico.length);
+});
+
+test('Cloudflare must not serve the game HTML for missing icon or asset paths', () => {
+    const config = readFileSync(path.join(__dirname, '../../cloudflare/wrangler.toml'), 'utf8');
+    assert.match(config, /^not_found_handling\s*=\s*"none"\s*$/m);
 });

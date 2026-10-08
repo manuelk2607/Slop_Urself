@@ -35,11 +35,12 @@ try {
     for (const [selector, signature, allowedSizes] of [
         ['link[rel="icon"][type="image/x-icon"]', '00000100', [16, 32, 48]],
         ['link[rel="icon"][type="image/png"]', '89504e47', [32]],
-        ['link[rel="apple-touch-icon"]', '89504e47', [180]]
+        ['link[rel="apple-touch-icon"]', '89504e47', [180]],
+        ['link[rel="apple-touch-icon-precomposed"]', '89504e47', [180]]
     ] as const) {
         const href = await host.locator(selector).getAttribute('href');
         assert.ok(href);
-        assert.equal(new URL(href, base).searchParams.get('v'), '2');
+        assert.equal(new URL(href, base).searchParams.get('v'), '3');
         const response = await host.request.get(new URL(href, base).href);
         assert.equal(response.status(), 200);
         assert.match(response.headers()['content-type'], /^image\//);
@@ -61,9 +62,19 @@ try {
         assert.equal(icon.pixel[3], 255);
     }
     const defaultTouchIcon = await host.request.get(`${base}/apple-touch-icon.png`);
+    const precomposedIcon = await host.request.get(`${base}/apple-touch-icon-precomposed.png`);
     assert.equal(defaultTouchIcon.status(), 200);
+    assert.equal(precomposedIcon.status(), 200);
     assert.match(defaultTouchIcon.headers()['content-type'], /^image\/png/);
+    assert.match(precomposedIcon.headers()['content-type'], /^image\/png/);
+    assert.deepEqual(await precomposedIcon.body(), await defaultTouchIcon.body());
+    for (const file of ['/nonexistent-icon.png', '/assets/nonexistent-image.png', '/apple-touch-icon-180x180-precomposed.png']) {
+        for (const headers of [{ accept: 'image/*' }, { 'sec-fetch-mode': 'navigate' }]) {
+            assert.equal((await host.request.get(`${base}${file}`, { headers })).status(), 404, 'A missing image must never be reported as a successful HTML page.');
+        }
+    }
     console.log('PASS: favicon and Safari touch icon are served as images and decode correctly.');
+    console.log('PASS: Safari automatic precomposed icon is PNG; missing assets return 404 instead of the game HTML.');
     assert.equal(await host.locator('#screenLobby input[type="number"]').count(), 0);
     assert.equal(await host.locator('#roundLimitHint').count(), 0);
     await host.locator('#usernameInput').fill('Host');

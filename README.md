@@ -69,6 +69,11 @@ nicht mit hochgeladen. Der Link fuer Freunde lautet:
 https://slopurself.jsbk9gv78n.workers.dev. `npm run invite` zeigt denselben
 Spiellink. Der Host teilt zusaetzlich den vierstelligen Raumcode.
 
+Alle Spielansichten liegen unter `/`. Cloudflare verwendet keinen SPA-Fallback:
+fehlende Icons und andere unbekannte Dateien liefern 404 statt der Spielseite.
+Die automatischen Safari-Pfade `/apple-touch-icon.png` und
+`/apple-touch-icon-precomposed.png` liefern beide dasselbe PNG-Symbol.
+
 ## Einstieg mit Benutzername
 
 Ein Feld fuer den Benutzernamen (1 bis 15 sichtbare Zeichen) und zwei klar

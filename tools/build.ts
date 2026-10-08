@@ -16,5 +16,6 @@ async function main() {
         if (entry !== 'README.md') rmSync(`cloudflare/public/${entry}`, { recursive: true, force: true });
     }
     cpSync('public', 'cloudflare/public', { recursive: true });
+    cpSync('public/apple-touch-icon.png', 'cloudflare/public/apple-touch-icon-precomposed.png');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
