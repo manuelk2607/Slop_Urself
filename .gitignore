@@ -4,6 +4,9 @@
 dist/
 public/script.js
 public/startup.js
+public/assets/slopurself-favicon-v4.ico
+public/assets/slopurself-favicon-v4.png
+public/assets/slopurself-touch-v4.png
 node_modules/
 cloudflare/.wrangler/
 cloudflare/.dev.vars

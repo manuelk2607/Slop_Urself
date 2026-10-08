@@ -32,19 +32,26 @@ try {
     const config = await (await host.request.get(`${base}/api/config`)).json();
     assert.equal(config.mockAi, true, 'Browser regression tests require mock mode.');
     await Promise.all(pages.map(p => p.goto(base)));
-    for (const [selector, signature, allowedSizes] of [
-        ['link[rel="icon"][type="image/x-icon"]', '00000100', [16, 32, 48]],
-        ['link[rel="icon"][type="image/png"]', '89504e47', [32]],
-        ['link[rel="apple-touch-icon"]', '89504e47', [180]],
-        ['link[rel="apple-touch-icon-precomposed"]', '89504e47', [180]]
+    for (const [selector, file, canonical, signature, allowedSizes] of [
+        ['link[rel="icon"][type="image/x-icon"]', '/assets/slopurself-favicon-v4.ico', '/favicon.ico', '00000100', [16, 32, 48]],
+        ['link[rel="icon"][type="image/png"]', '/assets/slopurself-favicon-v4.png', '/assets/favicon-32.png', '89504e47', [32]],
+        ['link[rel="apple-touch-icon"]', '/assets/slopurself-touch-v4.png', '/apple-touch-icon.png', '89504e47', [180]],
+        ['link[rel="apple-touch-icon-precomposed"]', '/assets/slopurself-touch-v4.png', '/apple-touch-icon-precomposed.png', '89504e47', [180]]
     ] as const) {
         const href = await host.locator(selector).getAttribute('href');
         assert.ok(href);
-        assert.equal(new URL(href, base).searchParams.get('v'), '3');
+        assert.equal(new URL(href, base).pathname, file);
+        assert.equal(new URL(href, base).search, '');
         const response = await host.request.get(new URL(href, base).href);
         assert.equal(response.status(), 200);
         assert.match(response.headers()['content-type'], /^image\//);
         assert.equal((await response.body()).subarray(0, 4).toString('hex'), signature);
+        const head = await host.request.head(new URL(href, base).href);
+        assert.equal(head.status(), 200);
+        assert.equal(head.headers()['content-type'], response.headers()['content-type']);
+        const original = await host.request.get(new URL(canonical, base).href);
+        assert.equal(original.status(), 200);
+        assert.deepEqual(await response.body(), await original.body(), 'Versioned and automatic icon paths must return the same image.');
         const icon = await host.evaluate(async (selector) => {
             const image = new Image();
             image.src = (document.querySelector(selector) as HTMLLinkElement).href;
@@ -73,7 +80,7 @@ try {
             assert.equal((await host.request.get(`${base}${file}`, { headers })).status(), 404, 'A missing image must never be reported as a successful HTML page.');
         }
     }
-    console.log('PASS: favicon and Safari touch icon are served as images and decode correctly.');
+    console.log('PASS: distinct favicon filenames serve identical images via GET/HEAD and decode correctly.');
     console.log('PASS: Safari automatic precomposed icon is PNG; missing assets return 404 instead of the game HTML.');
     assert.equal(await host.locator('#screenLobby input[type="number"]').count(), 0);
     assert.equal(await host.locator('#roundLimitHint').count(), 0);

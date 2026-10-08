@@ -11,6 +11,11 @@ async function main() {
     }
     await build({ entryPoints: { script: 'src/client/app.ts', startup: 'src/client/startup.ts' },
         bundle: true, minify: true, platform: 'browser', format: 'iife', outdir: 'public' });
+    for (const [source, target] of [
+        ['public/favicon.ico', 'public/assets/slopurself-favicon-v4.ico'],
+        ['public/assets/favicon-32.png', 'public/assets/slopurself-favicon-v4.png'],
+        ['public/apple-touch-icon.png', 'public/assets/slopurself-touch-v4.png']
+    ]) cpSync(source, target);
     mkdirSync('cloudflare/public', { recursive: true });
     for (const entry of readdirSync('cloudflare/public')) {
         if (entry !== 'README.md') rmSync(`cloudflare/public/${entry}`, { recursive: true, force: true });

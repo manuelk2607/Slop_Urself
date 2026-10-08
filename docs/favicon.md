@@ -13,7 +13,12 @@ verwenden True-Color-RGBA statt einer indizierten Farbpalette.
 Der Build kopiert diese Assets auch nach `cloudflare/public`.
 Der Build erstellt zusaetzlich `/apple-touch-icon-precomposed.png` als Alias
 des 180-Pixel-Symbols; der Node-Server bietet denselben Pfad an.
-Die HTML-Verweise verwenden `?v=3`, damit Browser die neue Version abrufen.
+Die HTML-Verweise verwenden eigene Dateinamen statt `?v=3`:
+`/assets/slopurself-favicon-v4.ico`, `/assets/slopurself-favicon-v4.png` und
+`/assets/slopurself-touch-v4.png`. Der Build erstellt diese identischen Kopien
+fuer Node und Cloudflare aus den obigen Quelldateien. Es gibt keine zweite
+manuell gepflegte Version der Bilder. Beide Apple-Link-Typen zeigen auf dasselbe
+versionierte Touch-Icon; die automatischen Standardpfade bleiben erhalten.
 Die Browserpruefung decodiert ICO und PNG und kontrolliert die Pixel des Symbols.
 Das bestaetigt die Bilddecodierung in WebKit, aber nicht automatisch die Anzeige
 in der Tab-Leiste der installierten Safari-Version.
@@ -32,6 +37,22 @@ die Bildpixel und fehlende Dateien sowohl als Bild- als auch Navigationsanfrage.
 Die Routing-Korrektur behebt einen nachgewiesenen Serverfehler; ob dieser allein
 die fehlende Anzeige in einer konkreten Safari-Installation verursacht hat,
 muss separat am Browser bestaetigt werden.
+
+## Safari-Diagnose
+
+Die deployten Bilder liefern auch mit Safari-User-Agent, per HEAD und mit
+`Cache-Control: no-cache` gueltige Bildantworten. Der Nutzer hat die korrekte
+Darstellung der deployten ICO-Datei beim direkten Aufruf in Safari bestaetigt.
+Trotzdem wurde in der Safari-Tab-Leiste weiterhin ein W gemeldet. Die falsche
+HTML-Antwort erklaert diesen verbleibenden Fehler daher nicht vollstaendig.
+
+Die echten neuen Dateipfade sind ein gezielter Kompatibilitaetsversuch, keine
+Bestaetigung einer Cache-Ursache. Safari hat einen separat gemeldeten Fehler
+bei Favicon-Aktualisierungen:
+https://bugs.webkit.org/show_bug.cgi?id=266426. Browserdaten werden weder
+geloescht noch veraendert. Tests pruefen GET, HEAD, Bilddecodierung und gleiche
+Dateiinhalte fuer versionierte und automatische Pfade. Die native Tab-Anzeige
+muss weiterhin separat bestaetigt werden.
 
 ## Generierungsprompt
 
