@@ -52,6 +52,7 @@ export interface VideoStats {
     videoUrl: string;
     roundPoints: number;
     createdAt: string;
+    evictedAt: string | null;
 }
 export interface RoomStats {
     code: string;
@@ -64,10 +65,10 @@ export interface RoomStats {
 }
 export interface VideoCreator { id: string; name: string }
 export interface SavedVideo extends VideoStats { deleteAfter: string | null }
-export interface GameStats { overview: StatsOverview; players: PlayerStats[]; recentVideos: VideoStats[]; videoCreators: VideoCreator[]; rooms: RoomStats[] }
+export interface GameStats { overview: StatsOverview; players: PlayerStats[]; recentVideos: VideoStats[]; videoCreators: VideoCreator[]; rooms: RoomStats[]; videoCursor: string | null; roomCursor: string | null }
 export const emptyStats = (): GameStats => ({
     overview: { gamesPlayed: 0, completedGames: 0, roundsPlayed: 0, votesCast: 0, videosArchived: 0, highestScore: 0 },
-    players: [], recentVideos: [], videoCreators: [], rooms: []
+    players: [], recentVideos: [], videoCreators: [], rooms: [], videoCursor: null, roomCursor: null
 });
 
 export interface SqlStatement { text: string; values?: unknown[] }

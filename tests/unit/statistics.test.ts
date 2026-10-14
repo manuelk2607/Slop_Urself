@@ -1,8 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { historyResponse, deleteStoredHistory, purgeDeletedVideos } from '../../src/server/statistics';
+import { historyResponse, historyListing, deleteStoredHistory, purgeDeletedVideos } from '../../src/server/statistics';
 import { deleteArchivedVideo } from '../../src/storage/archive';
 import type { GameRepository } from '../../src/database/repository';
+
+test('history pages enforce authentication, GET and validated cursors before querying the database', async () => {
+    let calls = 0;
+    const database = { videoPage: async () => { calls++; return { items: [], nextCursor: null }; } } as unknown as GameRepository;
+    const request = (suffix = '', method = 'GET') => new Request(`https://game.test/api/stats/videos${suffix}`, { method });
+    const config = { AUTH_MODE: 'disabled', AI_PROVIDER: 'mock' };
+    assert.equal((await historyListing(request(), {}, database)).status, 401);
+    assert.equal((await historyListing(request('', 'POST'), config, database)).status, 405);
+    assert.equal((await historyListing(request('?cursor=bad!'), config, database)).status, 400);
+    assert.equal((await historyListing(request(), config, null)).status, 503);
+    assert.equal(calls, 0);
+    const response = await historyListing(request(), config, database);
+    assert.equal(response.status, 200); assert.equal(calls, 1);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+});
 
 test('history deletion requires a same-origin signed-in request and a valid resource', async () => {
     let calls = 0;

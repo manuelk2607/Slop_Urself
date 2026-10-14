@@ -17,7 +17,7 @@ export function httpRateRule(path: string, method: string): RateRule | undefined
     if (path === '/api/session' && method === 'POST') return { limit: 60, windowMs: 60_000 };
     if (path === '/api/admin/session' && method === 'POST') return { limit: 5, windowMs: 60_000 };
     if (path.startsWith('/api/admin/')) return { limit: 60, windowMs: 60_000 };
-    if (path === '/api/config' || path === '/api/stats' || path.startsWith('/api/stats/rooms/') || path.startsWith('/api/stats/videos/')) return { limit: 120, windowMs: 60_000 };
+    if (path === '/api/config' || path === '/api/stats' || path.startsWith('/api/stats/')) return { limit: 120, windowMs: 60_000 };
     if (path.startsWith('/ws/')) return { limit: 60, windowMs: 60_000 };
 }
 

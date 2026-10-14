@@ -265,6 +265,9 @@ test('archive reads real MP4 bytes and serves byte ranges through signed private
         assert.equal(response.headers.get('content-range'), 'bytes 0-3/16');
         assert.equal(requests.at(-1)?.headers.get('range'), 'bytes=0-3');
         assert.ok(requests.find(request => request.method === 'PUT')?.headers.get('authorization')?.startsWith('AWS4-HMAC-SHA256'));
+        assert.equal(response.headers.get('content-disposition'), null);
+        const download = await serveVideo(new Request('https://game.test/video?download=1'), url.slice('/api/videos/'.length), config);
+        assert.match(download.headers.get('content-disposition')!, /^attachment; filename="slopurself-\d{13}-[a-z0-9-]+\.mp4"$/);
     } finally { globalThis.fetch = original; }
 });
 test('video delivery distinguishes an unconfigured archive, removed file and storage outage', async () => {

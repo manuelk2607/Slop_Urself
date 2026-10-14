@@ -1,6 +1,7 @@
 import { DATABASE_SCHEMA } from './schema';
 import { OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL, VIDEO_CREATORS_SQL, ROOMS_SQL } from './statistics';
 import { COPY_VIDEO_HISTORY_SQL, VIDEO_PROJECTION } from './video-history';
+import { historyPage, VIDEO_PAGE_SIZE, ROOM_PAGE_SIZE, type HistoryCursor } from './pagination';
 import type { DatabaseDriver, SqlStatement, PersistPlayerInput, PersistRoundInput, FinalStandingInput, GameStats, StatsOverview, PlayerStats, VideoStats, RoomStats, VideoCreator, SavedVideo } from './types';
 
 const scoresSql = `insert into players (room_code, socket_id, name, score, is_host, account_id)
@@ -94,7 +95,7 @@ export class GameRepository {
             statement(`${COPY_VIDEO_HISTORY_SQL} and r.room_code = $1 and r.round_number = $2
                 on conflict (id) do update set prompt = excluded.prompt, video_url = excluded.video_url,
                     round_points = excluded.round_points, creator_id = excluded.creator_id, creator_name = excluded.creator_name
-                where video_history.delete_after is null`, [input.roomCode, input.roundNumber])
+                where video_history.delete_after is null and video_history.evicted_at is null`, [input.roomCode, input.roundNumber])
         ];
         if (input.standings) {
             const winner = input.standings[0];
@@ -150,12 +151,25 @@ export class GameRepository {
     async deleteRoom(code: string) {
         await this.query('delete from rooms where code = $1', [code]);
     }
+    async reconcileArchive(availableUrls: string[]) {
+        // Storage is authoritative. Keep metadata and scores, but never advertise missing files as playable.
+        await this.query(`update video_history set evicted_at = clock_timestamp()
+            where video_url like '/api/videos/videos/%' and evicted_at is null
+              and not (video_url = any($1::text[]))`, [availableUrls]);
+    }
+    async videoPage(creatorId?: string, cursor?: HistoryCursor) {
+        return historyPage(await this.query<VideoStats>(VIDEOS_SQL, [creatorId || null, cursor?.at ?? null, cursor?.id ?? null]), VIDEO_PAGE_SIZE);
+    }
+    async roomPage(cursor?: HistoryCursor) {
+        return historyPage(await this.query<RoomStats>(ROOMS_SQL, [cursor?.at ?? null, cursor?.id ?? null]), ROOM_PAGE_SIZE);
+    }
     async getStats(creatorId?: string): Promise<GameStats> {
         const overview = await this.query<StatsOverview>(OVERVIEW_SQL);
         const players = await this.query<PlayerStats>(PLAYERS_SQL);
-        const recentVideos = await this.query<VideoStats>(VIDEOS_SQL, [creatorId || null]);
+        const videos = await this.videoPage(creatorId);
         const videoCreators = await this.query<VideoCreator>(VIDEO_CREATORS_SQL);
-        const rooms = await this.query<RoomStats>(ROOMS_SQL);
-        return { overview: overview[0], players, recentVideos, videoCreators, rooms };
+        const rooms = await this.roomPage();
+        return { overview: overview[0], players, recentVideos: videos.items, videoCreators, rooms: rooms.items,
+            videoCursor: videos.nextCursor, roomCursor: rooms.nextCursor };
     }
 }

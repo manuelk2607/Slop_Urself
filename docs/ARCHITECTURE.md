@@ -30,6 +30,9 @@ kleine SQL-Treiberschnittstelle.
 gespielter Videos. Raum-Fremdschlüssel betreffen diese Daten nicht. Unveränderliche
 Video-IDs bleiben auch nach Raumlöschungen und wiederverwendeten Raumcodes gültig.
 Die Löschfrist liegt in Postgres; Löschmarker verhindern versehentliches Wiederanlegen.
+`evicted_at` markiert automatisch entfernte Dateien, ohne Metadaten und Spielpunkte
+zu löschen. `pagination.ts` kodiert validierte Cursor; Datum plus unveränderliche
+Video-ID bzw. Raumcode bilden stabile Keysets mit einer Vorschauzeile pro Seite.
 
 `node.ts` verwendet den bestehenden pg-Verbindungspool. `neon.ts` verwendet
 Neons HTTP-Treiber für Cloudflare. Beide liefern denselben Repository-Code
@@ -54,6 +57,9 @@ Servern. Der globale Service serialisiert Archivierung, reversible Video-Löschu
 und endgültige Dateibereinigung. Sein Alarm verarbeitet abgelaufene Löschfristen
 unabhängig von offenen Tabs. Node verwendet dafür einen Timer und nimmt ausstehende
 Bereinigungen nach einem Neustart wieder auf.
+`src/server/archive.ts` gleicht vollständige S3-Bestandslisten mit der Datenbank ab.
+Bestandsprüfung, Archivierung und Löschung laufen innerhalb derselben Archiv-Queue;
+Speicherfehler dürfen niemals als leerer Bestand interpretiert werden.
 
 Die Transport- und Lebenszykluslogik bleibt plattformspezifisch: Node und
 Durable Objects haben unterschiedliche Anforderungen an Verbindungen,
@@ -86,3 +92,8 @@ aufzurufender Migrationstest für einen isolierten Neon-Testbranch, niemals für
 den Produktivhost. Gemeinsame Testhilfen liegen in `tests/support`.
 `tests/run-ci.mts` startet isolierte Mock-Server für Chromium und WebKit
 und beendet sie danach wieder. Diese Tests verbrauchen keine GPU-Zeit.
+`tests/support/cloudflare.ts` startet zusätzlich den echten Worker mit seinen
+SQLite-Durable-Objects in workerd und blockiert ausgehende Netzwerkzugriffe.
+Die Browser-Suiten laufen dort ebenfalls. `cloudflare-runtime.mts` ersetzt nur
+die externen Neon-HTTP-/S3-Verträge und prüft Routing, Ranges, Downloads und
+den persistenten Löschalarm nach Object-Eviction ohne offene Browser.

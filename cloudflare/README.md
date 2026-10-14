@@ -108,6 +108,14 @@ Storage-Ausfälle werden erneut versucht. Punkte und Bewertungen bleiben bei ein
 Video-Löschung bestehen. Fehlgeschlagene Einträge bleiben ausgewählt.
 Die automatische Archivbereinigung überspringt Dateien mit noch laufender
 Rückgängig-Frist. Neue Uploads und Video-Löschungen werden dafür global serialisiert.
+Dateien, die das Speicherlimit automatisch entfernt hat, bleiben mit Ersteller,
+Prompt und Punkten als nicht mehr verfügbare Clips sichtbar. Der Speicherabgleich
+beim Statistikaufruf korrigiert auch ältere fehlende Dateien; Fehler oder
+unvollständige Bestandslisten ändern keine Verfügbarkeitsmarker.
+
+„Mehr Videos laden“ und „Mehr Räume laden“ erschließen die gesamte Historie in
+begrenzten Seiten, ohne laufende Videos oder Auswahlfelder neu anzulegen.
+Der Download-Pfeil lädt verfügbare Clips über die angemeldete App als MP4 herunter.
 
 Videos und ihre Metadaten liegen in `video_history`, ohne Fremdschlüssel auf Räume,
 Runden oder Benutzer. Vorhandene Videos werden beim ersten Schema-Update ohne
@@ -141,3 +149,6 @@ KI-Provider, Dauer und technische Fehler ohne Bilder, Prompts oder Tokens.
 
 CI: `npm run test:ci`; GitHub Actions prüft jeden Push und Pull Request mit
 Mock-KI, ohne Produktivdaten oder echte GPU-Aufträge.
+Die Browserabläufe laufen auch gegen workerd mit echten SQLite-Durable-Objects.
+Ein isolierter Integrationstest prüft Dateiauslieferung und die verzögerte
+Löschung nach Object-Eviction. Nur die externen Neon-/S3-Antworten sind dort ersetzt.

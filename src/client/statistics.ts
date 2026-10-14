@@ -1,6 +1,7 @@
 import type { PlayerStats, StatsOverview, VideoStats, RoomStats, VideoCreator } from '../database/types';
 import { videoPlayback } from './video';
 import { historySelection, type HistoryKind } from './history-selection';
+import { createElement, Download, VideoOff } from 'lucide';
 
 interface StatisticsElements {
     statsOverview: HTMLDivElement;
@@ -33,7 +34,7 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
             { label: 'Erstellte Videos', value: overview.roundsPlayed },
             { label: 'Bewertungen', value: overview.votesCast },
             { label: 'Videos', value: overview.videosArchived },
-            { label: 'Höchstpunktzahl', value: overview.highestScore }
+            { label: 'Höchste Punktzahl', value: overview.highestScore }
         ];
 
         items.forEach(item => {
@@ -101,10 +102,10 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
         });
     }
 
-    function renderVideoStats(videos: VideoStats[], videoStorageMode: string) {
-        videoStatsList.innerHTML = '';
+    function renderVideoStats(videos: VideoStats[], videoStorageMode: string, append = false) {
+        if (!append) videoStatsList.innerHTML = '';
 
-        if (videos.length === 0) {
+        if (videos.length === 0 && !append) {
             videoStatsNotice.innerText = playerFilter.value ? 'Keine Videos für diesen Spieler gespeichert.' : 'Noch keine Videos gespeichert.';
             videoSelection.update();
             return;
@@ -129,11 +130,19 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
             retry.type = 'button';
             retry.className = 'btn-muted';
             retry.textContent = 'Video erneut laden';
-            const playback = videoPlayback({ video: videoElement, notice, retry });
-            playback.load(video.videoUrl);
             const media = document.createElement('div');
             media.className = 'video-stat-media';
-            media.append(videoElement, notice, retry);
+            if (video.evictedAt) {
+                media.classList.add('video-unavailable');
+                const status = document.createElement('span');
+                status.textContent = 'Automatisch entfernt';
+                media.title = 'Die Videodatei wurde bei der Speicherbereinigung entfernt.';
+                media.append(createElement(VideoOff, { 'aria-hidden': 'true' }), status);
+            } else {
+                const playback = videoPlayback({ video: videoElement, notice, retry });
+                playback.load(video.videoUrl);
+                media.append(videoElement, notice, retry);
+            }
 
             const meta = document.createElement('div');
             meta.className = 'video-stat-meta';
@@ -149,14 +158,24 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
 
             const selection = videoSelection.checkbox(videoUrl(video), `Video ${video.roundNumber} von ${video.creatorName} in Raum ${video.roomCode} auswählen`);
             meta.append(title, prompt, points, selection);
+            if (!video.evictedAt && /^(\/api\/videos\/videos\/\d{13}-[a-z0-9-]+\.mp4|\/assets\/[a-z0-9-]+\.mp4)$/.test(video.videoUrl)) {
+                const download = document.createElement('a');
+                download.className = 'video-download';
+                download.href = video.videoUrl + (video.videoUrl.startsWith('/api/videos/') ? '?download=1' : '');
+                download.download = `slopurself-${video.roomCode}-${video.roundNumber}.mp4`;
+                download.title = 'Video herunterladen';
+                download.setAttribute('aria-label', `Video ${video.roundNumber} von ${video.creatorName} herunterladen`);
+                download.append(createElement(Download, { 'aria-hidden': 'true', width: 20, height: 20 }));
+                meta.append(download);
+            }
             li.append(media, meta);
             videoStatsList.appendChild(li);
         });
         videoSelection.update();
     }
-    function renderRooms(rooms: RoomStats[]) {
-        roomStatsList.replaceChildren();
-        roomStatsNotice.textContent = rooms.length ? '' : 'Noch keine gespeicherten Räume vorhanden.';
+    function renderRooms(rooms: RoomStats[], append = false) {
+        if (!append) roomStatsList.replaceChildren();
+        if (!append) roomStatsNotice.textContent = rooms.length ? '' : 'Noch keine gespeicherten Räume vorhanden.';
         rooms.forEach(room => {
             const li = document.createElement('li');
             li.className = 'score-item room-stat-item';

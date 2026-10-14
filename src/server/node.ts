@@ -6,8 +6,9 @@ import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
 import { accountsResponse } from './accounts';
 import { QuotaBudget, QuotaConfig, playerCount } from '../ai/quota';
-import { ArchiveConfig, archiveVideo, serveVideo, listArchive, archiveEnabled, archiveLimit, deleteArchivedVideo } from '../storage/archive';
-import { historyResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
+import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo } from '../storage/archive';
+import { archiveStatus } from './archive';
+import { historyResponse, historyListing, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
 import { Server, Socket } from 'socket.io';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
 import { takeRateLimit, rateKey, httpRateRule, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
@@ -62,7 +63,10 @@ function scheduleVideoCleanup(time: number) {
 if (isDatabaseEnabled()) scheduleVideoCleanup(Date.now() + 1000);
 function withBudget<T>(action: () => Promise<T>): Promise<T> { const result = budgetWork.then(action); budgetWork = result.catch(() => {}); return result; }
 function archive(url: string) {
-    const result = archiveWork.then(async () => archiveVideo(url, config, await getDatabase()?.protectedVideoUrls() || []));
+    const result = archiveWork.then(async () => {
+        const database = getDatabase();
+        return archiveVideo(url, config, await database?.protectedVideoUrls() || [], database ? urls => database.reconcileArchive(urls) : undefined);
+    });
     archiveWork = result.catch(() => {}); return result;
 }
 app.use(async (req, res, next) => {
@@ -90,7 +94,8 @@ app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req,
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/videos', async (req, res) => {
     try { await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
-    await webResponse(await serveVideo(webRequest(req), req.originalUrl.split('/api/videos/')[1], config), res);
+    const request = webRequest(req);
+    await webResponse(await serveVideo(request, new URL(request.url).pathname.slice('/api/videos/'.length), config), res);
 });
 
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'index.html')));
@@ -114,12 +119,20 @@ app.get('/api/config', async (req, res) => {
 });
 app.get('/api/stats', async (req, res) => {
     try { await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
-    try { const objects = await listArchive(config).catch(() => null); res.json({ databaseEnabled: isDatabaseEnabled(), ...await getStats(typeof req.query.player === 'string' ? req.query.player.slice(0, 100) : undefined), videoStorageMode: archiveEnabled(config) ? 'archive' : 'url', archive: objects ? { usedBytes: objects.reduce((sum, object) => sum + object.size, 0), maxBytes: archiveLimit(config), videoCount: objects.length } : null }); }
+    try {
+        const status = archiveWork.then(() => archiveStatus(config, getDatabase()));
+        archiveWork = status.catch(() => {});
+        const archive = await status.catch(() => null);
+        res.json({ databaseEnabled: isDatabaseEnabled(), ...await getStats(typeof req.query.player === 'string' ? req.query.player.slice(0, 100) : undefined),
+            videoStorageMode: archiveEnabled(config) ? 'archive' : 'url', archive });
+    }
     catch (error) {
         console.error('[DB] Statistics unavailable', error instanceof Error ? error.message : 'Database error');
         res.status(503).json({ error: 'Statistiken konnten nicht geladen werden.' });
     }
 });
+
+app.all(['/api/stats/videos', '/api/stats/rooms'], async (req, res) => webResponse(await historyListing(webRequest(req), config, getDatabase()), res));
 
 app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) => webResponse(await historyResponse(webRequest(req), config, async command => {
     const database = getDatabase();

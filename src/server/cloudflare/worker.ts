@@ -7,7 +7,7 @@ import { serveVideo, archiveEnabled } from '../../storage/archive';
 import { httpRateRule, rateKey, RATE_MESSAGE } from '../../security/rate-limit';
 import { sanitizeRoomId } from '../../game/rules';
 import { service, json } from './runtime';
-import { historyResponse, HistoryError } from '../statistics';
+import { historyResponse, historyListing, HistoryError } from '../statistics';
 import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
 import type { Env } from './types';
@@ -48,18 +48,21 @@ export default {
         if (url.pathname === '/api/stats') {
             try { await requestAccount(request, auth); } catch (error) { return json({ error: authFailureStatus(error) === 503 ? 'Deine Browsersitzung ist gerade nicht erreichbar.' : 'Bitte melde dich an.' }, { status: authFailureStatus(error) }); }
             try {
+                const archive = await service(env, '/archive/status').catch(() => null);
                 const stats = await getDatabase(env.DATABASE_URL)?.getStats(url.searchParams.get('player')?.slice(0, 100)) ?? emptyStats();
                 return json({
                     databaseEnabled: Boolean(env.DATABASE_URL),
                     ...stats,
                     videoStorageMode: archiveEnabled(env) ? 'archive' : 'url',
-                    archive: await service(env, '/archive/status').catch(() => null)
+                    archive
                 });
             } catch (error) {
                 console.error('[DB] Statistics unavailable', error instanceof Error ? error.message : 'Database error');
                 return json({ error: 'Statistiken konnten nicht geladen werden.' }, { status: 503 });
             }
         }
+
+        if (url.pathname === '/api/stats/videos' || url.pathname === '/api/stats/rooms') return historyListing(request, auth, getDatabase(env.DATABASE_URL));
 
         if (url.pathname.startsWith('/api/stats/rooms/') || url.pathname.startsWith('/api/stats/videos/')) return historyResponse(request, auth, async command => {
             const room = env.ROOMS.get(env.ROOMS.idFromName(command.code));

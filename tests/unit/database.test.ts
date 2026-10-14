@@ -50,7 +50,7 @@ test('shared statistics and score batches use the same bounded queries on both r
     const f = fixture();
     assert.deepEqual(await f.repository.getStats(), emptyStats());
     assert.deepEqual(f.queries.map(q => q.text), [OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL, VIDEO_CREATORS_SQL, ROOMS_SQL]);
-    assert.match(PLAYERS_SQL, /limit 50/); assert.match(VIDEOS_SQL, /limit 12/);
+    assert.match(PLAYERS_SQL, /limit 50/); assert.match(VIDEOS_SQL, /limit 13/);
     await f.repository.saveScores('TEST', [{ id: 'a', accountId: 'account', name: 'Friend', score: 5 }, { id: 'b', name: 'Other', score: 3 }], 'a');
     assert.equal(f.queries.length, 6);
     assert.deepEqual(JSON.parse(f.queries[5].values![1] as string), [
@@ -64,7 +64,7 @@ test('video filtering uses stable account identities and parameterized creator I
     const id = "account'; delete from rooms; --";
     await f.repository.getStats(id);
     const videoQuery = f.queries.find(query => query.text === VIDEOS_SQL)!;
-    assert.deepEqual(videoQuery.values, [id]);
+    assert.deepEqual(videoQuery.values, [id, null, null]);
     assert.equal(videoQuery.text.includes(id), false);
     assert.match(PLAYERS_SQL, /pt.player_key as id/);
     assert.match(VIDEOS_SQL, /as "creatorId"/);

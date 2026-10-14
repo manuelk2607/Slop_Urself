@@ -1,5 +1,27 @@
 # Technische Prüfung vom 6./7. Oktober 2026
 
+## Ergänzung vom 14. Oktober 2026
+
+- Archiv und Statistik werden anhand vollständiger Speicherlisten abgeglichen.
+  Automatisch entfernte Clips behalten ihre Metadaten, werden jedoch nicht mehr
+  als verfügbare Dateien gezählt. Ungültige Listen und Storage-Ausfälle verändern
+  keine Verfügbarkeitsmarker. Nachholende Rundenwrites reaktivieren keine alten Dateien.
+- Videos und Räume sind vollständig über validierte Keyset-Seiten erreichbar.
+  Laufende Wiedergabe und Mehrfachauswahl bleiben beim Nachladen erhalten.
+  Filterwechsel verwerfen veraltete Antworten; fehlgeschlagene Seiten bleiben erneut ladbar.
+- Verfügbare Archivvideos besitzen einen MP4-Download mit authentifizierter
+  Auslieferung; normale Wiedergabe und Byte-Ranges bleiben unverändert.
+- CI startet zusätzlich workerd mit den echten Worker-/Durable-Object-Klassen.
+  Ein Runtime-Test prüft den persistenten 30-Sekunden-Löschalarm nach Object-Eviction.
+  Externe Neon-/S3-Verträge werden dort isoliert ersetzt, echte SQL-Abfragen
+  separat mit temporären Postgres-Tabellen geprüft. Es werden keine produktiven
+  Spielzeilen verändert und keine GPU-Aufträge gestartet.
+- Verifiziert: TypeScript-Build, 89 Unit-Tests, vollständige CI-Suiten in Chromium
+  und WebKit gegen Node und Cloudflare sowie echte Postgres-Integrationstests mit
+  temporären Tabellen. Desktop- und Mobilansichten visuell geprüft.
+
+Die folgenden Abschnitte dokumentieren den älteren Prüfstand vom 6./7. Oktober.
+
 ## Behobene Fehler
 
 - Spielablauf: Punktvergabe genau einmal, stabile Spieler-IDs nach Reload,

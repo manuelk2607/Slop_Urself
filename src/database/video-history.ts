@@ -9,7 +9,8 @@ export const VIDEO_HISTORY_SCHEMA = `create table if not exists video_history (
     video_url text not null,
     round_points integer not null,
     created_at timestamptz not null,
-    delete_after timestamptz
+    delete_after timestamptz,
+    evicted_at timestamptz
 )`;
 
 export const COPY_VIDEO_HISTORY_SQL = `insert into video_history
@@ -22,5 +23,7 @@ export const COPY_VIDEO_HISTORY_SQL = `insert into video_history
 
 export const VIDEO_PROJECTION = `h.id::text as id, h.room_code as "roomCode", h.round_number as "roundNumber",
     h.creator_id as "creatorId", h.creator_name as "creatorName", h.prompt,
-    h.video_url as "videoUrl", h.round_points as "roundPoints", h.created_at::text as "createdAt",
+    h.video_url as "videoUrl", h.round_points as "roundPoints",
+    to_char(h.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",
+    h.evicted_at::text as "evictedAt",
     not exists (select 1 from rounds r where r.id = h.id) as "roomDeleted"`;

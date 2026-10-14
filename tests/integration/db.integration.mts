@@ -6,6 +6,8 @@ import { deleteStoredHistory, purgeDeletedVideos } from '../../src/server/statis
 import { sqlProfiles } from '../../src/auth/profiles';
 import { profileAuthConfig, sessionResponse, verifyAccountToken } from '../../src/auth/session';
 import { DATABASE_SCHEMA } from '../../src/database/schema';
+import { COPY_VIDEO_HISTORY_SQL } from '../../src/database/video-history';
+import { historyCursor } from '../../src/database/pagination';
 
 dotenv.config({ path: '.env.local', quiet: true });
 assert.ok(process.env.DATABASE_URL, 'DATABASE_URL is required for the opt-in database test.');
@@ -131,6 +133,42 @@ try {
         assert.notEqual(replacement.id, retired.id);
         await assert.rejects(verifyAccountToken(token, auth), /gelöscht/);
         assert.equal(await profiles.remove('nonexistent'), undefined);
+        await client.query(`insert into rooms (code, host_socket_id, max_rounds, status, started_at, created_at)
+            select 'P' || lpad(i::text, 3, '0'), 'pager', 1, 'GAME_OVER', now(), '2026-10-14T12:00:00.123456Z' from generate_series(1, 55) i`);
+        await client.query(`insert into players (room_code, socket_id, name, account_id, score)
+            select code, 'pager', 'Pager', 'page-friend', 5 from rooms where code like 'P%'`);
+        await client.query(`insert into rounds (room_code, round_number, creator_socket_id, prompt, video_url, round_points, created_at)
+            select 'P' || lpad(i::text, 3, '0'), 1, 'pager', 'Keep this prompt', '/api/videos/videos/1234567890123-page-' || i || '.mp4', 5,
+                '2026-10-14T12:00:00.123456Z' from generate_series(1, 31) i`);
+        await client.query(`${COPY_VIDEO_HISTORY_SQL} on conflict (id) do nothing`);
+        const repository = getDatabase()!;
+        const first = await repository.getStats('page-friend');
+        assert.equal(first.recentVideos.length, 12); assert.ok(first.videoCursor); assert.ok(first.roomCursor);
+        const allVideos = [...first.recentVideos]; let cursor = first.videoCursor;
+        while (cursor) { const page = await repository.videoPage('page-friend', historyCursor(cursor, 'videos')); allVideos.push(...page.items); cursor = page.nextCursor; }
+        assert.equal(allVideos.length, 31); assert.equal(new Set(allVideos.map(video => video.id)).size, 31);
+        const allRooms = [...first.rooms]; cursor = first.roomCursor;
+        while (cursor) { const page = await repository.roomPage(historyCursor(cursor, 'rooms')); allRooms.push(...page.items); cursor = page.nextCursor; }
+        assert.equal(allRooms.length, (await client.query('select count(*)::int as n from rooms')).rows[0].n);
+        assert.equal(new Set(allRooms.map(room => room.code)).size, allRooms.length);
+        const removed = first.recentVideos[0], overviewBefore = first.overview.videosArchived;
+        const existingUrls = (await client.query("select video_url from video_history where video_url <> ''")).rows.map(row => row.video_url as string);
+        await repository.reconcileArchive(existingUrls.filter(url => url !== removed.videoUrl));
+        const afterEviction = await repository.getStats('page-friend');
+        assert.equal(afterEviction.overview.videosArchived, overviewBefore - 1);
+        assert.ok(afterEviction.recentVideos.find(video => video.id === removed.id)?.evictedAt);
+        assert.equal(afterEviction.recentVideos[0].prompt, 'Keep this prompt');
+        assert.equal(afterEviction.players.find(player => player.id === 'page-friend')?.totalScore, first.players.find(player => player.id === 'page-friend')?.totalScore);
+        assert.equal(afterEviction.rooms.find(room => room.code === removed.roomCode)?.videoCount, 0);
+        await repository.saveRound({ roomCode: removed.roomCode, roundNumber: 1, creatorSocketId: 'pager', prompt: 'Delayed write', videoUrl: removed.videoUrl, roundPoints: 5, votes: [] });
+        assert.ok((await repository.savedVideo(removed.id))?.evictedAt, 'A delayed round write must not revive an evicted file.');
+        assert.equal((await repository.savedVideo(removed.id))?.prompt, 'Keep this prompt');
+        // Exercise the additive migration against a legacy table as well as a fresh schema.
+        const historyCount = (await client.query('select count(*)::int as n from video_history')).rows[0].n;
+        await client.query('alter table video_history drop column evicted_at');
+        await client.query(DATABASE_SCHEMA.find(sql => sql.startsWith('alter table video_history add column'))!);
+        assert.equal((await client.query('select count(*)::int as n from video_history')).rows[0].n, historyCount);
+        console.log('PASS: keyset history pagination across timestamp ties, creator filters, archive reconciliation preserving points/prompts and additive legacy schema migration.');
         console.log('PASS: PostgreSQL transactions, idempotent round saves, final standings, statistics and rollback; no production rows changed.');
     } finally {
         Pool.prototype.query = originals.query;

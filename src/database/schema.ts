@@ -57,6 +57,7 @@ export const DATABASE_SCHEMA = [
     'alter table players add column if not exists account_id text',
     'create index if not exists players_account_id_idx on players(account_id)',
     VIDEO_HISTORY_SCHEMA,
+    'alter table video_history add column if not exists evicted_at timestamptz',
     'create index if not exists video_history_creator_idx on video_history(creator_id, created_at desc)',
     'create index if not exists video_history_deletion_idx on video_history(delete_after) where delete_after is not null',
     `${COPY_VIDEO_HISTORY_SQL} on conflict (id) do nothing`

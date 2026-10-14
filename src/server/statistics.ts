@@ -1,6 +1,7 @@
 import { requestAccount, authFailureStatus, type AuthConfig } from '../auth/session';
 import type { GameRepository } from '../database/repository';
 import type { SavedVideo } from '../database/types';
+import { historyCursor } from '../database/pagination';
 
 export interface HistoryDeletion { code: string; roundNumber?: number; videoId?: string; restore?: boolean }
 export const VIDEO_UNDO_SECONDS = 30;
@@ -11,6 +12,18 @@ export class HistoryError extends Error {
 export const historyJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
     status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
 });
+
+export async function historyListing(request: Request, config: AuthConfig, database: GameRepository | null) {
+    if (request.method !== 'GET') return historyJson({ error: 'Diese Aktion ist nicht verfügbar.' }, 405);
+    try { await requestAccount(request, config); } catch (error) { return historyJson({ error: 'Bitte melde dich erneut an.' }, authFailureStatus(error)); }
+    const url = new URL(request.url), kind = url.pathname === '/api/stats/videos' ? 'videos' : 'rooms';
+    let cursor;
+    try { cursor = historyCursor(url.searchParams.get('cursor'), kind); }
+    catch (error) { return historyJson({ error: (error as Error).message }, 400); }
+    if (!database) return historyJson({ error: 'Die Statistik-Datenbank ist nicht eingerichtet.' }, 503);
+    try { return historyJson(kind === 'videos' ? await database.videoPage(url.searchParams.get('player')?.slice(0, 100), cursor) : await database.roomPage(cursor)); }
+    catch { return historyJson({ error: 'Die Historie konnte nicht geladen werden.' }, 503); }
+}
 
 export async function historyResponse(request: Request, config: AuthConfig,
     remove: (command: HistoryDeletion) => Promise<HistoryResult | void>,

@@ -258,18 +258,24 @@ archiviert und über die angemeldete App gestreamt (einschließlich Byte-Ranges)
 VIDEO_ARCHIVE_MB=512 begrenzt das Archiv; bevor es voll wird, werden die ältesten
 Videos gelöscht. Punkte und Runden bleiben dabei in Postgres erhalten.
 Ein Video darf höchstens 15 MB groß sein; das Archivlimit ist auf 1 GB gedeckelt.
-Die Statistik zeigt Archivgröße und Videohistorie.
+Die Statistik zeigt Archivgröße und Videohistorie. Automatisch entfernte Dateien
+werden als solche markiert und nicht mehr als verfügbare Videos gezählt.
+Ein vollständiger, erfolgreicher Speicherabgleich repariert auch ältere fehlende
+Dateien. Bei einem Speicherfehler wird kein leerer Bestand angenommen.
 Ein Archiv-Ausfall wird als Fehler gemeldet; ein temporärer HF-Link wird nicht
 als erfolgreich vorbereitetes Spielvideo freigegeben.
 Bereits abgelaufene alte HF-Links können nicht nachträglich gerettet werden.
 Originalbilder werden nicht in Neon gespeichert.
 
 In der Video-Historie filtert "Erstellt von" nach der stabilen Spieler-ID.
-Ein Klick auf einen Spielernamen wählt denselben Filter. "Video löschen"
-entfernt die private Archivdatei und ihren Video-Link; Punkte, Runden und
-Bewertungen bleiben erhalten. "Raum löschen" entfernt auch alle Runden,
-Bewertungen und Punkte der Partie per Datenbank-Kaskade. Benutzerkonten bleiben
-erhalten. Beide Aktionen benötigen eine Bestätigung und eine angemeldete
+Ein Klick auf einen Spielernamen wählt denselben Filter. Videos und Räume lassen
+sich seitenweise nachladen; laufende Videos und die Mehrfachauswahl bleiben dabei
+erhalten. Der Download-Pfeil sichert verfügbare Archivvideos als MP4.
+Bestätigte Video-Löschungen lassen sich 30 Sekunden lang rückgängig machen;
+erst danach wird die private Datei entfernt. Punkte, Runden und Bewertungen
+bleiben erhalten. "Raum löschen" entfernt Runden, Bewertungen und Spielpunkte
+der Partie per Datenbank-Kaskade. Videos samt Ersteller/Prompt und Benutzerkonten
+bleiben erhalten. Beide Aktionen benötigen eine Bestätigung und eine angemeldete
 Browsersitzung. Laufende Partien sind vor Löschung geschützt. Der Raum wird
 auch aus dem Laufzeit-Speicher entfernt, damit er nicht wiederhergestellt wird.
 
@@ -285,7 +291,10 @@ npm audit
 
 `.github/workflows/ci.yml` führt bei Push und Pull Request Build, Unit-Tests
 und Browser-Tests in Chromium und WebKit aus. `test:ci` startet und beendet
-isolierte Mock-Server selbst. Weder produktive DB-/Storage-Zugangsdaten noch
+isolierte Node-Mock-Server und die Cloudflare-Laufzeit (workerd/Miniflare) selbst.
+Beide Backends durchlaufen Mehrspieler-, Video- und Statistiktests. Ein zusätzlicher
+Runtime-Test prüft Byte-Ranges, Downloads und den echten 30-Sekunden-Löschalarm
+nach dem Entladen des Service-Durable-Objects. Weder produktive DB-/Storage-Zugangsdaten noch
 ein echter HF-Token sind notwendig; es wird keine GPU-Zeit verbraucht.
 Browser-Screenshots liegen im System-Tempverzeichnis oder in `TEST_ARTIFACT_DIR`.
 

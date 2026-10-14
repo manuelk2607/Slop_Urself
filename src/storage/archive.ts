@@ -18,9 +18,12 @@ export async function listArchive(config: ArchiveConfig): Promise<ArchivedObject
     const response = await client(config).fetch(`${endpoint(config)}?list-type=2&prefix=videos%2F`, { signal: AbortSignal.timeout(15_000) });
     if (!response.ok) throw new Error('Videoarchiv nicht erreichbar.');
     const result = new XMLParser({ isArray: name => name === 'Contents' }).parse(await response.text()).ListBucketResult;
+    if (!result || typeof result !== 'object' || !['true', 'false'].includes(String(result.IsTruncated))) throw new Error('Ungültige Bestandsliste des Videoarchivs.');
     // The capped archive can contain at most a few hundred clips. Fail closed rather than undercount.
     if (String(result.IsTruncated) === 'true') throw new Error('Videoarchiv ist zu groß für eine sichere Speicherprüfung.');
-    return (result.Contents || []).map((item: { Key: string; Size: number; LastModified: string }) => ({ key: item.Key, size: Number(item.Size), modified: item.LastModified }));
+    const objects: ArchivedObject[] = (result.Contents || []).map((item: { Key: string; Size: number; LastModified: string }) => ({ key: item.Key, size: Number(item.Size), modified: item.LastModified }));
+    if (objects.some(object => !validKey(object.key) || !Number.isFinite(object.size) || object.size < 0 || typeof object.modified !== 'string')) throw new Error('Ungültige Dateien in der Bestandsliste des Videoarchivs.');
+    return objects;
 }
 export function evictionPlan(objects: ArchivedObject[], incoming: number, limit: number, protectedKeys: ReadonlySet<string> = new Set()) {
     if (incoming > limit) throw new Error('Video ist größer als das Archivlimit.');
@@ -61,15 +64,19 @@ export async function downloadVideo(url: string) {
 }
 
 // Called under the global service queue, including deletion before the new upload.
-export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = []) {
+export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>) {
     if (url.startsWith('/assets/')) return url;
     if (!archiveEnabled(config)) throw new Error('Die Zugangsdaten für das dauerhafte Videoarchiv fehlen.');
     const bytes = await downloadVideo(url);
     const objects = await listArchive(config);
+    const remaining = new Set(objects.map(object => `/api/videos/${object.key}`));
+    await reconcile?.([...remaining]);
     const protectedKeys = new Set(protectedUrls.filter(url => url.startsWith('/api/videos/')).map(url => url.slice('/api/videos/'.length)));
     for (const old of evictionPlan(objects, bytes.length, archiveLimit(config), protectedKeys)) {
         const response = await client(config).fetch(endpoint(config, old.key), { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
         if (!response.ok && response.status !== 404) throw new Error('Altes Video konnte nicht gelöscht werden; Archivierung pausiert.');
+        remaining.delete(`/api/videos/${old.key}`);
+        await reconcile?.([...remaining]);
     }
     const key = `videos/${Date.now()}-${crypto.randomUUID()}.mp4`;
     const response = await client(config).fetch(endpoint(config, key), { method: 'PUT', body: bytes, headers: { 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300' }, signal: AbortSignal.timeout(30_000) });
@@ -90,6 +97,7 @@ export async function serveVideo(request: Request, key: string, config: ArchiveC
         headers: response.headers.has('content-range') ? { 'content-range': response.headers.get('content-range')! } : {} });
     if (!response.ok) return new Response(null, { status: 503 });
     const headers = new Headers({ 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300', 'accept-ranges': 'bytes' });
+    if (new URL(request.url).searchParams.get('download') === '1') headers.set('content-disposition', `attachment; filename="slopurself-${key.slice('videos/'.length)}"`);
     for (const name of ['content-length', 'content-range', 'etag']) if (response.headers.has(name)) headers.set(name, response.headers.get(name)!);
     return new Response(request.method === 'HEAD' ? null : response.body, { status: response.status, headers });
 }

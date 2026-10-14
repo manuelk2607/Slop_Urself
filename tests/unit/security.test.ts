@@ -13,6 +13,8 @@ test('request limits reset, isolate clients and stay bounded under changing iden
     for (let i = 0; i < 3000; i++) takeRateLimit(buckets, `client-${i}`, rule, 1101);
     assert.equal(Object.keys(buckets).length, 2048);
     assert.equal(httpRateRule('/assets/video.mp4', 'GET'), undefined);
+    assert.equal(httpRateRule('/api/stats/videos', 'GET')?.limit, 120);
+    assert.equal(httpRateRule('/api/stats/rooms', 'GET')?.limit, 120);
     const key = await rateKey('127.0.0.1', '/api/session', 'private-salt');
     assert.equal(key.length, 64); assert.equal(key.includes('127.0.0.1'), false);
     assert.notEqual(key, await rateKey('127.0.0.1', '/api/config', 'private-salt'));

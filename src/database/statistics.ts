@@ -6,7 +6,7 @@ export const OVERVIEW_SQL = `
             count(*) filter (where status = 'GAME_OVER')::int as "completedGames",
             (select count(*)::int from rounds) as "roundsPlayed",
             (select count(*)::int from votes) as "votesCast",
-            (select count(*)::int from video_history where video_url <> '' and delete_after is null) as "videosArchived",
+            (select count(*)::int from video_history where video_url <> '' and delete_after is null and evicted_at is null) as "videosArchived",
             coalesce((select max(score)::int from players), 0) as "highestScore"
         from rooms
     `;
@@ -70,8 +70,9 @@ export const VIDEOS_SQL = `
         from video_history h
         where h.video_url <> '' and h.delete_after is null
           and ($1::text is null or h.creator_id = $1)
+          and ($2::timestamptz is null or (h.created_at, h.id) < ($2::timestamptz, $3::bigint))
         order by h.created_at desc, h.id desc
-        limit 12
+        limit 13
     `;
 
 export const VIDEO_CREATORS_SQL = `select creator_id as id, max(creator_name) as name
@@ -79,10 +80,13 @@ export const VIDEO_CREATORS_SQL = `select creator_id as id, max(creator_name) as
     group by creator_id order by lower(max(creator_name)), creator_id limit 200`;
 
 export const ROOMS_SQL = `
-        select r.code, r.status, r.winner_name as "winnerName", r.created_at::text as "createdAt",
+        select r.code, r.status, r.winner_name as "winnerName",
+            to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",
             (select count(*)::int from players p where p.room_code = r.code) as "playerCount",
             (select count(*)::int from rounds v join video_history h on h.id = v.id
-                where v.room_code = r.code and h.video_url <> '' and h.delete_after is null) as "videoCount",
+                where v.room_code = r.code and h.video_url <> '' and h.delete_after is null and h.evicted_at is null) as "videoCount",
             coalesce((select sum(p.score)::int from players p where p.room_code = r.code), 0) as "totalPoints"
-        from rooms r order by r.created_at desc limit 50
+        from rooms r
+        where ($1::timestamptz is null or (r.created_at, r.code) < ($1::timestamptz, $2::text))
+        order by r.created_at desc, r.code desc limit 51
     `;

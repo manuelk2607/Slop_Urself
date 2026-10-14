@@ -2,7 +2,8 @@ import { sqlProfiles, storedProfiles, type Profile, type ManagedProfileStore } f
 import { getSql, getDatabase } from '../../database/neon';
 import { purgeDeletedVideos, deleteStoredHistory, HistoryError, type HistoryDeletion } from '../statistics';
 import { QuotaBudget } from '../../ai/quota';
-import { archiveVideo, listArchive, archiveEnabled, archiveLimit, deleteArchivedVideo } from '../../storage/archive';
+import { archiveVideo, deleteArchivedVideo } from '../../storage/archive';
+import { archiveStatus } from '../archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
@@ -42,9 +43,13 @@ export class ServiceDurableObject {
             else if (path === '/quota/release') await this.budget.release(data.code);
             else if (path === '/quota/drop') await this.budget.drop(data.code, data.generations);
             else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
-            else if (path === '/archive') return json({ url: await archiveVideo(data.url, this.env, await getDatabase(this.env.DATABASE_URL)?.protectedVideoUrls() || []) });
+            else if (path === '/archive') {
+                const database = getDatabase(this.env.DATABASE_URL);
+                return json({ url: await archiveVideo(data.url, this.env, await database?.protectedVideoUrls() || [],
+                    database ? urls => database.reconcileArchive(urls) : undefined) });
+            }
             else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
-            else if (path === '/archive/status') { const objects = await listArchive(this.env); return json({ enabled: archiveEnabled(this.env), usedBytes: objects.reduce((sum, item) => sum + item.size, 0), maxBytes: archiveLimit(this.env), videoCount: objects.length }); }
+            else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));
             else if (path === '/profiles/create') return json({ profile: await this.profiles.create(data.name) || null });
             else if (path === '/profiles/find') return json({ profile: await this.profiles.find(data.name) || null });
             else if (path === '/profiles/list') return json({ profiles: await this.profiles.list() });

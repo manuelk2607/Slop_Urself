@@ -7,10 +7,11 @@ import { videoPlayback } from './video';
 import { accountManagement } from './accounts';
 import type { QuotaCapacity } from '../ai/quota';
 import type { PlayerStats, StatsOverview, VideoStats, RoomStats, VideoCreator } from '../database/types';
+import type { HistoryPage } from '../database/pagination';
 
 const socket = createRealtimeClient(() => currentRoomId);
 const accounts = accountManagement();
-const undoVideos = historyUndo(() => loadStatistics());
+const undoVideos = historyUndo(() => loadStatistics(false, true));
 
 // Header
 const gameHeader = document.getElementById('gameHeader') as HTMLElement;
@@ -50,6 +51,12 @@ const videoStatsList = document.getElementById('videoStatsList') as HTMLUListEle
 const videoPlayerFilter = document.getElementById('videoPlayerFilter') as HTMLSelectElement;
 const statsActionNotice = document.getElementById('statsActionNotice')!;
 const roomStatsList = document.getElementById('roomStatsList') as HTMLUListElement;
+const moreVideosButton = document.getElementById('moreVideosButton') as HTMLButtonElement;
+const moreRoomsButton = document.getElementById('moreRoomsButton') as HTMLButtonElement;
+let videoHistory: VideoStats[] = [], roomHistory: RoomStats[] = [];
+let videoCursor: string | null = null, roomCursor: string | null = null;
+let videoStorageMode = 'archive';
+const historyLoading = { videos: false, rooms: false };
 const { renderStatsOverview, renderStats, renderVideoStats, renderRooms, resetEditing } = statisticsView({ statsOverview, statsList, statsNotice, videoStatsList, videoStatsNotice,
     roomStatsList, roomStatsNotice: document.getElementById('roomStatsNotice')!, playerFilter: videoPlayerFilter,
     selectCreator: id => { videoPlayerFilter.value = id; void loadStatistics(true); }, deleteItems: deleteSelectedStatistics });
@@ -455,10 +462,60 @@ startGameButton.addEventListener('click', () => {
     socket.emit('startGame', { roomId: currentRoomId || displayRoomCode.innerText });
 });
 
-async function loadStatistics(videosOnly = false) {
+function updateHistoryButtons() {
+    const loading = screenStats.hasAttribute('aria-busy');
+    for (const [button, kind, cursor] of [[moreVideosButton, 'videos', videoCursor], [moreRoomsButton, 'rooms', roomCursor]] as const) {
+        button.hidden = !cursor;
+        button.disabled = loading || historyLoading[kind];
+        button.textContent = historyLoading[kind] ? 'Wird geladen …' : kind === 'videos' ? 'Mehr Videos laden' : 'Mehr Räume laden';
+    }
+}
+async function historyRequest<T>(kind: HistoryKind, cursor: string, creator: string): Promise<HistoryPage<T>> {
+    const params = new URLSearchParams({ cursor });
+    if (kind === 'videos' && creator) params.set('player', creator);
+    const response = await fetch(`/api/stats/${kind}?${params}`, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Die Historie konnte nicht geladen werden.');
+    return data;
+}
+async function retainHistory<T>(kind: HistoryKind, items: T[], cursor: string | null, target: number, creator: string, requestId: number) {
+    while (cursor && items.length < target && requestId === statisticsRequest) {
+        const page = await historyRequest<T>(kind, cursor, creator);
+        items.push(...page.items); cursor = page.nextCursor;
+    }
+    return { items, nextCursor: cursor };
+}
+async function loadMoreHistory(kind: HistoryKind) {
+    const cursor = kind === 'videos' ? videoCursor : roomCursor;
+    if (!cursor || historyLoading[kind] || screenStats.hasAttribute('aria-busy')) return;
+    const requestId = statisticsRequest, creator = videoPlayerFilter.value;
+    historyLoading[kind] = true; updateHistoryButtons(); statsActionNotice.hidden = true;
+    try {
+        if (kind === 'videos') {
+            const page = await historyRequest<VideoStats>(kind, cursor, creator);
+            if (requestId !== statisticsRequest || screenStats.style.display === 'none') return;
+            const added = page.items.filter(item => !videoHistory.some(video => video.id === item.id));
+            videoHistory.push(...added); videoCursor = page.nextCursor;
+            renderVideoStats(added, videoStorageMode, true);
+        } else {
+            const page = await historyRequest<RoomStats>(kind, cursor, creator);
+            if (requestId !== statisticsRequest || screenStats.style.display === 'none') return;
+            const added = page.items.filter(item => !roomHistory.some(room => room.code === item.code));
+            roomHistory.push(...added); roomCursor = page.nextCursor;
+            renderRooms(added, true);
+        }
+    } catch (error) {
+        if (requestId === statisticsRequest) { statsActionNotice.textContent = (error as Error).message; statsActionNotice.hidden = false; }
+    } finally { if (requestId === statisticsRequest) { historyLoading[kind] = false; updateHistoryButtons(); } }
+}
+moreVideosButton.addEventListener('click', () => { void loadMoreHistory('videos'); });
+moreRoomsButton.addEventListener('click', () => { void loadMoreHistory('rooms'); });
+
+async function loadStatistics(videosOnly = false, retainDepth = false) {
     const requestId = ++statisticsRequest;
     const creator = videoPlayerFilter.value;
     screenStats.setAttribute('aria-busy', 'true');
+    historyLoading.videos = false; historyLoading.rooms = false; updateHistoryButtons();
 
     try {
         const response = await fetch(`/api/stats${creator ? `?player=${encodeURIComponent(creator)}` : ''}`, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
@@ -471,6 +528,8 @@ async function loadStatistics(videosOnly = false) {
             recentVideos: VideoStats[];
             videoCreators?: VideoCreator[];
             rooms?: RoomStats[];
+            videoCursor?: string | null;
+            roomCursor?: string | null;
             videoStorageMode: string;
             archive?: { usedBytes: number; maxBytes: number; videoCount: number };
         };
@@ -481,17 +540,24 @@ async function loadStatistics(videosOnly = false) {
             return;
         }
 
+        const videos = await retainHistory('videos', data.recentVideos, data.videoCursor || null, retainDepth ? videoHistory.length : 0, creator, requestId);
+        const rooms = videosOnly ? null : await retainHistory('rooms', data.rooms || [], data.roomCursor || null, retainDepth ? roomHistory.length : 0, creator, requestId);
+        if (requestId !== statisticsRequest || screenStats.style.display === 'none') return;
+        videoHistory = videos.items; videoCursor = videos.nextCursor;
+        if (rooms) { roomHistory = rooms.items; roomCursor = rooms.nextCursor; }
+        videoStorageMode = data.videoStorageMode;
+
         // Keep focused controls and the content above the filter in place.
-        if (!videosOnly) { renderStatsOverview(data.overview); renderStats(data.players, data.videoCreators); renderRooms(data.rooms || []); }
+        if (!videosOnly) { renderStatsOverview(data.overview); renderStats(data.players, data.videoCreators); renderRooms(roomHistory); }
         if (videoPlayerFilter.value !== creator) { void loadStatistics(true); return; }
         const position = videoPlayerFilter.getBoundingClientRect().top;
         if (videosOnly) screenStats.style.minHeight = `${screenStats.offsetHeight}px`;
-        renderVideoStats(data.recentVideos, data.videoStorageMode);
+        renderVideoStats(videoHistory, videoStorageMode);
         if (videosOnly) window.scrollBy(0, videoPlayerFilter.getBoundingClientRect().top - position);
         document.getElementById('archiveUsage')!.innerText = data.archive ? `${data.archive.videoCount} archivierte Videos · ${(data.archive.usedBytes / 1024 / 1024).toFixed(1)} / ${Math.round(data.archive.maxBytes / 1024 / 1024)} MB` : '';
     } catch {
         if (requestId === statisticsRequest) { statsActionNotice.textContent = 'Statistiken konnten nicht geladen werden.'; statsActionNotice.hidden = false; }
-    } finally { if (requestId === statisticsRequest) screenStats.removeAttribute('aria-busy'); }
+    } finally { if (requestId === statisticsRequest) { screenStats.removeAttribute('aria-busy'); updateHistoryButtons(); } }
 }
 statsButton.addEventListener('click', () => {
     videoPlayerFilter.value = ''; resetEditing(); screenStats.style.minHeight = ''; statsActionNotice.hidden = true;
@@ -519,7 +585,7 @@ async function deleteSelectedStatistics(urls: string[], kind: HistoryKind) {
         catch (error) { failed.push(url); reasons.add(error instanceof Error ? error.message : 'Löschen fehlgeschlagen.'); }
     }
     undoVideos.remember(undo);
-    await loadStatistics();
+    await loadStatistics(false, true);
     if (failed.length) {
         const items = kind === 'rooms' ? 'Räume' : 'Videos';
         const item = kind === 'rooms' ? 'Raum' : 'Video';
