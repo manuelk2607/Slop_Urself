@@ -100,7 +100,7 @@ class NativeWebSocketRealtimeClient implements RealtimeClient {
                         resolve();
                     }
                     this.dispatch(message.type, message.payload);
-                } catch { this.dispatch('errorMsg', 'Ungueltige Server-Antwort.'); }
+                } catch { this.dispatch('errorMsg', 'Ungültige Server-Antwort.'); }
             });
             target.addEventListener('error', () => {
                 window.clearTimeout(timeout);

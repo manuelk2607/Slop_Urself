@@ -1,4 +1,4 @@
-import { authDisabled, requestAccount, sessionResponse } from '../../auth/session';
+import { authDisabled, requestAccount, sessionResponse, authFailureStatus } from '../../auth/session';
 import { getDatabase } from '../../database/neon';
 import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
@@ -7,6 +7,9 @@ import { serveVideo, archiveEnabled } from '../../storage/archive';
 import { httpRateRule, rateKey, RATE_MESSAGE } from '../../security/rate-limit';
 import { sanitizeRoomId } from '../../game/rules';
 import { service, json } from './runtime';
+import { historyResponse, HistoryError } from '../statistics';
+import { accountsResponse } from '../accounts';
+import { cloudflareAuth, serviceProfiles } from './profiles';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
@@ -15,6 +18,7 @@ export type { Env } from './types';
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
+        const auth = cloudflareAuth(env);
         const rule = httpRateRule(url.pathname, request.method);
         if (rule) {
             try {
@@ -25,15 +29,13 @@ export default {
         }
 
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
-        if (url.pathname === '/api/session') return sessionResponse(request, env, {
-            create: async name => (await service(env, '/profiles/create', { name })).profile || undefined,
-            find: async name => (await service(env, '/profiles/find', { name })).profile || undefined
-        });
+        if (url.pathname === '/api/session') return sessionResponse(request, auth, serviceProfiles(env));
+        if (url.pathname.startsWith('/api/admin/')) return accountsResponse(request, auth, serviceProfiles(env));
 
         if (url.pathname === '/api/config') {
             let players: number;
-            try { players = playerCount(url.searchParams.get('players') ?? 1); } catch { return json({ error: 'Ungueltige Spielerzahl.' }, { status: 400 }); }
-            const signedIn = authDisabled(env) || Boolean(await requestAccount(request, env).catch(() => undefined));
+            try { players = playerCount(url.searchParams.get('players') ?? 1); } catch { return json({ error: 'Ungültige Spielerzahl.' }, { status: 400 }); }
+            const signedIn = authDisabled(env) || Boolean(await requestAccount(request, auth).catch(() => undefined));
             return json({
                 ...(signedIn ? await service(env, '/quota/display', { players }) : { aiRoundLimit: 0, quotaMode: 'unavailable' }),
                 authEnabled: !authDisabled(env),
@@ -44,9 +46,9 @@ export default {
         }
 
         if (url.pathname === '/api/stats') {
-            try { await requestAccount(request, env); } catch { return json({ error: 'Bitte melde dich an.' }, { status: 401 }); }
+            try { await requestAccount(request, auth); } catch (error) { return json({ error: authFailureStatus(error) === 503 ? 'Deine Browsersitzung ist gerade nicht erreichbar.' : 'Bitte melde dich an.' }, { status: authFailureStatus(error) }); }
             try {
-                const stats = await getDatabase(env.DATABASE_URL)?.getStats() ?? emptyStats();
+                const stats = await getDatabase(env.DATABASE_URL)?.getStats(url.searchParams.get('player')?.slice(0, 100)) ?? emptyStats();
                 return json({
                     databaseEnabled: Boolean(env.DATABASE_URL),
                     ...stats,
@@ -59,8 +61,19 @@ export default {
             }
         }
 
+        if (url.pathname.startsWith('/api/stats/rooms/') || url.pathname.startsWith('/api/stats/videos/')) return historyResponse(request, auth, async command => {
+            const room = env.ROOMS.get(env.ROOMS.idFromName(command.code));
+            const response = await room.fetch(new Request('https://internal/statistics/delete', { method: 'POST', body: JSON.stringify(command) }));
+            if (!response.ok) throw new HistoryError((await response.json() as { error: string }).error, response.status);
+            return await response.json();
+        }, async id => {
+            const database = getDatabase(env.DATABASE_URL);
+            if (!database) throw new HistoryError('Die Statistik-Datenbank ist nicht eingerichtet.');
+            return database.savedVideo(id);
+        });
+
         if (url.pathname.startsWith('/api/videos/')) {
-            try { await requestAccount(request, env); } catch { return new Response(null, { status: 401 }); }
+            try { await requestAccount(request, auth); } catch (error) { return new Response(null, { status: authFailureStatus(error) }); }
             return serveVideo(request, url.pathname.slice('/api/videos/'.length), env);
         }
 
@@ -72,7 +85,7 @@ export default {
             if (request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) return new Response('Invalid origin', { status: 403 });
             const roomCode = sanitizeRoomId(url.pathname.replace('/ws/', ''));
             if (!roomCode) return new Response('Missing room code', { status: 400 });
-            try { await requestAccount(request, env); } catch { return new Response('Bitte melde dich an.', { status: 401 }); }
+            try { await requestAccount(request, auth); } catch (error) { return new Response('Verbindung nicht möglich. Bitte versuche es erneut.', { status: authFailureStatus(error) }); }
 
             const id = env.ROOMS.idFromName(roomCode);
             const room = env.ROOMS.get(id);

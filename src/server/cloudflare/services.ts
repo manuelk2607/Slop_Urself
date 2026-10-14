@@ -1,7 +1,8 @@
-import { sqlProfiles, storedProfiles, type Profile, type ProfileStore } from '../../auth/profiles';
-import { getSql } from '../../database/neon';
+import { sqlProfiles, storedProfiles, type Profile, type ManagedProfileStore } from '../../auth/profiles';
+import { getSql, getDatabase } from '../../database/neon';
+import { purgeDeletedVideos, deleteStoredHistory, HistoryError, type HistoryDeletion } from '../statistics';
 import { QuotaBudget } from '../../ai/quota';
-import { archiveVideo, listArchive, archiveEnabled, archiveLimit } from '../../storage/archive';
+import { archiveVideo, listArchive, archiveEnabled, archiveLimit, deleteArchivedVideo } from '../../storage/archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
@@ -11,7 +12,7 @@ export class ServiceDurableObject {
     private archiveOperations: Promise<unknown> = Promise.resolve();
     private profileOperations: Promise<unknown> = Promise.resolve();
     private securityOperations: Promise<unknown> = Promise.resolve();
-    private profiles: ProfileStore;
+    private profiles: ManagedProfileStore;
     private budget: QuotaBudget;
     constructor(private state: DurableObjectState, private env: Env) {
         this.budget = new QuotaBudget(state.storage, env);
@@ -20,7 +21,12 @@ export class ServiceDurableObject {
     async fetch(request: Request) {
         const path = new URL(request.url).pathname;
         const action = async () => {
-            const data = await request.json() as { code: string; rounds: number; players?: number; generations: number; seconds: number; jobId?: string; url: string; name: string; key: string; rule: RateRule };
+            const data = await request.json() as { code: string; rounds: number; players?: number; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion };
+            if (path === '/video-trash/schedule') {
+                await this.scheduleCleanup(data.time);
+                return json({ ok: true });
+            }
+            if (path === '/video-trash/delete') return json(await deleteStoredHistory(getDatabase(this.env.DATABASE_URL), data.command, time => this.scheduleCleanup(time)));
             if (path === '/security/rate') {
                 const buckets = await this.state.storage.get<RateBuckets>('rateBuckets') || {};
                 const retryAfter = takeRateLimit(buckets, data.key, data.rule);
@@ -36,17 +42,36 @@ export class ServiceDurableObject {
             else if (path === '/quota/release') await this.budget.release(data.code);
             else if (path === '/quota/drop') await this.budget.drop(data.code, data.generations);
             else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
-            else if (path === '/archive') return json({ url: await archiveVideo(data.url, this.env) });
+            else if (path === '/archive') return json({ url: await archiveVideo(data.url, this.env, await getDatabase(this.env.DATABASE_URL)?.protectedVideoUrls() || []) });
+            else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
             else if (path === '/archive/status') { const objects = await listArchive(this.env); return json({ enabled: archiveEnabled(this.env), usedBytes: objects.reduce((sum, item) => sum + item.size, 0), maxBytes: archiveLimit(this.env), videoCount: objects.length }); }
             else if (path === '/profiles/create') return json({ profile: await this.profiles.create(data.name) || null });
             else if (path === '/profiles/find') return json({ profile: await this.profiles.find(data.name) || null });
+            else if (path === '/profiles/list') return json({ profiles: await this.profiles.list() });
+            else if (path === '/profiles/remove') return json({ profile: await this.profiles.remove(data.id) || null });
             return json({ ok: true });
         };
-        const result = (path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.' }, { status: 503 }));
+        const result = (path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.' }, { status: error instanceof HistoryError ? error.status : 503 }));
         if (path.startsWith('/security/')) this.securityOperations = result;
         else if (path.startsWith('/quota/')) this.quotaOperations = result;
         else if (path.startsWith('/profiles/')) this.profileOperations = result;
         else this.archiveOperations = result;
         return result;
+    }
+
+    private async scheduleCleanup(time: number) {
+        const alarm = await this.state.storage.getAlarm();
+        if (alarm === null || alarm > time) await this.state.storage.setAlarm(time);
+    }
+
+    async alarm() {
+        const result = this.archiveOperations.then(async () => {
+            const database = getDatabase(this.env.DATABASE_URL);
+            await purgeDeletedVideos(database, url => deleteArchivedVideo(url, this.env));
+            const next = await database?.nextVideoDeletion();
+            if (next !== undefined) await this.state.storage.setAlarm(Math.max(Date.now() + 100, next));
+        }).catch(async () => { await this.state.storage.setAlarm(Date.now() + 30_000); });
+        this.archiveOperations = result;
+        await result;
     }
 }

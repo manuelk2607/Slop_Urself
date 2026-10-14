@@ -22,6 +22,7 @@ export interface PersistRoundInput {
 }
 
 export interface PlayerStats {
+    id: string;
     name: string;
     gamesPlayed: number;
     wins: number;
@@ -41,6 +42,9 @@ export interface StatsOverview {
     highestScore: number;
 }
 export interface VideoStats {
+    id: string;
+    roomDeleted: boolean;
+    creatorId: string;
     roomCode: string;
     roundNumber: number;
     creatorName: string;
@@ -49,10 +53,21 @@ export interface VideoStats {
     roundPoints: number;
     createdAt: string;
 }
-export interface GameStats { overview: StatsOverview; players: PlayerStats[]; recentVideos: VideoStats[] }
+export interface RoomStats {
+    code: string;
+    status: string;
+    playerCount: number;
+    videoCount: number;
+    totalPoints: number;
+    winnerName: string | null;
+    createdAt: string;
+}
+export interface VideoCreator { id: string; name: string }
+export interface SavedVideo extends VideoStats { deleteAfter: string | null }
+export interface GameStats { overview: StatsOverview; players: PlayerStats[]; recentVideos: VideoStats[]; videoCreators: VideoCreator[]; rooms: RoomStats[] }
 export const emptyStats = (): GameStats => ({
     overview: { gamesPlayed: 0, completedGames: 0, roundsPlayed: 0, votesCast: 0, videosArchived: 0, highestScore: 0 },
-    players: [], recentVideos: []
+    players: [], recentVideos: [], videoCreators: [], rooms: []
 });
 
 export interface SqlStatement { text: string; values?: unknown[] }

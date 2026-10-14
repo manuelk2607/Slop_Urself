@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 const children = new Set<ReturnType<typeof spawn>>();
-const env = { ...process.env, DATABASE_URL: '', HF_TOKEN: '', AI_PROVIDER: 'mock',
+const env = { ...process.env, DATABASE_URL: '', HF_TOKEN: '', AI_PROVIDER: 'mock', ADMIN_ACCOUNT_ID: '', ADMIN_ACCESS_KEY: '',
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', TEST_PROFILE_DB: 'false',
     AUTH_COOKIE_SECRET: 'ci-only-cookie-secret-at-least-32-characters' };
 async function run(args: string[], extra: Record<string, string> = {}) {
@@ -16,7 +16,7 @@ async function start(port: number, auth: boolean) {
     children.add(child);
     await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Test server startup timed out')), 15_000);
-        child.stdout.on('data', data => { if (String(data).includes('Server laeuft')) { clearTimeout(timer); resolve(); } });
+        child.stdout.on('data', data => { if (String(data).includes('Server läuft')) { clearTimeout(timer); resolve(); } });
         child.once('error', error => { clearTimeout(timer); reject(error); });
         child.once('exit', code => { clearTimeout(timer); reject(new Error(`Test server exited: ${code}`)); });
     });
@@ -33,6 +33,9 @@ try {
     for (const engine of (process.env.TEST_BROWSER_ENGINE ? [process.env.TEST_BROWSER_ENGINE] : ['chromium', 'webkit'])) {
         const browserEnv = { TEST_BROWSER_ENGINE: engine, TEST_BROWSER_PATH: engine === 'webkit' ? '' : process.env.TEST_BROWSER_PATH || '' };
         await run(['tests/e2e/browser.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
+        await run(['tests/e2e/video.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
+        await run(['tests/e2e/statistics.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
+        await run(['tests/e2e/accounts.e2e.mts'], browserEnv);
         await run(['tests/e2e/startup.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/auth.e2e.mts', 'http://127.0.0.1:3312'], browserEnv);
         await run(['tests/e2e/quota.e2e.mts'], browserEnv);

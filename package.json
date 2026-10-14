@@ -14,9 +14,10 @@
     "start": "node dist/server/node.js",
     "cf:build": "npm run build",
     "cf:dev": "npm run cf:build && npx wrangler dev --config cloudflare/wrangler.toml",
-    "cf:deploy": "npm run cf:build && npx wrangler deploy --config cloudflare/wrangler.toml",
+    "cf:deploy": "npm run cf:build && node --import tsx tools/cloudflare-deploy.ts",
     "cf:secrets": "node --import tsx tools/cloudflare-setup.ts upload",
     "cf:local": "node --import tsx tools/cloudflare-setup.ts local",
+    "admin:setup": "node --import tsx tools/admin-setup.ts",
     "invite": "node --import tsx tools/cloudflare-setup.ts invite",
     "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },

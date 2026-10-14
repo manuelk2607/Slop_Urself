@@ -241,6 +241,8 @@ test('archive evicts oldest files only and stays capped below the free storage a
     const objects = [{ key: 'new', size: 30, modified: '2026-10-02' }, { key: 'old', size: 40, modified: '2026-10-01' }];
     assert.deepEqual(evictionPlan(objects, 50, 100).map(object => object.key), ['old']);
     assert.deepEqual(evictionPlan(objects, 20, 100), []);
+    assert.deepEqual(evictionPlan(objects, 50, 100, new Set(['old'])).map(object => object.key), ['new']);
+    assert.throws(() => evictionPlan(objects, 50, 100, new Set(['old', 'new'])), /Rückgängig/);
     assert.equal(archiveLimit({ VIDEO_ARCHIVE_MB: '99999' }), 1024 * 1024 * 1024);
 });
 test('archive reads real MP4 bytes and serves byte ranges through signed private S3 requests', async () => {
@@ -260,7 +262,25 @@ test('archive reads real MP4 bytes and serves byte ranges through signed private
         assert.ok(url.startsWith('/api/videos/videos/'));
         const response = await serveVideo(new Request('https://game.test', { headers: { range: 'bytes=0-3' } }), url.slice('/api/videos/'.length), config);
         assert.equal(response.status, 206); assert.equal((await response.arrayBuffer()).byteLength, 4);
+        assert.equal(response.headers.get('content-range'), 'bytes 0-3/16');
+        assert.equal(requests.at(-1)?.headers.get('range'), 'bytes=0-3');
         assert.ok(requests.find(request => request.method === 'PUT')?.headers.get('authorization')?.startsWith('AWS4-HMAC-SHA256'));
+    } finally { globalThis.fetch = original; }
+});
+test('video delivery distinguishes an unconfigured archive, removed file and storage outage', async () => {
+    const key = 'videos/1234567890123-test.mp4';
+    const request = () => new Request('https://game.test');
+    assert.equal((await serveVideo(request(), key, {})).status, 503);
+    const original = globalThis.fetch;
+    const config = { AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_ENDPOINT_URL_S3: 'https://storage.test' };
+    try {
+        globalThis.fetch = async () => new Response(null, { status: 404 });
+        assert.equal((await serveVideo(request(), key, config)).status, 410);
+        globalThis.fetch = async () => { throw new Error('Network down'); };
+        assert.equal((await serveVideo(request(), key, config)).status, 503);
+        globalThis.fetch = async () => new Response(null, { status: 416, headers: { 'content-range': 'bytes */16' } });
+        const range = await serveVideo(request(), key, config);
+        assert.equal(range.status, 416); assert.equal(range.headers.get('content-range'), 'bytes */16');
     } finally { globalThis.fetch = original; }
 });
 test('sessions reject missing or short signing keys before accessing profiles', async () => {

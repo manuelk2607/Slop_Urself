@@ -38,10 +38,10 @@ export interface AiLifecycle {
     resultTimeoutMs?: number;
 }
 export class AiPendingError extends Error {
-    constructor(public job: AiJob) { super('Die Videoerstellung laeuft noch. Der bestehende Auftrag wird erneut abgefragt.'); }
+    constructor(public job: AiJob) { super('Die Videoerstellung läuft noch. Der bestehende Auftrag wird erneut abgefragt.'); }
 }
 export class AiExpiredError extends Error {
-    constructor() { super('Der KI-Auftrag konnte nicht wiederhergestellt werden. Bitte versuche es spaeter erneut.'); }
+    constructor() { super('Der KI-Auftrag konnte nicht wiederhergestellt werden. Bitte versuche es später erneut.'); }
 }
 class AiProviderError extends Error {}
 class AiHttpError extends Error {
@@ -62,13 +62,13 @@ export function validateImage(value: unknown): { mime: string; base64: string } 
     }
     const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
     if (!match || match[2].length % 4 !== 0) {
-        throw new Error('Bitte lade ein gueltiges PNG-, JPEG- oder WebP-Bild hoch.');
+        throw new Error('Bitte lade ein gültiges PNG-, JPEG- oder WebP-Bild hoch.');
     }
     const bytes = atob(match[2]);
     const valid = match[1] === 'image/png' ? bytes.startsWith('\x89PNG\r\n\x1a\n')
         : match[1] === 'image/jpeg' ? bytes.startsWith('\xff\xd8\xff')
         : bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP';
-    if (!valid || bytes.length > MAX_IMAGE_BYTES) throw new Error('Die Bilddatei ist ungueltig oder zu gross.');
+    if (!valid || bytes.length > MAX_IMAGE_BYTES) throw new Error('Die Bilddatei ist ungültig oder zu groß.');
     return { mime: match[1], base64: match[2] };
 }
 
@@ -84,9 +84,9 @@ export function extractVideoUrl(result: unknown, root: string): string {
     const item = first as { video?: { url?: string; path?: string }; url?: string; path?: string };
     const file = item?.video ?? item;
     const value = typeof first === 'string' ? first : file?.url || (file?.path ? `${root}/gradio_api/file=${file.path}` : '');
-    if (!value) throw new Error('KI hat keine Video-URL zurueckgegeben.');
+    if (!value) throw new Error('KI hat keine Video-URL zurückgegeben.');
     const url = new URL(value, root);
-    if (url.protocol !== 'https:') throw new Error('KI hat eine ungueltige Video-URL geliefert.');
+    if (url.protocol !== 'https:') throw new Error('KI hat eine ungültige Video-URL geliefert.');
     return url.href;
 }
 
@@ -131,21 +131,21 @@ export function orderProviderValues(parameters: ApiParameter[], values: Record<s
     return parameters.map(parameter => {
         const value = values[parameter.parameter_name];
         if (value === undefined) {
-            if (!parameter.parameter_has_default) throw new Error(`KI-Schnittstelle geaendert: ${parameter.parameter_name}`);
+            if (!parameter.parameter_has_default) throw new Error(`KI-Schnittstelle geändert: ${parameter.parameter_name}`);
             return parameter.parameter_default;
         }
         const range = /between ([\d.]+) and ([\d.]+)/.exec(parameter.type.description || '');
         if (typeof value === 'number' && range && (value < Number(range[1]) || value > Number(range[2]))) {
-            throw new Error(`${parameter.parameter_name}: ${value} liegt ausserhalb des unterstuetzten Bereichs.`);
+            throw new Error(`${parameter.parameter_name}: ${value} liegt außerhalb des unterstützten Bereichs.`);
         }
-        if (parameter.type.enum && !parameter.type.enum.includes(value)) throw new Error(`Ungueltiger KI-Parameter: ${parameter.parameter_name}`);
+        if (parameter.type.enum && !parameter.type.enum.includes(value)) throw new Error(`Ungültiger KI-Parameter: ${parameter.parameter_name}`);
         return value;
     });
 }
 
 export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (step: string) => void = () => {}, lifecycle: AiLifecycle = {}) {
     if (!/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(job.root) || !/^\/[a-zA-Z0-9_-]+$/.test(job.endpoint)
-        || (job.eventId && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.eventId))) throw new Error('Ungueltiger gespeicherter KI-Auftrag.');
+        || (job.eventId && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.eventId))) throw new Error('Ungültiger gespeicherter KI-Auftrag.');
     if (job.status === 'complete' && job.videoUrl) return job.videoUrl;
     if (job.status === 'failed') throw new AiProviderError('Der KI-Provider hat die Generierung abgebrochen.');
     if (Date.now() - job.submittedAt >= AI_JOB_MAX_AGE_MS) {
@@ -188,7 +188,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
         const response = await fetch('https://huggingface.co/api/whoami-v2', {
             headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(15_000)
         });
-        if (response.status === 401 || response.status === 403) throw new Error('Der Hugging-Face-Token ist ungueltig. Bitte HF_TOKEN auf dem Server aktualisieren.');
+        if (response.status === 401 || response.status === 403) throw new Error('Der Hugging-Face-Token ist ungültig. Bitte HF_TOKEN auf dem Server aktualisieren.');
         if (!response.ok) throw new Error('Hugging-Face-Anmeldung ist momentan nicht erreichbar.');
     }
     const errors: string[] = [];
@@ -202,7 +202,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
         const timer = setTimeout(() => controller.abort(), 180_000);
         try {
             const needed = providerGpuSeconds(provider, config);
-            if (!Number.isFinite(needed)) throw new Error('Dieser Space unterstuetzt keine Videos mit mindestens 5 Sekunden.');
+            if (!Number.isFinite(needed)) throw new Error('Dieser Space unterstützt keine Videos mit mindestens 5 Sekunden.');
             const quota = await fetchGpuQuota(config);
             if (quota.current < needed || quota.runs?.remaining === 0) throw new Error('Das kostenlose GPU-Kontingent ist aufgebraucht.');
             await allowAttempt?.(needed);
@@ -255,5 +255,5 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             clearTimeout(timer);
         }
     }
-    throw new Error(`Alle kostenlosen KI-Provider sind derzeit nicht verfuegbar (${errors.join(', ')}). Bitte versuche es spaeter erneut.`);
+    throw new Error(`Alle kostenlosen KI-Provider sind derzeit nicht verfügbar (${errors.join(', ')}). Bitte versuche es später erneut.`);
 }

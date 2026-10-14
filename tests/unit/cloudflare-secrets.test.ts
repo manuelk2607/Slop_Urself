@@ -2,6 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareSecrets } from '../../tools/cloudflare-secrets';
 
+test('admin setup uploads both optional secrets only when configured and never accepts a short key', () => {
+    const env = { ADMIN_ACCOUNT_ID: 'owner-id', ADMIN_ACCESS_KEY: 'unit-admin-key-at-least-32-characters' };
+    assert.deepEqual(prepareSecrets(env, ['ADMIN_ACCOUNT_ID', 'ADMIN_ACCESS_KEY']), env);
+    assert.throws(() => prepareSecrets({ ...env, ADMIN_ACCESS_KEY: 'short' }, ['ADMIN_ACCESS_KEY']), /mindestens 32/);
+    assert.throws(() => prepareSecrets({ ADMIN_ACCOUNT_ID: 'owner-id' }, ['ADMIN_ACCOUNT_ID', 'ADMIN_ACCESS_KEY']), /ADMIN_ACCESS_KEY/);
+});
+
 test('Cloudflare secret setup validates required values without revealing their contents', () => {
     const env = { HF_TOKEN: 'private-hf-token', DATABASE_URL: 'private-database-url',
         AUTH_COOKIE_SECRET: 'test-only-cookie-secret-at-least-32-characters',

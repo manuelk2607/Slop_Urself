@@ -5,7 +5,7 @@ import { prepareSecrets } from './cloudflare-secrets';
 
 const mode = process.argv[2];
 if (mode === 'invite') {
-    console.log('https://slopurself.jsbk9gv78n.workers.dev/');
+    console.log('https://slopurself.manuelk2607.workers.dev/');
 } else if (mode === 'local' || mode === 'upload') {
     const env = parse(readFileSync('.env.local'));
     const secrets = prepareSecrets(env, mode === 'upload' ? process.argv.slice(3) : []);

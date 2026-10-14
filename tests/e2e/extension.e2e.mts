@@ -9,13 +9,14 @@ const base = external || `http://127.0.0.1:${port}`;
 const server = external ? undefined : spawn(process.execPath, ['--import', 'tsx', 'tests/support/quota-server.ts'], {
     cwd: process.cwd(), env: { ...process.env, PORT: port, DATABASE_URL: '', AI_PROVIDER: 'wan22',
         AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx', AI_GPU_SECONDS_PER_ROUND: '0', HF_TOKEN: 'test',
+        AWS_ACCESS_KEY_ID: 'test-only', AWS_SECRET_ACCESS_KEY: 'test-only', AWS_ENDPOINT_URL_S3: 'https://storage.test',
         TEST_EXTRA_ROUNDS: 'true', AUTH_COOKIE_SECRET: 'extra-round-test-secret-at-least-32-characters' }, stdio: ['pipe', 'pipe', 'pipe']
 });
 const exited = server && new Promise<void>(resolve => server.once('exit', () => resolve()));
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 try {
     if (server) await new Promise<void>((resolve, reject) => {
-        server.stdout.on('data', data => { if (String(data).includes('Server laeuft')) resolve(); });
+        server.stdout.on('data', data => { if (String(data).includes('Server läuft')) resolve(); });
         server.once('error', reject); server.once('exit', code => reject(new Error(`Server exited: ${code}`)));
     });
     browser = await (process.env.TEST_BROWSER_ENGINE === 'webkit' ? webkit : chromium).launch({ headless: true, executablePath: process.env.TEST_BROWSER_PATH });

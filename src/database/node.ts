@@ -1,11 +1,11 @@
 import { Pool } from 'pg';
-import { type ProfileStore, sqlProfiles, storedProfiles } from '../auth/profiles';
+import { type ManagedProfileStore, sqlProfiles, storedProfiles } from '../auth/profiles';
 import { GameRepository } from './repository';
 import { emptyStats, type DatabaseDriver, type SqlStatement, type PersistPlayerInput, type PersistRoundInput, type FinalStandingInput } from './types';
 
 let pool: Pool | undefined;
 let database: GameRepository | undefined;
-let profiles: ProfileStore | undefined;
+let profiles: ManagedProfileStore | undefined;
 const localProfiles = new Map<string, unknown>();
 
 function getPool() {
@@ -13,7 +13,7 @@ function getPool() {
     return pool ??= new Pool({ connectionString: process.env.DATABASE_URL,
         max: 5, connectionTimeoutMillis: 10_000, idleTimeoutMillis: 30_000 });
 }
-function getDatabase() {
+export function getDatabase() {
     const pool = getPool();
     if (!pool) return null;
     if (!database) {
@@ -51,4 +51,4 @@ export const markRoomStarted = async (code: string) => { await getDatabase()?.ma
 export const markRoomFinished = async (code: string, standings: FinalStandingInput[]) => { await getDatabase()?.markRoomFinished(code, standings); };
 export const reopenRoom = async (code: string, rounds: number, hostId: string) => { await getDatabase()?.reopenRoom(code, rounds, hostId); };
 export const saveRound = async (input: PersistRoundInput) => { await getDatabase()?.saveRound(input); };
-export const getStats = async () => await getDatabase()?.getStats() ?? emptyStats();
+export const getStats = async (creatorId?: string) => await getDatabase()?.getStats(creatorId) ?? emptyStats();

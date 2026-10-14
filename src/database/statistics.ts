@@ -1,10 +1,12 @@
+import { VIDEO_PROJECTION } from './video-history';
+
 export const OVERVIEW_SQL = `
         select
             count(*) filter (where started_at is not null)::int as "gamesPlayed",
             count(*) filter (where status = 'GAME_OVER')::int as "completedGames",
             (select count(*)::int from rounds) as "roundsPlayed",
             (select count(*)::int from votes) as "votesCast",
-            (select count(*)::int from rounds where video_url <> '') as "videosArchived",
+            (select count(*)::int from video_history where video_url <> '' and delete_after is null) as "videosArchived",
             coalesce((select max(score)::int from players), 0) as "highestScore"
         from rooms
     `;
@@ -46,6 +48,7 @@ export const PLAYERS_SQL = `
             group by coalesce(p.account_id, 'legacy:' || lower(p.name))
         )
         select
+            pt.player_key as id,
             pt.name,
             pt."gamesPlayed"::int,
             coalesce(cr."roundsCreated", 0)::int as "roundsCreated",
@@ -63,19 +66,23 @@ export const PLAYERS_SQL = `
     `;
 
 export const VIDEOS_SQL = `
-        select
-            r.room_code as "roomCode",
-            r.round_number::int as "roundNumber",
-            coalesce(p.name, 'Unbekannt') as "creatorName",
-            r.prompt,
-            r.video_url as "videoUrl",
-            r.round_points::int as "roundPoints",
-            r.created_at::text as "createdAt"
-        from rounds r
-        left join players p
-          on p.room_code = r.room_code
-         and p.socket_id = r.creator_socket_id
-        where r.video_url <> ''
-        order by r.created_at desc
+        select ${VIDEO_PROJECTION}
+        from video_history h
+        where h.video_url <> '' and h.delete_after is null
+          and ($1::text is null or h.creator_id = $1)
+        order by h.created_at desc, h.id desc
         limit 12
+    `;
+
+export const VIDEO_CREATORS_SQL = `select creator_id as id, max(creator_name) as name
+    from video_history where video_url <> '' and delete_after is null
+    group by creator_id order by lower(max(creator_name)), creator_id limit 200`;
+
+export const ROOMS_SQL = `
+        select r.code, r.status, r.winner_name as "winnerName", r.created_at::text as "createdAt",
+            (select count(*)::int from players p where p.room_code = r.code) as "playerCount",
+            (select count(*)::int from rounds v join video_history h on h.id = v.id
+                where v.room_code = r.code and h.video_url <> '' and h.delete_after is null) as "videoCount",
+            coalesce((select sum(p.score)::int from players p where p.room_code = r.code), 0) as "totalPoints"
+        from rooms r order by r.created_at desc limit 50
     `;

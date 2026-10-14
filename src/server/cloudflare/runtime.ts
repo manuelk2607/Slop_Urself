@@ -1,12 +1,13 @@
 import type { Env } from './types';
 import { roundLimit } from '../../game/rules';
+import { HistoryError } from '../statistics';
 
 export async function service(env: Env, path: string, payload?: unknown) {
     if (!env.SERVICES && env.AI_PROVIDER === 'mock') return { aiRoundLimit: getAiRoundLimit(env), playerCount: (payload as { players?: number })?.players || 1, quotaMode: 'mock' };
     if (!env.SERVICES) throw new Error('Cloudflare SERVICES-Binding fehlt.');
     const response = await env.SERVICES.get(env.SERVICES.idFromName('global')).fetch(new Request(`https://internal${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload || {}) }));
     const result = await response.json() as Record<string, any>;
-    if (!response.ok) throw new Error(result.error || 'KI- oder Videospeicher nicht erreichbar.');
+    if (!response.ok) throw new HistoryError(result.error || 'KI- oder Videospeicher nicht erreichbar.', response.status);
     return result;
 }
 

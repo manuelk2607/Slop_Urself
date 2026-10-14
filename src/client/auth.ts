@@ -6,6 +6,7 @@ interface AuthUI {
     refreshToken(token: string): void;
 }
 let refresh: (() => Promise<void>) | undefined;
+class SessionError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 export async function refreshAccount() { await refresh?.(); }
 
 export async function initializeAccount(ui: AuthUI) {
@@ -22,7 +23,7 @@ export async function initializeAccount(ui: AuthUI) {
     async function session(mode: 'create' | 'login' | 'refresh') {
         const response = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode }), signal: AbortSignal.timeout(15_000) });
         const result = await response.json() as { account?: Account; token?: string; error?: string };
-        if (!response.ok || !result.account || !result.token) throw new Error(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`);
+        if (!response.ok || !result.account || !result.token) throw new SessionError(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`, response.status);
         ui.refreshToken(result.token);
         return result.account;
     }
@@ -50,7 +51,11 @@ export async function initializeAccount(ui: AuthUI) {
     existing.addEventListener('click', () => { void enter('login'); });
     refresh = async () => {
         if (!ready) return;
-        if (!pending) pending = session('refresh').then(() => {}).catch(() => {}).finally(() => { pending = undefined; });
+        if (!pending) pending = session('refresh').then(() => {}).catch(async reason => {
+            if (reason instanceof SessionError && reason.status === 401) {
+                ready = false; await ui.signedOut(); bar.hidden = true; ui.showAuth(); error.innerText = reason.message;
+            }
+        }).finally(() => { pending = undefined; });
         await pending;
     };
     document.getElementById('signOutButton')!.addEventListener('click', async () => {
@@ -64,7 +69,7 @@ export async function initializeAccount(ui: AuthUI) {
     });
     window.setInterval(() => { void refreshAccount(); }, 5 * 60_000);
     try {
-        if (location.protocol === 'file:') throw new Error('Bitte oeffne das Spiel ueber den Server oder den Cloudflare-Link.');
+        if (location.protocol === 'file:') throw new Error('Bitte öffne das Spiel über den Server oder den Cloudflare-Link.');
         const response = await fetch('/api/config', { signal: AbortSignal.timeout(10_000) });
         if (!response.ok) throw new Error('Spielkonfiguration nicht erreichbar.');
         const config = await response.json() as { authEnabled: boolean };

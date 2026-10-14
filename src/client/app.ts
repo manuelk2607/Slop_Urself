@@ -1,10 +1,16 @@
 import { initializeAccount, refreshAccount } from './auth';
 import { createRealtimeClient, type SocketPayload } from './realtime';
 import { statisticsView } from './statistics';
+import type { HistoryKind } from './history-selection';
+import { historyUndo } from './history-undo';
+import { videoPlayback } from './video';
+import { accountManagement } from './accounts';
 import type { QuotaCapacity } from '../ai/quota';
-import type { PlayerStats, StatsOverview, VideoStats } from '../database/types';
+import type { PlayerStats, StatsOverview, VideoStats, RoomStats, VideoCreator } from '../database/types';
 
 const socket = createRealtimeClient(() => currentRoomId);
+const accounts = accountManagement();
+const undoVideos = historyUndo(() => loadStatistics());
 
 // Header
 const gameHeader = document.getElementById('gameHeader') as HTMLElement;
@@ -41,7 +47,12 @@ const statsOverview = document.getElementById('statsOverview') as HTMLDivElement
 const statsList = document.getElementById('statsList') as HTMLUListElement;
 const videoStatsNotice = document.getElementById('videoStatsNotice') as HTMLParagraphElement;
 const videoStatsList = document.getElementById('videoStatsList') as HTMLUListElement;
-const { renderStatsOverview, renderStats, renderVideoStats } = statisticsView({ statsOverview, statsList, statsNotice, videoStatsList, videoStatsNotice });
+const videoPlayerFilter = document.getElementById('videoPlayerFilter') as HTMLSelectElement;
+const statsActionNotice = document.getElementById('statsActionNotice')!;
+const roomStatsList = document.getElementById('roomStatsList') as HTMLUListElement;
+const { renderStatsOverview, renderStats, renderVideoStats, renderRooms, resetEditing } = statisticsView({ statsOverview, statsList, statsNotice, videoStatsList, videoStatsNotice,
+    roomStatsList, roomStatsNotice: document.getElementById('roomStatsNotice')!, playerFilter: videoPlayerFilter,
+    selectCreator: id => { videoPlayerFilter.value = id; void loadStatistics(true); }, deleteItems: deleteSelectedStatistics });
 const hostNotice = document.getElementById('hostNotice') as HTMLParagraphElement;
 const lobbyPlayerList = document.getElementById('lobbyPlayerList') as HTMLUListElement;
 const startGameButton = document.getElementById('startGameButton') as HTMLButtonElement;
@@ -61,6 +72,9 @@ const loadingText = document.getElementById('loadingText') as HTMLParagraphEleme
 // Voting-Elemente
 const authorNotice = document.getElementById('authorNotice') as HTMLParagraphElement;
 const votingVideoPlayer = document.getElementById('votingVideoPlayer') as HTMLVideoElement;
+const finishPreviewButton = document.getElementById('finishPreviewButton') as HTMLButtonElement;
+const votingPlayback = videoPlayback({ video: votingVideoPlayer,
+    notice: document.getElementById('videoPlaybackNotice')!, retry: document.getElementById('retryVideoButton') as HTMLButtonElement });
 const votingActionBox = document.getElementById('votingActionBox') as HTMLDivElement;
 const votingWaitingBox = document.getElementById('votingWaitingBox') as HTMLDivElement;
 const votingStatusText = document.getElementById('votingStatusText') as HTMLParagraphElement;
@@ -95,6 +109,8 @@ let currentPhaseKey = '';
 let lobbyActionPending = false;
 let pendingRoomCreation: SocketPayload | null = null;
 let noticeTimeout: number | undefined;
+let currentVideoNumber = 0;
+let statisticsRequest = 0;
 
 function createRoomCode() {
     return createSessionId().replace(/-/g, '').slice(-4).toUpperCase();
@@ -136,6 +152,8 @@ function clearSession(preserveStored = false) {
 
 // --- SCREEN SWITCHER ---
 function showScreen(screenToShow: HTMLElement) {
+    document.body.classList.toggle('statistics-open', screenToShow === screenStats);
+    if (screenToShow !== screenStats) accounts.reset();
     if (screenToShow !== screenVoting) votingVideoPlayer.pause();
     if (screenToShow !== screenStats) videoStatsList.querySelectorAll('video').forEach(video => video.pause());
     [document.getElementById('screenStartup')!, document.getElementById('screenAuth')!, screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
@@ -303,11 +321,11 @@ socket.on('resumeFailed', () => {
     clearSession(); setLobbyPending(false);
     gameHeader.style.display = 'none';
     showScreen(screenLobby);
-    lobbyError.innerText = 'Deine vorige Sitzung ist nicht mehr verfuegbar.';
+    lobbyError.innerText = 'Deine vorige Sitzung ist nicht mehr verfügbar.';
 });
 socket.on('sessionReplaced', () => {
     clearSession(true); gameHeader.style.display = 'none'; showScreen(screenLobby);
-    lobbyError.innerText = 'Diese Sitzung wurde in einem anderen Tab geoeffnet.';
+    lobbyError.innerText = 'Diese Sitzung wurde in einem anderen Tab geöffnet.';
 });
 socket.on('disconnect', () => {
     extensionPending = false;
@@ -337,11 +355,8 @@ function showVotingState(data: { videoUrl?: string; authorId?: string; authorNam
     const entering = screenVoting.style.display === 'none';
     showScreen(screenVoting);
     const newVideo = votingVideoPlayer.getAttribute('src') !== data.videoUrl;
-    if (newVideo) votingVideoPlayer.src = data.videoUrl;
-    if (entering || newVideo) {
-        votingVideoPlayer.currentTime = 0;
-        votingVideoPlayer.play().catch(() => {});
-    }
+    if (entering || newVideo) votingPlayback.load(data.videoUrl, true);
+    finishPreviewButton.hidden = data.total !== 0;
 
     const isMe = Boolean(data.authorId) && isCurrentSocket(data.authorId || '');
 
@@ -349,7 +364,7 @@ function showVotingState(data: { videoUrl?: string; authorId?: string; authorNam
         authorNotice.innerText = isMe ? 'Das ist dein Video!' : `Video von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'none';
         votingWaitingBox.style.display = 'block';
-        votingStatusText.innerText = data.total === 0 ? 'Solo-Test: Vorschau, danach Ergebnis ohne Bewertung.' : `${data.hasVoted ? 'Bewertung gespeichert. ' : ''}Stimmen: ${data.voted || 0}/${data.total || 0}`;
+        votingStatusText.innerText = data.total === 0 ? 'Solo-Vorschau ohne Bewertung.' : `${data.hasVoted ? 'Bewertung gespeichert. ' : ''}Stimmen: ${data.voted || 0}/${data.total || 0}`;
     } else {
         authorNotice.innerText = `🎬 Video erstellt von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'block';
@@ -388,6 +403,7 @@ socket.on('roomDataUpdate', (data: {
     turnCounter.innerText = `${data.turnNumber || 1}/${data.turnCount || 1}`;
     if (currentHostId !== data.hostId || data.gameState !== 'GAME_OVER') extensionPending = false;
     currentHostId = data.hostId;
+    currentVideoNumber = data.videoNumber || data.currentRound;
 
     if (data.gameState === 'LOBBY') {
         const isHost = isCurrentSocket(data.hostId);
@@ -439,16 +455,13 @@ startGameButton.addEventListener('click', () => {
     socket.emit('startGame', { roomId: currentRoomId || displayRoomCode.innerText });
 });
 
-statsButton.addEventListener('click', async () => {
-    showScreen(screenStats);
-    statsNotice.innerText = 'Lade Statistiken...';
-    statsOverview.innerHTML = '';
-    statsList.innerHTML = '';
-    videoStatsNotice.innerText = '';
-    videoStatsList.innerHTML = '';
+async function loadStatistics(videosOnly = false) {
+    const requestId = ++statisticsRequest;
+    const creator = videoPlayerFilter.value;
+    screenStats.setAttribute('aria-busy', 'true');
 
     try {
-        const response = await fetch('/api/stats');
+        const response = await fetch(`/api/stats${creator ? `?player=${encodeURIComponent(creator)}` : ''}`, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
         if (!response.ok) throw new Error('Statistik-Request fehlgeschlagen');
 
         const data = await response.json() as {
@@ -456,25 +469,71 @@ statsButton.addEventListener('click', async () => {
             overview: StatsOverview;
             players: PlayerStats[];
             recentVideos: VideoStats[];
+            videoCreators?: VideoCreator[];
+            rooms?: RoomStats[];
             videoStorageMode: string;
             archive?: { usedBytes: number; maxBytes: number; videoCount: number };
         };
 
+        if (requestId !== statisticsRequest || screenStats.style.display === 'none') return;
         if (!data.databaseEnabled) {
-            statsNotice.innerText = 'Statistiken sind momentan nicht verfuegbar.';
+            statsNotice.innerText = 'Statistiken sind momentan nicht verfügbar.';
             return;
         }
 
-        renderStatsOverview(data.overview);
-        renderStats(data.players);
+        // Keep focused controls and the content above the filter in place.
+        if (!videosOnly) { renderStatsOverview(data.overview); renderStats(data.players, data.videoCreators); renderRooms(data.rooms || []); }
+        if (videoPlayerFilter.value !== creator) { void loadStatistics(true); return; }
+        const position = videoPlayerFilter.getBoundingClientRect().top;
+        if (videosOnly) screenStats.style.minHeight = `${screenStats.offsetHeight}px`;
         renderVideoStats(data.recentVideos, data.videoStorageMode);
+        if (videosOnly) window.scrollBy(0, videoPlayerFilter.getBoundingClientRect().top - position);
         document.getElementById('archiveUsage')!.innerText = data.archive ? `${data.archive.videoCount} archivierte Videos · ${(data.archive.usedBytes / 1024 / 1024).toFixed(1)} / ${Math.round(data.archive.maxBytes / 1024 / 1024)} MB` : '';
     } catch {
-        statsNotice.innerText = 'Statistiken konnten nicht geladen werden.';
-    }
+        if (requestId === statisticsRequest) { statsActionNotice.textContent = 'Statistiken konnten nicht geladen werden.'; statsActionNotice.hidden = false; }
+    } finally { if (requestId === statisticsRequest) screenStats.removeAttribute('aria-busy'); }
+}
+statsButton.addEventListener('click', () => {
+    videoPlayerFilter.value = ''; resetEditing(); screenStats.style.minHeight = ''; statsActionNotice.hidden = true;
+    showScreen(screenStats); void loadStatistics(); void accounts.load();
 });
+videoPlayerFilter.addEventListener('change', () => { void loadStatistics(true); });
+
+async function removeStatistic(url: string) {
+    const response = await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(30_000) });
+    if (response.status === 404) return;
+    const data = await response.json() as { error?: string; undoUntil?: number };
+    if (!response.ok) throw new Error(data.error || 'Der Eintrag konnte nicht gelöscht werden.');
+    return data;
+}
+
+async function deleteSelectedStatistics(urls: string[], kind: HistoryKind) {
+    const failed: string[] = [], reasons = new Set<string>();
+    const undo: { url: string; undoUntil: number }[] = [];
+    statsActionNotice.hidden = true;
+    for (const url of urls) {
+        try {
+            const result = await removeStatistic(url);
+            if (kind === 'videos' && result?.undoUntil) undo.push({ url, undoUntil: result.undoUntil });
+        }
+        catch (error) { failed.push(url); reasons.add(error instanceof Error ? error.message : 'Löschen fehlgeschlagen.'); }
+    }
+    undoVideos.remember(undo);
+    await loadStatistics();
+    if (failed.length) {
+        const items = kind === 'rooms' ? 'Räume' : 'Videos';
+        const item = kind === 'rooms' ? 'Raum' : 'Video';
+        const total = urls.length === 1 ? item : kind === 'rooms' ? 'Räumen' : 'Videos';
+        const remaining = failed.length === 1 ? `Der übrige ${item} bleibt ausgewählt.` : `Die übrigen ${items} bleiben ausgewählt.`;
+        statsActionNotice.textContent = `${urls.length - failed.length} von ${urls.length} ${total} gelöscht. ${[...reasons].join(' ')} ${remaining}`;
+        statsActionNotice.hidden = false;
+    }
+    return failed;
+}
 
 backToLobbyButton.addEventListener('click', () => {
+    ++statisticsRequest;
+    resetEditing();
     showScreen(screenLobby);
 });
 
@@ -532,8 +591,8 @@ customButton.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); imageInput.click(); }
 });
 
-votingVideoPlayer.addEventListener('error', () => {
-    if (votingVideoPlayer.getAttribute('src')) showRoomNotice('Das Video konnte nicht geladen werden. Der Video-Link ist eventuell abgelaufen.');
+finishPreviewButton.addEventListener('click', () => {
+    socket.emit('finishPreview', { roomId: currentRoomId, videoNumber: currentVideoNumber });
 });
 
 imageInput.addEventListener('change', (event: Event) => {

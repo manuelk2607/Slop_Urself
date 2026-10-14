@@ -66,10 +66,11 @@ test('reconnect changes the connection without changing persistence identity', (
     assert.equal(playerForConnection(r, 'socket-a'), undefined);
 });
 
-test('solo preview lasts ten seconds and final ties receive the same rank', () => {
-    const r = room(); r.players = [r.players[0]]; r.currentVotes = {}; r.soloFinishAt = 10_000;
-    assert.equal(finishVoting(r, 9_999), false);
-    assert.equal(finishVoting(r, 10_000), true);
+test('solo preview waits for explicit confirmation and final ties receive the same rank', () => {
+    const r = room(); r.players = [r.players[0]]; r.currentVotes = {};
+    assert.equal(finishVoting(r), false);
+    assert.equal(finishVoting(r, true), true);
+    assert.equal(finishVoting(r, true), false);
     const tied = room(); tied.players[0].score = 5; tied.players[1].score = 5;
     assert.deepEqual(finalStandings(tied).map(p => p.finalRank), [1, 1, 3]);
 });

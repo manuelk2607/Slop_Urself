@@ -3,7 +3,6 @@ import type { AiJob } from '../ai/generation';
 
 export type GameState = 'LOBBY' | 'IDLE' | 'GENERATING' | 'VOTING' | 'RESULTS' | 'GAME_OVER';
 export const DISCONNECT_GRACE_MS = 15_000;
-export const SOLO_PREVIEW_MS = 10_000;
 
 export interface Player {
     id: string;
@@ -35,7 +34,6 @@ export interface Room {
     generationId?: string;
     generationJob?: AiJob;
     generationRetryAt?: number;
-    soloFinishAt?: number;
     lastResult?: { authorName: string; roundPoints: number };
 }
 
@@ -53,8 +51,8 @@ export function startRounds(room: Room) {
 }
 
 export function extendRound(room: Room) {
-    if (room.state !== 'GAME_OVER' || !room.players.length || room.players.some(p => !p.connected)) throw new Error('Die Partie kann gerade nicht verlaengert werden.');
-    if (!Number.isSafeInteger(room.maxRounds + 1)) throw new Error('Ungueltige Rundenzahl.');
+    if (room.state !== 'GAME_OVER' || !room.players.length || room.players.some(p => !p.connected)) throw new Error('Die Partie kann gerade nicht verlängert werden.');
+    if (!Number.isSafeInteger(room.maxRounds + 1)) throw new Error('Ungültige Rundenzahl.');
     const videoNumber = room.videoNumber || room.currentRound;
     room.currentRound = ++room.maxRounds;
     room.videoNumber = videoNumber + 1;
@@ -68,7 +66,6 @@ export function extendRound(room: Room) {
     room.generationId = undefined;
     room.generationJob = undefined;
     room.generationRetryAt = undefined;
-    room.soloFinishAt = undefined;
     room.extensionQuota = undefined;
     room.state = 'IDLE';
 }
@@ -167,27 +164,25 @@ export function removePlayer(room: Room, playerId: string) {
         room.generationId = undefined;
         room.generationJob = undefined;
         room.generationRetryAt = undefined;
-        room.soloFinishAt = undefined;
         if (room.pendingCreators) selectNextCreator(room);
     }
     return skippedGenerations;
 }
 
 // Complete synchronously before any persistence await, so a second vote cannot score twice.
-export function finishVoting(room: Room, now = Date.now()) {
+export function finishVoting(room: Room, confirmedSolo = false) {
     if (room.state !== 'VOTING') return false;
     const creator = activeCreator(room);
     if (!creator) return false;
     const voters = room.players.filter(p => p.id !== creator.id);
     if (voters.some(p => room.currentVotes[p.id] === undefined)) return false;
-    if (!voters.length && room.soloFinishAt && now < room.soloFinishAt) return false;
+    if (!voters.length && !confirmedSolo) return false;
     const points = Object.values(room.currentVotes).reduce((sum, value) => sum + value, 0);
     creator.score += points;
     room.lastResult = { authorName: creator.name, roundPoints: points };
     if (room.pendingCreators) room.pendingCreators = room.pendingCreators.filter(id => id !== creator.id);
     room.state = room.currentRound >= room.maxRounds && !room.pendingCreators?.length ? 'GAME_OVER' : 'RESULTS';
     if (room.state === 'GAME_OVER') room.extensionQuota = undefined;
-    room.soloFinishAt = undefined;
     return true;
 }
 

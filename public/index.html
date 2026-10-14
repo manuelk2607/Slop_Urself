@@ -66,14 +66,55 @@
     <section id="screenStats" class="game-screen" style="display: none;">
         <h2>Statistiken</h2>
         <p id="statsNotice" class="subtitle"></p>
+        <p id="statsActionNotice" class="error-msg" role="alert" hidden></p>
         <div id="statsOverview" class="stats-overview"></div>
         <h3>Spieler</h3>
         <ul id="statsList" class="scoreboard-list"></ul>
-        <h3>Video-Historie</h3>
+        <div class="stats-section-heading">
+            <h3>Video-Historie</h3>
+            <button id="editVideosButton" class="btn-muted" type="button" aria-pressed="false">Bearbeiten</button>
+        </div>
+        <label class="field-label" for="videoPlayerFilter">Erstellt von</label>
+        <select id="videoPlayerFilter"><option value="">Alle Spieler</option></select>
         <p id="videoStatsNotice" class="hint-text"></p>
         <p id="archiveUsage" class="hint-text"></p>
+        <div id="videoEditToolbar" class="history-edit-toolbar" hidden>
+            <label class="history-select-label"><input id="selectAllVideos" type="checkbox"> Alle angezeigten auswählen</label>
+            <span id="videoSelectionCount" role="status" aria-live="polite">0 ausgewählt</span>
+            <button id="deleteSelectedVideos" class="stats-delete-button" type="button" disabled>Auswahl löschen</button>
+        </div>
         <ul id="videoStatsList" class="video-stats-list"></ul>
-        <button id="backToLobbyButton" class="btn-secondary" type="button">Zurueck</button>
+        <div class="stats-section-heading">
+            <h3>Räume</h3>
+            <button id="editRoomsButton" class="btn-muted" type="button" aria-pressed="false">Bearbeiten</button>
+        </div>
+        <p id="roomStatsNotice" class="hint-text"></p>
+        <div id="roomEditToolbar" class="history-edit-toolbar" hidden>
+            <label class="history-select-label"><input id="selectAllRooms" type="checkbox"> Alle angezeigten auswählen</label>
+            <span id="roomSelectionCount" role="status" aria-live="polite">0 ausgewählt</span>
+            <button id="deleteSelectedRooms" class="stats-delete-button" type="button" disabled>Auswahl löschen</button>
+        </div>
+        <ul id="roomStatsList" class="scoreboard-list"></ul>
+        <section id="accountManagement" hidden>
+            <div class="stats-section-heading">
+                <h3>Benutzerverwaltung</h3>
+                <button id="lockAccountsButton" class="btn-muted" type="button" hidden>Sperren</button>
+            </div>
+            <form id="adminUnlockForm" hidden>
+                <label class="field-label" for="adminKey">Verwaltungsschlüssel</label>
+                <div class="join-group">
+                    <input id="adminKey" type="password" autocomplete="off" required maxlength="200">
+                    <button class="btn-muted" type="submit">Freischalten</button>
+                </div>
+            </form>
+            <p id="accountManagementNotice" class="error-msg" role="alert" hidden></p>
+            <ul id="accountManagementList" class="scoreboard-list"></ul>
+        </section>
+        <div id="videoUndoNotice" class="history-undo" role="status" hidden>
+            <span id="videoUndoLabel"></span>
+            <button id="undoVideoDeletion" class="btn-secondary" type="button">Rückgängig</button>
+        </div>
+        <button id="backToLobbyButton" class="btn-secondary" type="button">Zurück</button>
     </section>
 
     <section id="screenRoomLobby" class="game-screen" style="display: none;">
@@ -84,7 +125,7 @@
 
         <label class="field-label" for="roomRoundCountInput">Runden pro Spieler</label>
         <input type="number" id="roomRoundCountInput" min="1" value="1" disabled>
-        <p id="roomRoundLimitHint" class="hint-text" role="status">Rundenlimit wird geprueft.</p>
+        <p id="roomRoundLimitHint" class="hint-text" role="status">Rundenlimit wird geprüft.</p>
 
         <button id="startGameButton" class="btn-primary">Spiel starten</button>
     </section>
@@ -135,6 +176,9 @@
                 Dein Browser unterstützt keine Videos.
             </video>
         </div>
+        <p id="videoPlaybackNotice" class="error-msg" role="alert" hidden></p>
+        <button id="retryVideoButton" class="btn-muted" type="button" hidden>Video erneut laden</button>
+        <button id="finishPreviewButton" class="btn-secondary" type="button" hidden>Ergebnis ansehen</button>
 
         <div id="votingActionBox">
             <h3>Bewerte das Meisterwerk:</h3>
@@ -177,7 +221,7 @@
 
         <ul id="finalScoreList" class="scoreboard-list"></ul>
 
-        <p id="extensionQuotaHint" class="hint-text" role="status">Rundenlimit wird geprueft.</p>
+        <p id="extensionQuotaHint" class="hint-text" role="status">Rundenlimit wird geprüft.</p>
         <button id="extendGameButton" class="btn-secondary" type="button" disabled>Zusatzrunde spielen</button>
         <button id="restartButton" class="btn-primary">Neues Spiel starten</button>
     </section>

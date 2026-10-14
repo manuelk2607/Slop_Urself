@@ -1,12 +1,15 @@
-import { authDisabled, requestAccount, verifyAccountToken } from '../../auth/session';
+import { authDisabled, requestAccount, verifyAccountToken, accountIsCurrent } from '../../auth/session';
+import { cloudflareAuth } from './profiles';
 import { getDatabase } from '../../database/neon';
 import { roundInput } from '../../game/persistence';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, validateImage } from '../../ai/generation';
 import { logAiEvent } from '../../ai/telemetry';
+import { archiveEnabled } from '../../storage/archive';
 import { takeRateLimit, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
 import { type QuotaCapacity } from '../../ai/quota';
-import { type Room as RoomState, type Player, activeCreator, playerForConnection, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, SOLO_PREVIEW_MS, startRounds, advanceTurn, remainingVideos, extendRound } from '../../game/rules';
+import { type Room as RoomState, type Player, activeCreator, playerForConnection, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, extendRound } from '../../game/rules';
 import { service } from './runtime';
+import { deleteStoredHistory, historyVideo, HistoryError, historyJson, type HistoryDeletion } from '../statistics';
 import type { DurableObjectState, CloudflareWebSocket, ConnectionMeta, Env, PendingRoomWrite } from './types';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
@@ -49,7 +52,7 @@ export class RoomDurableObject {
         });
     }
 
-    private enqueue(action: () => Promise<void>) {
+    private enqueue<T>(action: () => Promise<T>) {
         const next = this.operations.then(action);
         this.operations = next.catch(error => {
             console.error('[Room] Operation failed', error instanceof Error ? error.message : 'Unknown error');
@@ -58,11 +61,38 @@ export class RoomDurableObject {
     }
 
     async fetch(request: Request): Promise<Response> {
+        if (request.url === 'https://internal/statistics/delete' && request.method === 'POST') {
+            return this.enqueue(async () => {
+                const command = await request.json() as HistoryDeletion;
+                if (!sanitizeRoomId(command.code) || (this.room && this.room.code !== command.code)) throw new HistoryError('Ungültiger Raum.', 400);
+                const database = getDatabase(this.env.DATABASE_URL);
+                const video = await historyVideo(database, command);
+                const needsRoom = !video?.roomDeleted && !command.restore;
+                if (needsRoom) {
+                    if ((this.room && this.room.state !== 'GAME_OVER') || this.activeGenerations.size || Object.keys(this.aiJobs).length) throw new HistoryError('Der Raum wird noch gespielt. Beende die Partie zuerst.', 409);
+                    await this.flushPendingRounds();
+                    if (this.pendingRounds.length) throw new HistoryError('Die Partie wird noch gespeichert. Bitte versuche es gleich erneut.');
+                }
+                const result = video && !command.restore
+                    ? await service(this.env, '/video-trash/delete', { command })
+                    : await deleteStoredHistory(database, command, time => service(this.env, '/video-trash/schedule', { time }).then(() => {}));
+                if (!command.roundNumber && !command.videoId) {
+                    this.room = null;
+                    await this.saveRoom();
+                    for (const socket of this.sockets.keys()) { this.send(socket, 'leftRoom'); socket.close(1000, 'Room deleted'); }
+                    this.sockets.clear();
+                } else if (!video?.roomDeleted && !command.restore && this.room && (this.room.videoNumber || this.room.currentRound) === command.roundNumber) {
+                    this.room.currentVideoUrl = '';
+                    await this.saveRoom();
+                }
+                return historyJson({ ok: true, ...result });
+            }).catch(error => historyJson({ error: (error as Error).message }, error instanceof HistoryError ? error.status : 503));
+        }
         if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return new Response('Expected WebSocket upgrade', { status: 426 });
         this.roomCode = sanitizeRoomId(new URL(request.url).pathname.replace('/ws/', ''));
         const pair = new WebSocketPair();
         const socketId = crypto.randomUUID();
-        const meta: ConnectionMeta = { socketId, account: await requestAccount(request, this.env) };
+        const meta: ConnectionMeta = { socketId, account: await requestAccount(request, cloudflareAuth(this.env)) };
         this.state.acceptWebSocket(pair[1]);
         pair[1].serializeAttachment(meta);
         this.sockets.set(pair[1], meta);
@@ -73,19 +103,25 @@ export class RoomDurableObject {
     async webSocketMessage(socket: CloudflareWebSocket, data: string | ArrayBuffer) {
         await this.enqueue(async () => {
             try {
-                if (typeof data !== 'string' || data.length > 12 * 1024 * 1024) throw new Error('Ungueltige Nachricht oder Bild zu gross.');
+                if (typeof data !== 'string' || data.length > 12 * 1024 * 1024) throw new Error('Ungültige Nachricht oder Bild zu groß.');
                 const message = JSON.parse(data) as { type?: string; payload?: Record<string, unknown> };
-                if (!message || typeof message.type !== 'string' || (message.payload && (typeof message.payload !== 'object' || Array.isArray(message.payload)))) throw new Error('Ungueltige Nachricht.');
+                if (!message || typeof message.type !== 'string' || (message.payload && (typeof message.payload !== 'object' || Array.isArray(message.payload)))) throw new Error('Ungültige Nachricht.');
                 const payload = message.payload || {};
                 const meta = this.sockets.get(socket);
                 if (!meta) return;
                 if (takeRateLimit(this.messageBuckets, meta.account?.id || meta.playerId || meta.socketId, MESSAGE_RATE)) throw new Error(RATE_MESSAGE);
                 if (message.type === 'refreshAuth') {
-                    const account = await verifyAccountToken(payload.token, this.env);
+                    const account = await verifyAccountToken(payload.token, cloudflareAuth(this.env));
                     if (meta.account?.id !== account.id) throw new Error('Bitte verbinde dich erneut.');
                     meta.account = account; socket.serializeAttachment(meta); return;
                 }
                 if (!authDisabled(this.env) && (!meta.account || meta.account.expiresAt < Date.now())) { this.send(socket, 'authExpired'); return; }
+                if (!authDisabled(this.env) && !await accountIsCurrent(meta.account!, cloudflareAuth(this.env))) {
+                    this.send(socket, 'authExpired');
+                    const player = this.room && playerForConnection(this.room, meta.socketId);
+                    if (player) await this.leaveRoom(socket, player); else socket.close(4003, 'Account deleted');
+                    return;
+                }
                 if (message.type === 'createRoom') await this.createRoom(socket, meta, payload);
                 else if (message.type === 'joinRoom') await this.joinRoom(socket, meta, payload);
                 else if (message.type === 'resumeRoom') await this.resumeRoom(socket, meta, payload);
@@ -98,6 +134,8 @@ export class RoomDurableObject {
                     else if (message.type === 'startGame') await this.startGame(player);
                     else if (message.type === 'sendImage') await this.sendImage(player, payload);
                     else if (message.type === 'submitVote') await this.submitVote(player, payload);
+                    else if (message.type === 'finishPreview' && this.room?.players.length === 1 && activeCreator(this.room)?.id === player.id
+                        && Number(payload.videoNumber) === (this.room.videoNumber || this.room.currentRound)) await this.checkVotingComplete(true);
                     else if (message.type === 'startNextRound') await this.startNextRound(player);
                     else if (message.type === 'extendGame') await this.extendGame(player, payload);
                 }
@@ -205,7 +243,7 @@ export class RoomDurableObject {
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
         if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
         await this.refreshLobbyQuota();
-        if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht fuer eine vollstaendige Runde mit allen Spielern.');
+        if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
         await service(this.env, '/quota/reserve', { code: room.code, rounds: room.maxRounds, players: room.players.length });
         startRounds(room);
         await this.saveRoom();
@@ -230,7 +268,7 @@ export class RoomDurableObject {
         const room = this.room!;
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
         await this.refreshLobbyQuota();
-        if (!room.quota?.aiRoundLimit) throw new Error('Das KI-Kontingent reicht derzeit nicht fuer eine vollstaendige Runde mit allen Spielern.');
+        if (!room.quota?.aiRoundLimit) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
         room.maxRounds = maxRounds(payload.rounds, room.quota.aiRoundLimit);
         await this.saveRoom();
         this.broadcastRoomUpdate();
@@ -243,6 +281,7 @@ export class RoomDurableObject {
         const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim().slice(0, 150) : '';
         if (!prompt) throw new Error('Bitte gib einen Prompt ein.');
         validateImage(payload.imageBase64);
+        if (this.env.AI_PROVIDER !== 'mock' && !archiveEnabled(this.env)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
         const generationId = crypto.randomUUID();
         await service(this.env, '/quota/begin', { code: room.code, generations: remainingVideos(room), jobId: generationId });
         room.state = 'GENERATING';
@@ -280,14 +319,14 @@ export class RoomDurableObject {
         const work = generation
         .then(async videoUrl => {
             if (this.room !== room || room.generationId !== generationId) return videoUrl;
-            try { return (await service(this.env, '/archive', { url: videoUrl })).url as string; }
-            catch { this.broadcast('roomNotice', 'Das Video kann gerade nicht archiviert werden. Der temporaere Link bleibt abspielbar.'); return videoUrl; }
+            if (videoUrl === '/assets/mock-video.mp4') return videoUrl;
+            progress('Video wird gespeichert...');
+            return (await service(this.env, '/archive', { url: videoUrl })).url as string;
         }).then(videoUrl => this.enqueue(async () => {
             await this.releaseGenerationQuota(room.code, generationId);
             if (this.room !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
             room.currentVideoUrl = videoUrl;
             room.state = 'VOTING';
-            if (room.players.length === 1) room.soloFinishAt = Date.now() + SOLO_PREVIEW_MS;
             await this.saveRoom();
             this.broadcastRoomUpdate();
             await this.scheduleAlarm();
@@ -306,7 +345,7 @@ export class RoomDurableObject {
                 room.generationJob = error.job;
                 room.generationRetryAt = Date.now() + AI_RETRY_MS;
                 await this.saveRoom();
-                this.broadcast('generationProgress', { step: 'Videoerstellung laeuft weiter...' });
+                this.broadcast('generationProgress', { step: 'Videoerstellung läuft weiter...' });
                 return;
             }
             room.state = 'IDLE';
@@ -399,9 +438,9 @@ export class RoomDurableObject {
         await this.flushPendingRounds();
     }
 
-    private async checkVotingComplete() {
+    private async checkVotingComplete(confirmedSolo = false) {
         const room = this.room;
-        if (!room || !finishVoting(room)) return;
+        if (!room || !finishVoting(room, confirmedSolo)) return;
         if (room.state === 'GAME_OVER') await service(this.env, '/quota/release', { code: room.code });
         this.pendingRounds.push(structuredClone(room));
         await this.state.storage.put('pendingRounds', this.pendingRounds);
@@ -500,7 +539,6 @@ export class RoomDurableObject {
 
     private async scheduleAlarm() {
         const deadlines = this.room?.players.filter(p => !p.connected && p.disconnectedAt).map(p => p.disconnectedAt! + DISCONNECT_GRACE_MS) || [];
-        if (this.room?.soloFinishAt) deadlines.push(this.room.soloFinishAt);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
         if (this.quotaReleases.length) deadlines.push(Date.now() + 15_000);
         for (const [jobId, entry] of Object.entries(this.aiJobs)) {

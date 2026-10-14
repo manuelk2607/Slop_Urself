@@ -6,10 +6,16 @@ Messages are JSON objects with type and optional payload.
 ## Client messages
 
 createRoom, joinRoom and resumeRoom establish membership. Subsequent commands
-leaveRoom, refreshQuota, setRoundCount, startGame, sendImage, submitVote,
+leaveRoom, refreshQuota, setRoundCount, startGame, sendImage, submitVote, finishPreview,
 startNextRound and extendGame require that membership. Only the host changes the lobby's
 round selection (setRoundCount payload.rounds) or starts games/turns;
 only the current creator uploads; each other player votes once per video.
+In a one-player room, finishPreview requires payload.videoNumber matching the
+current video and explicit confirmation by the creator. A solo preview has no
+automatic completion timer and stays open through reconnects and reloads.
+Real generation requires configured video storage. A completed AI result is
+archived before publishing VOTING; archival failure never publishes a temporary
+external URL as a successfully prepared game video.
 At GAME_OVER, extendGame requires payload.completedVideo matching the completed
 videoNumber (or currentRound for legacy games). One complete additional player
 cycle is reserved using fresh shared quota. Replays and duplicate clicks cannot

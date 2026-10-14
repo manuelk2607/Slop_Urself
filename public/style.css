@@ -509,11 +509,176 @@ input::placeholder {
     object-fit: cover;
 }
 
+.video-stat-media {
+    min-width: 0;
+}
+
+.video-stat-media .error-msg {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.video-stat-media [hidden] {
+    display: none;
+}
+
 .video-stat-meta {
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+}
+
+#videoPlayerFilter {
+    width: 100%;
+    min-height: 42px;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border: 1px solid #57606f;
+    border-radius: 6px;
+    background: #2f3542;
+    color: #f1f2f6;
+    font: inherit;
+}
+
+.stats-delete-button {
+    width: auto;
+    min-height: 36px;
+    padding: 6px 10px;
+    border: 1px solid #80505a;
+    background: transparent;
+    color: #ff9aa5;
+    font-size: 0.85rem;
+    align-self: start;
+}
+
+.stats-delete-button:hover {
+    background: #422930;
+}
+
+.player-video-filter {
+    padding: 0;
+    background: transparent;
+    text-align: left;
+    border-radius: 0;
+}
+
+.player-video-filter:hover {
+    color: #2ed573;
+}
+
+.room-stat-item {
+    align-items: start;
+}
+
+body.statistics-open {
+    align-items: flex-start;
+}
+
+#screenStats [hidden] {
+    display: none;
+}
+
+.stats-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 22px;
+}
+
+.stats-section-heading h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.stats-section-heading button {
+    width: auto;
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.history-edit-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 8px 0;
+    border-bottom: 1px solid #57606f;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+.history-undo {
+    position: fixed;
+    z-index: 10;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(560px, calc(100% - 32px));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #2ed573;
+    border-radius: 8px;
+    background: #1e222d;
+    box-shadow: 0 4px 16px #0008;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+.history-undo button {
+    width: auto;
+    min-height: 38px;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+}
+
+#screenStats:has(.history-undo:not([hidden])) {
+    padding-bottom: 76px;
+}
+
+.history-select-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #dfe4ea;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.history-select-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+    accent-color: #2ed573;
+}
+
+.video-stat-item:has(.video-selection input:checked),
+.room-stat-item:has(.room-selection input:checked) {
+    border-color: #2ed573;
+}
+
+.account-management-item {
+    gap: 12px;
+    flex-wrap: wrap;
+    text-align: left;
+}
+
+.account-management-item strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.account-management-item .stats-delete-button {
+    margin-left: auto;
 }
 
 .video-stat-meta strong {

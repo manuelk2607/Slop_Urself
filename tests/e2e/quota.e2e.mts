@@ -10,7 +10,7 @@ const server = spawn(process.execPath, ['--import', 'tsx', 'tests/support/quota-
 });
 const exited = new Promise<void>(resolve => server.once('exit', () => resolve()));
 const ready = new Promise<void>((resolve, reject) => {
-    server.stdout.on('data', data => { if (String(data).includes('Server laeuft')) resolve(); });
+    server.stdout.on('data', data => { if (String(data).includes('Server läuft')) resolve(); });
     server.once('error', reject);
     server.once('exit', code => reject(new Error(`Test server exited: ${code}`)));
 });

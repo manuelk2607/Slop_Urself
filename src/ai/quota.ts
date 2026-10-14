@@ -32,11 +32,11 @@ export async function fetchGpuQuota(config: QuotaConfig): Promise<GpuQuota> {
     const response = await fetch('https://huggingface.co/api/spaces/zero-gpu/quota', {
         headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(10_000)
     });
-    if (!response.ok) throw new Error(response.status === 403 ? 'HF_TOKEN benoetigt die Berechtigung zum Lesen des Kontingents.' : 'KI-Kontingent momentan nicht erreichbar.');
+    if (!response.ok) throw new Error(response.status === 403 ? 'HF_TOKEN benötigt die Berechtigung zum Lesen des Kontingents.' : 'KI-Kontingent momentan nicht erreichbar.');
     const quota = await response.json() as GpuQuota;
     if (!Number.isFinite(quota.current) || quota.current < 0 || !Number.isFinite(quota.base) || quota.base < 0 ||
         (quota.runs && (!Number.isInteger(quota.runs.remaining) || quota.runs.remaining < 0)) ||
-        (quota.resetsAt !== null && (typeof quota.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.resetsAt))))) throw new Error('Ungueltiges KI-Kontingent.');
+        (quota.resetsAt !== null && (typeof quota.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.resetsAt))))) throw new Error('Ungültiges KI-Kontingent.');
     return quota;
 }
 export const requiredGpuSeconds = (duration: number) => providerGpuSeconds('wan22', { LTX_DURATION: String(duration) });
@@ -84,7 +84,7 @@ export class QuotaBudget {
             const reserved = Object.values(reservations).reduce((sum, entry) => sum + entry.rounds, 0);
             const providers = providerBudgets(this.config);
             const cheapest = [...providers].sort((a, b) => a.gpuSeconds - b.gpuSeconds)[0];
-            if (!cheapest) throw new Error('Kein konfigurierter KI-Provider unterstuetzt Videos mit mindestens 5 Sekunden.');
+            if (!cheapest) throw new Error('Kein konfigurierter KI-Provider unterstützt Videos mit mindestens 5 Sekunden.');
             const availableGenerations = freeGenerations(quota, reservations, cheapest.gpuSeconds);
             return { aiRoundLimit: roundsForPlayers(availableGenerations, players), playerCount: players, availableGenerations, quotaMode: 'live', remainingGpuSeconds: Math.floor(quota.current), reservedRounds: reserved, resetsAt: quota.resetsAt, gpuSecondsPerVideo: cheapest.gpuSeconds, gpuSecondsPerRound: cheapest.gpuSeconds * players, providers, budgetProvider: cheapest.name, sharedQuota: true };
         } catch (error) {
@@ -95,12 +95,12 @@ export class QuotaBudget {
         this.display = undefined;
         players = playerCount(players);
         const generations = rounds * players;
-        if (!Number.isSafeInteger(rounds) || rounds < 1 || !Number.isSafeInteger(generations)) throw new Error('Ungueltige Rundenzahl.');
+        if (!Number.isSafeInteger(rounds) || rounds < 1 || !Number.isSafeInteger(generations)) throw new Error('Ungültige Rundenzahl.');
         if (this.config.AI_PROVIDER === 'mock') return;
         const { quota, reservations } = await this.state();
         delete reservations[code];
         const seconds = secondsPerRound(this.config);
-        if (!Number.isFinite(seconds) || generations > freeGenerations(quota, reservations, seconds)) throw new Error(`Das kostenlose KI-Kontingent reicht nicht fuer ${rounds} Runden mit ${players} Spielern (${generations} Videos). Bitte weniger Runden waehlen.`);
+        if (!Number.isFinite(seconds) || generations > freeGenerations(quota, reservations, seconds)) throw new Error(`Das kostenlose KI-Kontingent reicht nicht für ${rounds} Runden mit ${players} Spielern (${generations} Videos). Bitte weniger Runden wählen.`);
         reservations[code] = { rounds: generations, active: 0, expiresAt: Date.now() + 2 * 60 * 60_000, reset: quota.resetsAt, gpuSecondsPerVideo: seconds };
         await this.storage.put('reservations', reservations);
     }
@@ -126,7 +126,7 @@ export class QuotaBudget {
         const { quota, reservations } = await this.state();
         const entry = reservations[code];
         const seconds = entry?.active ? Math.max(reservationCost(entry), secondsPerRound(this.config)) : secondsPerRound(this.config);
-        if (!Number.isFinite(seconds) || freeGenerations(quota, reservations, seconds) < players) throw new Error('Das kostenlose KI-Kontingent reicht nicht fuer eine Zusatzrunde mit allen Spielern.');
+        if (!Number.isFinite(seconds) || freeGenerations(quota, reservations, seconds) < players) throw new Error('Das kostenlose KI-Kontingent reicht nicht für eine Zusatzrunde mit allen Spielern.');
         // Preserve abandoned jobs still using GPU time while adding one complete cycle.
         reservations[code] = { ...entry, rounds: (entry?.rounds || 0) + players, active: entry?.active || 0,
             gpuSecondsPerVideo: seconds, expiresAt: Date.now() + 2 * 60 * 60_000, reset: quota.resetsAt };
@@ -141,7 +141,7 @@ export class QuotaBudget {
     }
     async drop(code: string, generations: number) {
         this.display = undefined;
-        if (!Number.isSafeInteger(generations) || generations < 0) throw new Error('Ungueltiges KI-Budget.');
+        if (!Number.isSafeInteger(generations) || generations < 0) throw new Error('Ungültiges KI-Budget.');
         const reservations = await this.storage.get<Record<string, Reservation>>('reservations') || {};
         const entry = reservations[code];
         if (entry) entry.rounds = Math.max(entry.active, entry.rounds - generations);
@@ -149,15 +149,15 @@ export class QuotaBudget {
     }
     async begin(code: string, requiredGenerations = 1, jobId: string = crypto.randomUUID()) {
         this.display = undefined;
-        if (!Number.isSafeInteger(requiredGenerations) || requiredGenerations < 1) throw new Error('Ungueltiges KI-Budget.');
+        if (!Number.isSafeInteger(requiredGenerations) || requiredGenerations < 1) throw new Error('Ungültiges KI-Budget.');
         if (this.config.AI_PROVIDER === 'mock') return;
         const { quota, reservations } = await this.state();
         const entry = reservations[code];
         if (!entry) throw new Error('KI-Budget abgelaufen. Bitte starte ein neues Spiel.');
-        if (entry.activeJobs?.[jobId]) throw new Error('Dieser KI-Versuch laeuft bereits.');
+        if (entry.activeJobs?.[jobId]) throw new Error('Dieser KI-Versuch läuft bereits.');
         const missing = Math.max(0, requiredGenerations + entry.active - entry.rounds);
         if (missing) {
-            if (freeGenerations(quota, reservations, reservationCost(entry)) < missing) throw new Error('Kein kostenloses KI-Budget fuer einen erneuten Versuch vorhanden, ohne spaetere Videos zu gefaehrden.');
+            if (freeGenerations(quota, reservations, reservationCost(entry)) < missing) throw new Error('Kein kostenloses KI-Budget für einen erneuten Versuch vorhanden, ohne spätere Videos zu gefährden.');
             entry.rounds += missing;
         }
         entry.active++;
@@ -176,7 +176,7 @@ export class QuotaBudget {
         const protectedRounds = Object.entries(reservations).reduce((sum, [key, entry]) => sum + Math.max(0, entry.rounds - (key === code ? 1 : 0)), 0);
         const ownCost = current.activeJobs?.[attempt] || reservationCost(current);
         const protectedSeconds = Object.entries(reservations).reduce((sum, [key, entry]) => sum + reservationSeconds(entry) - (key === code ? ownCost : 0), 0);
-        if (quota.current - protectedSeconds < seconds || (quota.runs && quota.runs.remaining - protectedRounds < 1)) throw new Error('Das kostenlose Kontingent reicht nicht fuer diesen KI-Versuch.');
+        if (quota.current - protectedSeconds < seconds || (quota.runs && quota.runs.remaining - protectedRounds < 1)) throw new Error('Das kostenlose Kontingent reicht nicht für diesen KI-Versuch.');
         // Hold quality upgrades until completion, including before HF charges queued jobs.
         current.activeJobs = { ...current.activeJobs, [attempt]: Math.max(ownCost, seconds) };
         await this.storage.put('reservations', reservations);

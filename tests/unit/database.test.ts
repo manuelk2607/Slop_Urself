@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { GameRepository } from '../../src/database/repository';
 import { DATABASE_SCHEMA } from '../../src/database/schema';
 import { emptyStats, type DatabaseDriver, type SqlStatement } from '../../src/database/types';
-import { OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL } from '../../src/database/statistics';
+import { OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL, VIDEO_CREATORS_SQL, ROOMS_SQL } from '../../src/database/statistics';
 import { getDatabase } from '../../src/database/neon';
 
 function fixture() {
@@ -34,27 +34,40 @@ test('round writes batch players and votes in one parameterized transaction rega
         votes: players.slice(1).map(p => ({ voterSocketId: p.id, points: 1 })),
         standings: players.map((p, i) => ({ playerSocketId: p.id, name: p.name, score: p.score, finalRank: i + 1 })) });
     const write = f.transactions[1];
-    assert.equal(write.length, 3);
+    assert.equal(write.length, 4);
     assert.equal(JSON.parse(write[0].values![1] as string).length, 10);
     assert.equal(JSON.parse(write[0].values![1] as string)[0].account, 'account-0');
     assert.equal(JSON.parse(write[0].values![1] as string)[0].rank, 1);
     assert.equal(JSON.parse(write[1].values![6] as string).length, 9);
     assert.ok(write.every(query => !query.text.includes(prompt)));
     assert.equal(write[1].values![3], prompt);
-    assert.deepEqual(write[2].values, ['TEST', 'player-0', 'Friend 0']);
+    assert.match(write[2].text, /insert into video_history/);
+    assert.deepEqual(write[2].values, ['TEST', 3]);
+    assert.deepEqual(write[3].values, ['TEST', 'player-0', 'Friend 0']);
 });
 
 test('shared statistics and score batches use the same bounded queries on both runtimes', async () => {
     const f = fixture();
     assert.deepEqual(await f.repository.getStats(), emptyStats());
-    assert.deepEqual(f.queries.map(q => q.text), [OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL]);
+    assert.deepEqual(f.queries.map(q => q.text), [OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL, VIDEO_CREATORS_SQL, ROOMS_SQL]);
     assert.match(PLAYERS_SQL, /limit 50/); assert.match(VIDEOS_SQL, /limit 12/);
     await f.repository.saveScores('TEST', [{ id: 'a', accountId: 'account', name: 'Friend', score: 5 }, { id: 'b', name: 'Other', score: 3 }], 'a');
-    assert.equal(f.queries.length, 4);
-    assert.deepEqual(JSON.parse(f.queries[3].values![1] as string), [
+    assert.equal(f.queries.length, 6);
+    assert.deepEqual(JSON.parse(f.queries[5].values![1] as string), [
         { id: 'a', account: 'account', name: 'Friend', score: 5, host: true },
         { id: 'b', account: null, name: 'Other', score: 3, host: false }
     ]);
+});
+
+test('video filtering uses stable account identities and parameterized creator IDs', async () => {
+    const f = fixture();
+    const id = "account'; delete from rooms; --";
+    await f.repository.getStats(id);
+    const videoQuery = f.queries.find(query => query.text === VIDEOS_SQL)!;
+    assert.deepEqual(videoQuery.values, [id]);
+    assert.equal(videoQuery.text.includes(id), false);
+    assert.match(PLAYERS_SQL, /pt.player_key as id/);
+    assert.match(VIDEOS_SQL, /as "creatorId"/);
 });
 
 test('cached Neon repositories get a fresh timeout for every request and transaction', async () => {

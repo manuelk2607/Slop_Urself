@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { RoomDurableObject, ServiceDurableObject, Env } from '../../src/server/cloudflare/worker';
 import { AI_JOB_MAX_AGE_MS, type AiJob } from '../../src/ai/generation';
 import { Room } from '../../src/game/rules';
+import { getDatabase } from '../../src/database/neon';
+import { DATABASE_SCHEMA } from '../../src/database/schema';
 
 class TestSocket {
     messages: { type: string; payload: any }[] = [];
@@ -59,6 +61,104 @@ test('Worker serializes votes and ignores duplicates; outsiders cannot vote or r
     assert.equal(f.outsider.messages.some(m => m.type === 'roomDataUpdate'), false);
     assert.equal(f.outsider.messages[0].type, 'errorMsg');
     assert.equal(JSON.stringify(f.sockets[0].messages).includes('session-'), false);
+});
+
+test('Worker revokes deleted profiles on game messages before generation and advances past the removed player', async () => {
+    const profile = { id: 'account-a', name: 'a', expiresAt: Date.now() + 60_000 };
+    const services = { idFromName: (name: string) => name, get: () => ({ fetch: async (request: Request) => {
+        const path = new URL(request.url).pathname;
+        return new Response(JSON.stringify(path === '/profiles/find' ? { profile: null } : { aiRoundLimit: 5, quotaMode: 'mock' }), { headers: { 'content-type': 'application/json' } });
+    } }) };
+    const f = await fixture('IDLE', { AUTH_MODE: '', SERVICES: services } as any);
+    f.sockets[0].attachment.account = profile;
+    const restored = await f.recreate();
+    await restored.webSocketMessage(f.sockets[0] as any, JSON.stringify({ type: 'sendImage', payload: {} }));
+    const room = f.data.get('room') as Room;
+    assert.equal(room.players.some(player => player.id === 'a'), false);
+    assert.equal(room.state, 'IDLE');
+    assert.equal(f.sockets[0].closed, true);
+    assert.equal(f.sockets[0].messages.some(message => message.type === 'authExpired'), true);
+});
+
+test('Worker rejects deleting an active room and closes completed rooms without recreating history', async () => {
+    const url = 'postgresql://test:test@ep-delete-history.neon.tech/test';
+    const database = getDatabase(url)!;
+    let deletes = 0;
+    database.historyVideos = async () => [];
+    database.roomExists = async () => true;
+    database.deleteRoom = async () => { deletes++; };
+    const request = () => new Request('https://internal/statistics/delete', { method: 'POST', body: JSON.stringify({ code: 'TEST' }) });
+    const active = await fixture('VOTING', { DATABASE_URL: url });
+    assert.equal((await active.worker.fetch(request())).status, 409);
+    assert.equal(deletes, 0);
+    const ended = await fixture('GAME_OVER', { DATABASE_URL: url });
+    assert.equal((await ended.worker.fetch(request())).status, 200);
+    assert.equal(deletes, 1);
+    assert.equal(ended.data.has('room'), false);
+    assert.ok(ended.sockets.every(socket => socket.closed));
+    await (await ended.recreate()).alarm();
+    assert.equal(ended.data.has('room'), false);
+    assert.deepEqual(ended.data.get('pendingRounds') || [], []);
+});
+
+test('retained video IDs can be deleted or restored without affecting a new active game with the same room code', async () => {
+    const url = 'postgresql://test:test@ep-independent-video.neon.tech/test';
+    const database = getDatabase(url)!;
+    let detached = true, deleted = 0, restored = 0, scheduled = 0;
+    database.savedVideo = async () => ({ id: '42', roomCode: 'TEST', roundNumber: 1, roomDeleted: detached } as any);
+    database.trashVideo = async () => { deleted++; return { undoUntil: Date.now() + 30_000 }; };
+    database.restoreVideo = async () => { restored++; return true; };
+    let alarm: number | null = null;
+    const globalService = new ServiceDurableObject({ storage: { getAlarm: async () => alarm,
+        setAlarm: async (time: number) => { alarm = time; scheduled++; } } } as any, { DATABASE_URL: url, AI_PROVIDER: 'mock' } as any);
+    const services = { idFromName: (name: string) => name, get: () => ({ fetch: (request: Request) => globalService.fetch(request) }) };
+    const f = await fixture('VOTING', { DATABASE_URL: url, SERVICES: services } as any);
+    const command = (restore = false) => new Request('https://internal/statistics/delete', { method: 'POST', body: JSON.stringify({ code: 'TEST', roundNumber: 1, videoId: '42', restore }) });
+    assert.equal((await f.worker.fetch(command())).status, 200);
+    assert.equal(deleted, 1); assert.equal(scheduled, 1);
+    assert.equal((f.data.get('room') as Room).currentVideoUrl, '/assets/mock-video.mp4');
+    assert.equal((f.data.get('room') as Room).state, 'VOTING');
+    detached = false;
+    assert.equal((await f.worker.fetch(command())).status, 409, 'A video belonging to the active game remains protected.');
+    assert.equal(deleted, 1);
+    assert.equal((await f.worker.fetch(command(true))).status, 200);
+    assert.equal(restored, 1);
+    assert.equal((f.data.get('room') as Room).currentVideoUrl, '/assets/mock-video.mp4');
+    detached = true; database.trashVideo = async () => undefined;
+    assert.equal((await f.worker.fetch(command())).status, 410, 'Expired undo errors retain their HTTP status across the global service.');
+});
+
+test('global video-cleanup alarms survive service recreation and retry failed storage deletions', async () => {
+    const url = 'postgresql://test:test@ep-video-cleanup.neon.tech/test';
+    const database = getDatabase(url)!;
+    let finalized = 0, alarm: number | null = null;
+    database.expiredVideos = async () => finalized ? [] : [{ id: '42', videoUrl: '/api/videos/videos/1234567890123-cleanup.mp4' }];
+    database.finalizeVideoDeletion = async () => { finalized++; };
+    database.nextVideoDeletion = async () => undefined;
+    const data = new Map<string, unknown>();
+    const state = { storage: { get: async (key: string) => data.get(key), put: async (key: string, value: unknown) => { data.set(key, value); },
+        getAlarm: async () => alarm, setAlarm: async (time: number) => { alarm = time; } } };
+    const env = { DATABASE_URL: url, AI_PROVIDER: 'mock', AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_ENDPOINT_URL_S3: 'https://cleanup.test' };
+    const service = new ServiceDurableObject(state as any, env as any);
+    const deadline = Date.now() + 30_000;
+    const schedule = (time: number) => service.fetch(new Request('https://internal/video-trash/schedule', { method: 'POST', body: JSON.stringify({ time }) }));
+    assert.equal((await schedule(deadline)).status, 200);
+    await schedule(deadline + 10_000); assert.equal(alarm, deadline);
+    const original = globalThis.fetch;
+    try {
+        let fail = true;
+        globalThis.fetch = async (input, init) => {
+            const request = input instanceof Request ? input : new Request(input, init);
+            assert.equal(request.method, 'DELETE');
+            assert.match(request.url, /1234567890123-cleanup.mp4/);
+            return new Response(null, { status: fail ? 403 : 204 });
+        };
+        const recreated = new ServiceDurableObject(state as any, env as any);
+        alarm = null; await recreated.alarm();
+        assert.equal(finalized, 0); assert.ok(alarm! > Date.now() + 29_000);
+        fail = false; alarm = null; await recreated.alarm();
+        assert.equal(finalized, 1);
+    } finally { globalThis.fetch = original; }
 });
 
 test('Worker applies actual lobby membership to the round limit and reserves all videos', async () => {
@@ -144,12 +244,41 @@ function fakeJob(overrides: Partial<AiJob> = {}): AiJob {
 }
 
 test('Worker recreation does not overwrite an existing wake-up alarm', async () => {
-    const deadline = Date.now() + 10_000;
-    const f = await fixture('VOTING', {}, 1, { soloFinishAt: deadline });
+    const f = await fixture('GENERATING', {}, 1, { generationId: 'generation-1', generationJob: fakeJob() });
+    const deadline = f.alarms[0];
     assert.deepEqual(f.alarms, [deadline]);
     await f.recreate();
     await f.message(f.sockets[0], 'refreshQuota');
     assert.deepEqual(f.alarms, [deadline]);
+});
+
+test('Worker solo preview survives alarms and recreation until its player confirms the current video', async () => {
+    const player = { id: 'a', name: 'a', sessionId: 'session-a-1234567890', connectionId: 'conn-a', connected: true, score: 0 };
+    const f = await fixture('VOTING', {}, 1, { players: [player], videoNumber: 1, pendingCreators: ['a'] });
+    await f.worker.alarm();
+    const restored = await f.recreate();
+    await restored.alarm();
+    assert.equal((f.data.get('room') as Room).state, 'VOTING');
+    await f.message(f.outsider, 'finishPreview', { videoNumber: 1 });
+    await f.message(f.sockets[0], 'finishPreview', { videoNumber: 2 });
+    assert.equal((f.data.get('room') as Room).state, 'VOTING');
+    await f.message(f.sockets[0], 'finishPreview', { videoNumber: 1 });
+    await f.message(f.sockets[0], 'finishPreview', { videoNumber: 1 });
+    assert.equal((f.data.get('room') as Room).state, 'GAME_OVER');
+    assert.equal((f.data.get('room') as Room).players[0].score, 0);
+});
+
+test('Worker never publishes an external video when archival fails', async () => {
+    const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: async (request: Request) => request.url.endsWith('/archive')
+        ? Response.json({ error: 'Videoarchiv nicht erreichbar.' }, { status: 503 }) : Response.json({}) }) } as any;
+    const f = await fixture('GENERATING', { SERVICES }, 1, { generationId: 'generation-1',
+        generationJob: fakeJob({ status: 'complete', videoUrl: 'https://test.hf.space/video.mp4' }), currentVideoUrl: '' });
+    await new Promise(resolve => setTimeout(resolve, 110));
+    await f.worker.alarm(); await Promise.all(f.pending);
+    const room = f.data.get('room') as Room;
+    assert.equal(room.state, 'IDLE'); assert.equal(room.currentVideoUrl, '');
+    assert.ok(f.sockets[0].messages.some(message => message.type === 'errorMsg' && message.payload.includes('Videoarchiv')));
+    assert.equal(f.sockets[0].messages.some(message => message.type === 'roomDataUpdate' && message.payload.gameState === 'VOTING'), false);
 });
 
 test('Worker restart resumes a persisted job once without another upload or quota reservation', async () => {
@@ -289,7 +418,7 @@ test('Worker retries the final write before the continuation marker after a data
         await (await f.recreate()).alarm();
         assert.equal((f.data.get('pendingRounds') as any[]).length, 0);
         assert.equal(transactions.length, 3);
-        assert.ok(transactions[0].every(sql => /^(create|alter)/.test(sql)), 'Schema initialization runs once in its own transaction.');
+        assert.deepEqual(transactions[0], [...DATABASE_SCHEMA], 'Schema initialization and backfill run once in their own transaction.');
         assert.ok(transactions[1].some(sql => sql.includes("status = 'GAME_OVER'")));
         assert.ok(transactions[2].some(sql => sql.includes("status = 'PLAYING'") && sql.includes('winner_socket_id = null')));
         assert.ok(transactions[2].some(sql => sql.includes('final_rank = null')));
