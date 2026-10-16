@@ -5,6 +5,8 @@ import { AI_JOB_MAX_AGE_MS, type AiJob } from '../../src/ai/generation';
 import { Room } from '../../src/game/rules';
 import { getDatabase } from '../../src/database/neon';
 import { DATABASE_SCHEMA } from '../../src/database/schema';
+import { testImageData } from '../support/images';
+import { gameOptions } from '../../src/game/options';
 
 class TestSocket {
     messages: { type: string; payload: any }[] = [];
@@ -61,6 +63,81 @@ test('Worker serializes votes and ignores duplicates; outsiders cannot vote or r
     assert.equal(f.outsider.messages.some(m => m.type === 'roomDataUpdate'), false);
     assert.equal(f.outsider.messages[0].type, 'errorMsg');
     assert.equal(JSON.stringify(f.sockets[0].messages).includes('session-'), false);
+});
+
+test('Worker phase clock survives recreation, enforces host-only closing and ignores stale commands', async () => {
+    const f = await fixture('LOBBY', {}, 1, { options: gameOptions({ phaseSeconds: 60 }) });
+    await f.message(f.sockets[0], 'startGame');
+    let r = f.data.get('room') as Room; const key = r.phaseKey, deadline = r.phaseDeadline;
+    assert.ok(deadline); assert.ok(f.alarms.includes(deadline!));
+    await f.message(f.sockets[1], 'closePhase', { phaseKey: key }); assert.equal((f.data.get('room') as Room).state, 'IDLE');
+    await f.message(f.sockets[0], 'closePhase', { phaseKey: key }); assert.equal((f.data.get('room') as Room).state, 'RESULTS');
+    await f.message(f.sockets[0], 'startNextRound'); r = f.data.get('room') as Room;
+    assert.equal(r.activeCreatorIndex, 1);
+    await f.message(f.sockets[0], 'closePhase', { phaseKey: key }); assert.equal((f.data.get('room') as Room).state, 'IDLE');
+    r.phaseDeadline = Date.now() - 1; f.data.set('room', r);
+    const restored = await f.recreate(); await restored.alarm(); r = f.data.get('room') as Room;
+    assert.equal(r.state, 'RESULTS'); assert.equal(r.players.every(player => player.score === 0), true);
+});
+
+test('Worker archive games bypass HF, persist replay state and never rewrite creation statistics', async () => {
+    const url = 'postgres://test:test@ep-archive-test.neon.tech/neondb';
+    const database = getDatabase(url)!;
+    const original = database.playableArchive;
+    database.playableArchive = async () => ['1', '2', '3'].map(id => ({ id, creatorId: 'old', creatorName: 'Original', prompt: `secret ${id}`, videoUrl: `/api/videos/videos/${id}.mp4` }));
+    try {
+        const f = await fixture('LOBBY', { DATABASE_URL: url }, 1, { options: gameOptions({ mode: 'archive-vote' }) });
+        await f.message(f.sockets[0], 'startGame'); let r = f.data.get('room') as Room;
+        assert.equal(r.state, 'VOTING'); assert.equal(r.quota?.quotaMode, 'archive'); assert.equal(r.archiveClips?.length, 2);
+        const worker = await f.recreate();
+        for (const socket of f.sockets.slice(0, 3)) await worker.webSocketMessage(socket as any, JSON.stringify({ type: 'submitVote', payload: { points: 4 } }));
+        r = f.data.get('room') as Room; assert.equal(r.state, 'RESULTS'); assert.equal(r.archiveResults?.[0].points, 12);
+        assert.equal(r.players.every(player => player.score === 0), true); assert.deepEqual(f.data.get('pendingRounds'), []);
+        await worker.webSocketMessage(f.sockets[0] as any, JSON.stringify({ type: 'startNextRound', payload: {} }));
+        r = f.data.get('room') as Room; assert.equal(r.state, 'VOTING'); assert.equal(r.archiveClips?.length, 1);
+    } finally { database.playableArchive = original; }
+});
+
+test('Worker restores private tasks, chunked common images and creator-only guess review after recreation', async () => {
+    const f = await fixture('LOBBY', {}, 1, { imageProfile: 'bounded', options: gameOptions({ sharedImage: true, secretTasks: true, guessPrompt: true }) });
+    await f.message(f.sockets[1], 'setSharedImage', { imageBase64: testImageData(832, 624) });
+    assert.equal((f.data.get('room') as Room).sharedImage, undefined);
+    const image = testImageData(832, 624, true);
+    await f.message(f.sockets[0], 'setSharedImage', { imageBase64: image });
+    let room = f.data.get('room') as Room;
+    assert.ok(room.sharedImage!.chunks > 1);
+    let worker = await f.recreate();
+    const path = `https://game.test/api/rooms/TEST/image?id=${room.sharedImage!.id}`;
+    const response = await worker.fetch(new Request(path));
+    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from(image.split(',')[1], 'base64'));
+    room.state = 'IDLE'; room.sharedImage!.expiresAt = Date.now() - 1;
+    f.data.set('room', room); worker = await f.recreate(); await worker.alarm();
+    assert.equal((f.data.get('room') as Room).sharedImage, undefined);
+    assert.equal([...f.data.keys()].some(key => key.startsWith('image:')), false);
+    await worker.webSocketMessage(f.sockets[0] as any, JSON.stringify({ type: 'setSharedImage', payload: { imageBase64: image } }));
+    room = f.data.get('room') as Room; assert.ok(room.sharedImage);
+    room.state = 'VOTING'; room.tasks = { a: 'Auftrag a', b: 'Auftrag b', c: 'Auftrag c' }; room.currentPrompt = 'private prompt';
+    f.data.set('room', room); worker = await f.recreate();
+    const send = (index: number, type: string, payload: unknown) => worker.webSocketMessage(f.sockets[index] as any, JSON.stringify({ type, payload }));
+    await send(1, 'submitVote', { taskPoints: 5, funPoints: 3, guess: 'spin' });
+    await send(2, 'submitVote', { taskPoints: 2, funPoints: 4, guess: 'run' });
+    assert.equal((f.data.get('room') as Room).state, 'GUESS_REVIEW');
+    worker = await f.recreate();
+    await send(1, 'judgeGuesses', { videoNumber: 1, correctPlayerIds: ['b'] });
+    assert.equal((f.data.get('room') as Room).state, 'GUESS_REVIEW');
+    await send(0, 'judgeGuesses', { videoNumber: 1, correctPlayerIds: ['b'] });
+    room = f.data.get('room') as Room;
+    assert.equal(room.state, 'GAME_OVER'); assert.equal(room.players[0].score, 7); assert.equal(room.players[1].score, 2);
+    await send(0, 'judgeGuesses', { videoNumber: 1, correctPlayerIds: ['b'] });
+    assert.equal((f.data.get('room') as Room).players[1].score, 2);
+    const review = f.sockets[0].messages.filter(message => message.type === 'roomDataUpdate' && message.payload.gameState === 'GUESS_REVIEW').at(-1)!.payload;
+    assert.equal(review.reviewPrompt, 'private prompt'); assert.equal(review.reviewGuesses.length, 2);
+    const guest = f.sockets[1].messages.filter(message => message.type === 'roomDataUpdate' && message.payload.gameState === 'GUESS_REVIEW').at(-1)!.payload;
+    assert.equal(guest.reviewPrompt, undefined); assert.equal(guest.reviewGuesses, undefined); assert.equal(guest.ownTask, undefined);
+    assert.equal(f.outsider.messages.some(message => message.type === 'roomDataUpdate'), false);
+    await send(0, 'leaveRoom', {}); await send(1, 'leaveRoom', {}); await send(2, 'leaveRoom', {});
+    assert.equal([...f.data.keys()].some(key => key.startsWith('image:')), false);
 });
 
 test('Worker revokes deleted profiles on game messages before generation and advances past the removed player', async () => {

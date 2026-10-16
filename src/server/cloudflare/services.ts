@@ -2,6 +2,7 @@ import { sqlProfiles, storedProfiles, type Profile, type ManagedProfileStore } f
 import { getSql, getDatabase } from '../../database/neon';
 import { purgeDeletedVideos, deleteStoredHistory, HistoryError, type HistoryDeletion } from '../statistics';
 import { QuotaBudget } from '../../ai/quota';
+import { generationQuality } from '../../ai/providers';
 import { archiveVideo, deleteArchivedVideo } from '../../storage/archive';
 import { archiveStatus } from '../archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
@@ -22,7 +23,8 @@ export class ServiceDurableObject {
     async fetch(request: Request) {
         const path = new URL(request.url).pathname;
         const action = async () => {
-            const data = await request.json() as { code: string; rounds: number; players?: number; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion };
+            const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion };
+            const quality = generationQuality(data.quality);
             if (path === '/video-trash/schedule') {
                 await this.scheduleCleanup(data.time);
                 return json({ ok: true });
@@ -34,10 +36,10 @@ export class ServiceDurableObject {
                 await this.state.storage.put('rateBuckets', buckets);
                 return json({ retryAfter });
             }
-            if (path === '/quota/display') return json(await this.budget.displayCapacity(data.players));
-            if (path === '/quota/capacity') return json(await this.budget.capacity(data.players));
-            if (path === '/quota/reserve') await this.budget.reserve(data.code, data.rounds, data.players);
-            else if (path === '/quota/extend') await this.budget.extend(data.code, data.players!);
+            if (path === '/quota/display') return json(await this.budget.displayCapacity(data.players, quality));
+            if (path === '/quota/capacity') return json(await this.budget.capacity(data.players, quality));
+            if (path === '/quota/reserve') await this.budget.reserve(data.code, data.rounds, data.players, quality);
+            else if (path === '/quota/extend') await this.budget.extend(data.code, data.players!, quality);
             else if (path === '/quota/begin') await this.budget.begin(data.code, data.generations, data.jobId);
             else if (path === '/quota/consume') await this.budget.consume(data.code, data.jobId);
             else if (path === '/quota/release') await this.budget.release(data.code);

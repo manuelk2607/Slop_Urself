@@ -7,7 +7,7 @@ export interface PersistPlayerInput {
     isHost: boolean;
 }
 
-export interface FinalStandingInput { playerSocketId: string; name: string; score: number; finalRank: number }
+export interface FinalStandingInput { playerSocketId: string; name: string; score: number; finalRank: number; guessPoints?: number }
 export interface PersistRoundInput {
     roomCode: string;
     roundNumber: number;
@@ -15,8 +15,10 @@ export interface PersistRoundInput {
     prompt: string;
     videoUrl: string;
     roundPoints: number;
-    votes: { voterSocketId: string; points: number }[];
-    players?: { id: string; accountId?: string; name: string; score: number }[];
+    votes: { voterSocketId: string; points: number; taskPoints?: number; funPoints?: number }[];
+    players?: { id: string; accountId?: string; name: string; score: number; guessPoints?: number }[];
+    taskText?: string;
+    guesses?: { playerId: string; name: string; text: string; correct?: boolean; points: number }[];
     hostId?: string;
     standings?: FinalStandingInput[];
 }
@@ -32,6 +34,7 @@ export interface PlayerStats {
     averageReceivedPoints: number;
     votesGiven: number;
     averageVoteGiven: number;
+    guessPoints?: number;
 }
 export interface StatsOverview {
     gamesPlayed: number;
@@ -53,6 +56,7 @@ export interface VideoStats {
     roundPoints: number;
     createdAt: string;
     evictedAt: string | null;
+    taskText?: string;
 }
 export interface RoomStats {
     code: string;

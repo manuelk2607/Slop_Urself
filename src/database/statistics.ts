@@ -19,6 +19,7 @@ export const PLAYERS_SQL = `
                 count(distinct room_code) as "gamesPlayed",
                 count(*) filter (where final_rank = 1)::int as wins,
                 coalesce(sum(score), 0)::int as "totalScore",
+                coalesce(sum(guess_points), 0)::int as "guessPoints",
                 coalesce(avg(score), 0)::float as "averageScore"
             from players
             where room_code in (select code from rooms where started_at is not null)
@@ -55,6 +56,7 @@ export const PLAYERS_SQL = `
             round(pt."averageScore"::numeric, 2)::float as "averageScore",
             round(coalesce(cr."averageReceivedPoints", 0)::numeric, 2)::float as "averageReceivedPoints",
             pt."totalScore"::int,
+            pt."guessPoints"::int,
             pt.wins::int,
             coalesce(gv."votesGiven", 0)::int as "votesGiven",
             round(coalesce(gv."averageVoteGiven", 0)::numeric, 2)::float as "averageVoteGiven"

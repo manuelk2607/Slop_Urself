@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 // No dotenv or Wrangler secret discovery: all external calls fail unless a test explicitly stubs them.
 export async function cloudflareRuntime(options: { port?: number; bindings?: Record<string, string>; outboundService?: V4FetchHandler } = {}) {
     const bundle = await build({ entryPoints: ['src/server/cloudflare/worker.ts'], bundle: true, write: false, format: 'esm', platform: 'browser' });
-    const bindings = { AI_PROVIDER: 'mock', AI_ROUND_LIMIT: '5', AUTH_MODE: 'disabled',
+    const bindings = { AI_PROVIDER: 'mock', AI_ROUND_LIMIT: '5', AI_IMAGE_PROFILE: 'bounded', AUTH_MODE: 'disabled',
         AUTH_COOKIE_SECRET: 'cloudflare-test-cookie-secret-at-least-32-characters', ...options.bindings };
     const runtime = new Miniflare({ host: '127.0.0.1', port: options.port ?? 0, logRequests: false, telemetry: { enabled: false },
         workers: [{ config: { name: 'slopurself-test', compatibilityDate: '2026-10-03',

@@ -34,9 +34,8 @@ new_sqlite_classes = ["ServiceDurableObject"]
 
 [vars]
 AI_PROVIDER = "wan22"
-AI_PROVIDER_CHAIN = "wan22,wan22-fast,ltx"
-HF_SPACE_ID = "Lightricks/ltx-video-distilled"
-HF_PREDICT_ENDPOINT = "/image_to_video"
+AI_PROVIDER_CHAIN = "wan22,wan22-fast"
+AI_IMAGE_PROFILE = "bounded"
 AI_ROUND_LIMIT = "5"
 AI_GPU_SECONDS_PER_ROUND = "0"
 VIDEO_BUCKET = "slopurself-videos"
@@ -44,8 +43,5 @@ VIDEO_ARCHIVE_MB = "512"
 AWS_REGION = "eu-central-1"
 AWS_ENDPOINT_URL_S3 = "https://br-soft-math-b1efy5s0.storage.c-5.eu-central-1.aws.neon.tech"
 LTX_DURATION = "5"
-LTX_HEIGHT = "512"
-LTX_WIDTH = "704"
-LTX_GUIDANCE = "1"
 
 # Upload the ignored .env.local secrets with npm run cf:secrets.

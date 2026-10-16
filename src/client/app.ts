@@ -5,12 +5,19 @@ import type { HistoryKind } from './history-selection';
 import { historyUndo } from './history-undo';
 import { videoPlayback } from './video';
 import { accountManagement } from './accounts';
+import { prepareImage } from './images';
+import { gameVariants, type VariantSnapshot } from './variants';
+import { partyControls, type PartySnapshot } from './party';
+import { gameOptions } from '../game/options';
 import type { QuotaCapacity } from '../ai/quota';
 import type { PlayerStats, StatsOverview, VideoStats, RoomStats, VideoCreator } from '../database/types';
 import type { HistoryPage } from '../database/pagination';
 
 const socket = createRealtimeClient(() => currentRoomId);
 const accounts = accountManagement();
+const party = partyControls(() => currentPlayerId, payload => socket.emit('closePhase', { ...payload, roomId: currentRoomId }));
+const variants = gameVariants(() => currentRoomId, () => currentPlayerId,
+    (event, payload) => socket.emit(event, { ...payload, roomId: currentRoomId }));
 const undoVideos = historyUndo(() => loadStatistics(false, true));
 
 // Header
@@ -107,7 +114,6 @@ interface GameOverData {
 let latestGameOver: GameOverData | undefined;
 let extensionPending = false;
 
-let previewObjectUrl: string | null = null;
 let currentRoomId = '';
 let currentHostId = '';
 let currentSessionId = '';
@@ -149,6 +155,7 @@ function saveSession(roomId: string, sessionId: string) {
 }
 
 function clearSession(preserveStored = false) {
+    party.clear();
     currentRoomId = '';
     currentSessionId = '';
     currentPlayerId = '';
@@ -168,10 +175,6 @@ function showScreen(screenToShow: HTMLElement) {
 }
 
 function clearImagePreview() {
-    if (previewObjectUrl) {
-        URL.revokeObjectURL(previewObjectUrl);
-        previewObjectUrl = null;
-    }
     imageInput.value = '';
     imagePreview.style.display = 'none';
     imagePreview.src = '';
@@ -290,6 +293,7 @@ createRoomButton.addEventListener('click', async () => {
     if (!username) return triggerNameError();
     clearSession();
     pendingRoomCreation = { username, maxRounds: 1, sessionId: createSessionId() };
+    clearInvitation();
     setLobbyPending(true);
     await requestCreateRoom();
 });
@@ -310,6 +314,7 @@ joinRoomButton.addEventListener('click', async () => {
 });
 
 function enterRoom(roomId: string, sessionId: string, playerId?: string) {
+    clearInvitation();
     setLobbyPending(false);
     pendingRoomCreation = null;
     currentPlayerId = playerId || socket.id;
@@ -399,7 +404,7 @@ socket.on('roomDataUpdate', (data: {
     roomId?: string;
     votedPlayerIds?: string[];
     lastResult?: { authorName: string; roundPoints: number };
-}) => {
+} & VariantSnapshot & PartySnapshot & { archiveAuthor?: string }) => {
     if (!currentRoomId || (data.roomId && data.roomId !== currentRoomId)) return;
     const phaseKey = `${currentRoomId}:${data.currentRound}:${data.activeCreatorId}`;
     const phaseChanged = phaseKey !== currentPhaseKey;
@@ -411,6 +416,8 @@ socket.on('roomDataUpdate', (data: {
     if (currentHostId !== data.hostId || data.gameState !== 'GAME_OVER') extensionPending = false;
     currentHostId = data.hostId;
     currentVideoNumber = data.videoNumber || data.currentRound;
+    const options = gameOptions(data.options), archiveVote = options.mode === 'archive-vote';
+    if (data.gameState !== 'RESULTS' && roomNotice.innerText === 'Warte darauf, dass der Host die nächste Runde startet.') roomNotice.style.display = 'none';
 
     if (data.gameState === 'LOBBY') {
         const isHost = isCurrentSocket(data.hostId);
@@ -419,7 +426,7 @@ socket.on('roomDataUpdate', (data: {
             ? 'Alle bereit? Starte die Partie, sobald genug Spieler im Raum sind.'
             : 'Warte darauf, dass der Host die Partie startet.';
         startGameButton.style.display = isHost ? 'block' : 'none';
-        startGameButton.disabled = !data.quota?.aiRoundLimit;
+        startGameButton.disabled = !data.quota?.aiRoundLimit || Boolean(data.options?.sharedImage && !data.sharedImageUrl);
         roomRoundCountInput.disabled = !isHost || !data.quota?.aiRoundLimit;
         roomRoundCountInput.min = data.quota?.aiRoundLimit ? '1' : '0';
         roomRoundCountInput.max = String(data.quota?.aiRoundLimit || 0);
@@ -428,20 +435,26 @@ socket.on('roomDataUpdate', (data: {
         showScreen(screenRoomLobby);
     } else if (data.gameState === 'IDLE' || data.gameState === 'GENERATING') {
         showCreateState({ ...data, reset: phaseChanged && data.gameState === 'IDLE' });
-    } else if (data.gameState === 'VOTING') {
+    } else if (data.gameState === 'VOTING' || data.gameState === 'GUESS_REVIEW') {
         showVotingState({
             videoUrl: data.currentVideoUrl,
-            authorId: data.activeCreatorId,
-            authorName: data.activeCreatorName,
+            authorId: archiveVote ? undefined : data.activeCreatorId,
+            authorName: data.archiveAuthor || data.activeCreatorName,
             hasVoted: data.votedPlayerIds?.includes(currentPlayerId),
             voted: data.votedPlayerIds?.length || 0,
-            total: data.players.length - 1
+            total: data.players.length - Number(!archiveVote)
         });
     } else if (data.gameState === 'RESULTS') {
         showResultsState({ ...data, authorName: data.lastResult?.authorName || data.activeCreatorName || 'Spieler', roundPoints: data.lastResult?.roundPoints || 0, isFinalRound: false });
     } else if (data.gameState === 'GAME_OVER') {
         showGameOverState({ ...data, players: [...data.players].sort((a, b) => b.score - a.score) });
     }
+    variants.render(data);
+    party.render(data);
+    if (data.gameState === 'GAME_OVER' && options.mode !== 'classic') {
+        extendGameButton.style.display = 'none'; extensionQuotaHint.textContent = 'Archivpartie · keine Änderung der Dauerstatistik';
+        if (archiveVote) { winnerName.textContent = 'Best-of · eure Videowertung'; finalScoreList.hidden = true; }
+    } else finalScoreList.hidden = false;
 });
 
 socket.on('errorMsg', (msg: string) => {
@@ -608,8 +621,9 @@ copyRoomCodeButton.addEventListener('click', async () => {
     if (!roomCode || roomCode === '----') return;
 
     try {
-        await navigator.clipboard.writeText(roomCode);
-        showRoomNotice(`Raumcode ${roomCode} kopiert.`);
+        const invitation = new URL('/', location.origin); invitation.searchParams.set('room', roomCode);
+        await navigator.clipboard.writeText(invitation.href);
+        showRoomNotice(`Einladungslink für Raum ${roomCode} kopiert.`);
     } catch {
         showRoomNotice(`Raumcode: ${roomCode}`);
     }
@@ -634,6 +648,8 @@ socket.on('roomNotice', (message: string) => {
 async function resumeStoredSession() {
     try {
         const stored = JSON.parse(localStorage.getItem('slopurself-session') || 'null') as { roomId?: string; sessionId?: string } | null;
+        const invited = invitationCode();
+        if (invited && invited !== stored?.roomId) { localStorage.removeItem('slopurself-session'); return; }
         if (!stored?.roomId || !stored.sessionId) return;
         currentRoomId = stored.roomId;
         currentSessionId = stored.sessionId;
@@ -648,6 +664,15 @@ socket.on('connect', () => {
 });
 // Session restoration starts only after the account cookie is available.
 
+function invitationCode() {
+    const code = new URL(location.href).searchParams.get('room')?.toUpperCase() || '';
+    return /^[A-Z0-9]{4}$/.test(code) ? code : '';
+}
+function clearInvitation() {
+    const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
+    document.getElementById('invitationNotice')!.hidden = true;
+}
+
 // --- SCREEN 2: ERSTELLEN vs. WARTEN ---
 socket.on('showCreateScreen', (data: { activeCreatorId: string; activeCreatorName: string; hostId: string }) => {
     showCreateState(data);
@@ -661,7 +686,7 @@ finishPreviewButton.addEventListener('click', () => {
     socket.emit('finishPreview', { roomId: currentRoomId, videoNumber: currentVideoNumber });
 });
 
-imageInput.addEventListener('change', (event: Event) => {
+imageInput.addEventListener('change', async (event: Event) => {
     const target = event.target as HTMLInputElement;
     const file = target.files?.[0];
     if (file) {
@@ -677,22 +702,24 @@ imageInput.addEventListener('change', (event: Event) => {
             return;
         }
 
-        if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
-        previewObjectUrl = URL.createObjectURL(file);
-        imagePreview.src = previewObjectUrl;
-        imagePreview.style.display = 'block';
-        if (customButton) customButton.innerText = 'Anderes Bild auswählen';
+        const phase = currentPhaseKey;
+        try {
+            const prepared = await prepareImage(file);
+            if (imageInput.files?.[0] !== file || currentPhaseKey !== phase) return;
+            imagePreview.src = prepared; imagePreview.style.display = 'block';
+            customButton.innerText = 'Anderes Bild auswählen';
+        } catch (error) { clearImagePreview(); alert((error as Error).message); }
     } else {
         clearImagePreview();
     }
 });
 
-uploadButton.addEventListener('click', () => {
+uploadButton.addEventListener('click', async () => {
     const file = imageInput.files?.[0];
     const promptText = promptInput.value.trim();
 
-    if (!file) return alert('Bitte wähle zuerst ein Bild aus!');
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+    if (!file && !variants.shared()) return alert('Bitte wähle zuerst ein Bild aus!');
+    if (!variants.shared() && file && (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024)) {
         alert('Bitte wähle ein gültiges Bild bis maximal 8 MB aus.');
         return;
     }
@@ -707,21 +734,19 @@ uploadButton.addEventListener('click', () => {
     const uploadRoomId = currentRoomId;
     const uploadTurnKey = currentPhaseKey;
 
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
+    try {
+        const imageBase64 = variants.shared() ? undefined : await prepareImage(file!);
         if (currentRoomId !== uploadRoomId || currentPhaseKey !== uploadTurnKey) return;
         socket.emit('sendImage', {
             roomId: uploadRoomId,
-            imageBase64: reader.result as string,
+            imageBase64,
             prompt: promptText
         });
-    };
-    reader.onerror = () => {
-        alert('Das Bild konnte nicht gelesen werden.');
+    } catch (error) {
+        alert((error as Error).message || 'Das Bild konnte nicht gelesen werden.');
         uploadButton.disabled = false;
         uploadButton.innerText = 'KI-Video generieren';
-    };
+    }
 });
 
 socket.on('generationStarted', (data: { authorName: string; step: string }) => {
@@ -748,7 +773,7 @@ socket.on('voteProgress', (data: { voted: number; total: number }) => {
 voteButtons.forEach(btn => {
     btn.addEventListener('click', () => {
         const points = parseInt(btn.getAttribute('data-points') || '0', 10);
-        socket.emit('submitVote', { roomId: displayRoomCode.innerText, points });
+        variants.vote(points);
 
         voteButtons.forEach(button => button.disabled = true);
         votingActionBox.style.display = 'none';
@@ -817,6 +842,11 @@ void initializeAccount({
         if (name) usernameInput.value = name.slice(0, 15);
         usernameInput.type = name ? 'hidden' : 'text';
         showScreen(screenLobby);
+        const invited = invitationCode();
+        if (invited) {
+            roomCodeInput.value = invited;
+            const notice = document.getElementById('invitationNotice')!; notice.textContent = `Einladung zu Raum ${invited}`; notice.hidden = false;
+        }
         if (socket.isNativeWebSocket) await resumeStoredSession(); else await socket.connectToRoom('');
     },
     signedOut: async () => {

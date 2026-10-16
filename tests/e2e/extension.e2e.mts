@@ -8,7 +8,7 @@ const port = '3316';
 const base = external || `http://127.0.0.1:${port}`;
 const server = external ? undefined : spawn(process.execPath, ['--import', 'tsx', 'tests/support/quota-server.ts'], {
     cwd: process.cwd(), env: { ...process.env, PORT: port, DATABASE_URL: '', AI_PROVIDER: 'wan22',
-        AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx', AI_GPU_SECONDS_PER_ROUND: '0', HF_TOKEN: 'test',
+        AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded', AI_GPU_SECONDS_PER_ROUND: '0', HF_TOKEN: 'test',
         AWS_ACCESS_KEY_ID: 'test-only', AWS_SECRET_ACCESS_KEY: 'test-only', AWS_ENDPOINT_URL_S3: 'https://storage.test',
         TEST_EXTRA_ROUNDS: 'true', AUTH_COOKIE_SECRET: 'extra-round-test-secret-at-least-32-characters' }, stdio: ['pipe', 'pipe', 'pipe']
 });
@@ -49,7 +49,7 @@ try {
     await guest.locator('#roomCodeInput').fill(code); await guest.locator('#joinRoomButton').click();
     await guest.locator('#screenRoomLobby').waitFor({ state: 'visible' });
     await host.locator('#startGameButton').click();
-    for (let cycle = 1; cycle <= 3; cycle++) {
+    for (let cycle = 1; cycle <= 4; cycle++) {
         await host.locator('#creatorControls').waitFor({ state: 'visible' });
         assert.equal(await host.locator('#roundCounter').innerText(), `${cycle}/${cycle}`);
         await upload(host); await guest.locator('[data-points="4"]').click();
@@ -77,7 +77,7 @@ try {
             await host.screenshot({ path: artifactPath('slopurself-extension-host-mobile.png'), fullPage: true });
             await host.setViewportSize({ width: 1280, height: 900 });
         }
-        if (cycle < 3) {
+        if (cycle < 4) {
             await host.waitForFunction(() => !(document.getElementById('extendGameButton') as HTMLButtonElement).disabled);
             await host.locator('#extendGameButton').click();
             await Promise.all(pages.map(p => p.locator('#screenCreate').waitFor({ state: 'visible' })));
@@ -91,9 +91,9 @@ try {
         assert.equal(quota.reservedRounds, 0); assert.equal(quota.aiRoundLimit, 0);
     }
     await guest.reload(); await guest.locator('#screenGameOver').waitFor({ state: 'visible' });
-    assert.match(await guest.locator('#finalScoreList').innerText(), /9 Pkt/);
+    assert.match(await guest.locator('#finalScoreList').innerText(), /12 Pkt/);
     assert.deepEqual(errors, []);
-    console.log('PASS: two players create six videos over three cycles; host-only extra rounds, cumulative scores, same room, reload, quota exhaustion and mobile layout. No real AI or production DB calls.');
+    console.log('PASS: two players create eight videos over four cycles with simulated cheaper consumption; host-only extra rounds, cumulative scores, same room, reload, call quota exhaustion and mobile layout. No real AI or production DB calls.');
 } catch (error) {
     for (const [i, page] of (browser?.contexts().flatMap(c => c.pages()) || []).entries()) await page.screenshot({ path: artifactPath(`slopurself-extension-failed-${i}.png`), fullPage: true });
     throw error;

@@ -1,4 +1,5 @@
 export type Provider = 'wan' | 'wan22' | 'wan22-fast' | 'ltx';
+export type GenerationQuality = 'auto' | 'quality' | 'economy';
 export interface ProviderConfig {
     AI_PROVIDER?: string;
     AI_PROVIDER_CHAIN?: string;
@@ -6,13 +7,26 @@ export interface ProviderConfig {
     LTX_DURATION?: string;
     HF_SPACE_ID?: string;
     HF_PREDICT_ENDPOINT?: string;
+    AI_IMAGE_PROFILE?: string;
 }
 export interface ProviderBudget { id: Provider; name: string; gpuSeconds: number }
-export const DEFAULT_PROVIDER_CHAIN = 'wan22,wan22-fast,ltx';
+export const DEFAULT_PROVIDER_CHAIN = 'wan22,wan22-fast';
+
+export function generationQuality(value: unknown): GenerationQuality {
+    if (value === undefined) return 'auto';
+    if (value !== 'auto' && value !== 'quality' && value !== 'economy') throw new Error('Ungültiger KI-Modus.');
+    return value;
+}
+export function qualityConfig<T extends ProviderConfig>(config: T, quality: GenerationQuality = 'auto'): T {
+    const chain = config.AI_PROVIDER_CHAIN || DEFAULT_PROVIDER_CHAIN;
+    // Old explicit configurations remain resumable; new games never fall back to LTX.
+    const auto = config.AI_IMAGE_PROFILE === 'bounded' ? parseProviderChain(chain).filter(provider => provider === 'wan22' || provider === 'wan22-fast').join(',') || DEFAULT_PROVIDER_CHAIN : chain;
+    return { ...config, AI_PROVIDER_CHAIN: quality === 'quality' ? 'wan22' : quality === 'economy' ? 'wan22-fast' : auto };
+}
 
 export function parseProviderChain(value = DEFAULT_PROVIDER_CHAIN): Provider[] {
     const providers = value.split(',').map(s => s.trim()).filter((s): s is Provider => ['wan', 'wan22', 'wan22-fast', 'ltx'].includes(s));
-    return providers.length ? [...new Set(providers)] : ['wan22', 'wan22-fast', 'ltx'];
+    return providers.length ? [...new Set(providers)] : ['wan22', 'wan22-fast'];
 }
 
 export const videoDuration = (config: ProviderConfig) => Math.max(5, Math.min(Number(config.LTX_DURATION) || 5, 8.5));
@@ -22,15 +36,20 @@ export const providerSpace = (provider: Provider, config: ProviderConfig) => pro
 export const providerEndpoint = (provider: Provider, config: ProviderConfig) => provider === 'ltx' ? config.HF_PREDICT_ENDPOINT || '/image_to_video' : '/generate_video';
 export const providerSteps = (provider: Provider) => provider === 'wan22-fast' ? 4 : provider === 'wan22' ? 8 : 6;
 
-export function providerGpuSeconds(provider: Provider, config: ProviderConfig) {
+export function providerGpuSeconds(provider: Provider, config: ProviderConfig, size?: { width: number; height: number }) {
     const duration = videoDuration(config);
     // This Wan 2.1 Space supports at most 3.4 seconds; it cannot satisfy the game's minimum.
     if (provider === 'wan') return Infinity;
     const seconds = provider === 'ltx' ? duration > 7 ? 150 : 120
         // Space get_inference_duration(), guidance=1, no interpolation, xlarge costs 2x.
-        // Use its maximum resized area (832x832), not an assumed input aspect ratio.
-        : Math.ceil(2 * (15 + providerSteps(provider) * 5 * Math.pow((1 + Math.round(duration * 16)) * 832 * 832 / (81 * 832 * 624), 1.5)));
-    return Math.max(seconds, Math.max(0, Number(config.AI_GPU_SECONDS_PER_ROUND) || 0));
+        // Bounded inputs are validated server-side; legacy jobs retain the conservative maximum.
+        : Math.ceil(2 * (15 + providerSteps(provider) * 5 * Math.pow((1 + Math.round(duration * 16))
+            * (size ? size.width * size.height : 832 * (config.AI_IMAGE_PROFILE === 'bounded' ? 624 : 832)) / (81 * 832 * 624), 1.5)));
+    // Live measurements exceeded the Space estimate (~75 / ~122 quota seconds).
+    // Calibrate bounded jobs with reserve; legacy jobs keep their existing upper bound.
+    const calibrated = config.AI_IMAGE_PROFILE === 'bounded' && provider.startsWith('wan22')
+        ? Math.ceil(seconds * (provider === 'wan22' ? 114 : 112) / 100) : seconds;
+    return Math.max(calibrated, Math.max(0, Number(config.AI_GPU_SECONDS_PER_ROUND) || 0));
 }
 
 export function providerBudgets(config: ProviderConfig): ProviderBudget[] {

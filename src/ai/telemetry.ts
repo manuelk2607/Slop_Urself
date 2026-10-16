@@ -10,6 +10,8 @@ export interface AiTelemetry {
     durationSeconds?: number;
     elapsedMs?: number;
     errorCode?: string;
+    stage?: 'quota' | 'metadata' | 'configuration' | 'upload' | 'submit' | 'result';
+    httpStatus?: number;
 }
 
 export function logAiEvent(event: string, fields: AiTelemetry = {}) {
@@ -17,5 +19,6 @@ export function logAiEvent(event: string, fields: AiTelemetry = {}) {
     console.info(JSON.stringify({ type: 'ai', event, at: new Date().toISOString(),
         generationId: fields.generationId, roomCode: fields.roomCode, videoNumber: fields.videoNumber,
         provider: fields.provider, attempt: fields.attempt, steps: fields.steps,
-        durationSeconds: fields.durationSeconds, elapsedMs: fields.elapsedMs, errorCode: fields.errorCode }));
+        durationSeconds: fields.durationSeconds, elapsedMs: fields.elapsedMs, errorCode: fields.errorCode,
+        stage: fields.stage, httpStatus: fields.httpStatus }));
 }

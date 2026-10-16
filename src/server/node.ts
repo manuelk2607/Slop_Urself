@@ -6,6 +6,12 @@ import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
 import { accountsResponse } from './accounts';
 import { QuotaBudget, QuotaConfig, playerCount } from '../ai/quota';
+import { qualityConfig } from '../ai/providers';
+import { preparedImageSize } from '../ai/images';
+import { gameOptions } from '../game/options';
+import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from '../game/archive-play';
+import { closePhase, syncPhase } from '../game/phases';
+import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
 import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo } from '../storage/archive';
 import { archiveStatus } from './archive';
 import { historyResponse, historyListing, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
@@ -16,7 +22,7 @@ import { logAiEvent } from '../ai/telemetry';
 import {
     Room, Player, activeCreator, playerForConnection, roomSnapshot, finishVoting, finalStandings,
     removePlayer, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, roundLimit, maxRounds,
-    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, extendRound
+    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, extendRound, recordVote, judgeGuesses
 } from '../game/rules';
 import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
 import { roundInput } from '../game/persistence';
@@ -39,7 +45,10 @@ const pendingStarts = new Set<string>();
 const httpBuckets: RateBuckets = {};
 const messageBuckets: RateBuckets = {};
 const budgetData = new Map<string, unknown>();
-const config: AuthConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN }, getProfiles());
+const config: AuthConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
+const imageData = new Map<string, unknown>();
+const imageStorage: ImageStorage = { get: async <T>(key: string) => imageData.get(key) as T | undefined,
+    put: async (key, value) => { imageData.set(key, value); }, delete: async key => { imageData.delete(key); } };
 const budget = new QuotaBudget({ get: async <T>(key: string) => structuredClone(budgetData.get(key)) as T | undefined, put: async (key, value) => { budgetData.set(key, structuredClone(value)); } }, config);
 let budgetWork: Promise<unknown> = Promise.resolve();
 let archiveWork: Promise<unknown> = Promise.resolve();
@@ -97,6 +106,14 @@ app.use('/api/videos', async (req, res) => {
     const request = webRequest(req);
     await webResponse(await serveVideo(request, new URL(request.url).pathname.slice('/api/videos/'.length), config), res);
 });
+app.get('/api/rooms/:code/image', async (req, res) => {
+    const request = webRequest(req);
+    try {
+        const account = await requestAccount(request, config), room = rooms.get(sanitizeRoomId(req.params.code));
+        if (!room || (!authDisabled(config) && !room.players.some(player => player.accountId === account?.id))) { res.sendStatus(403); return; }
+        await webResponse(await sharedImageResponse(request, imageStorage, room.sharedImage), res);
+    } catch (error) { res.sendStatus(authFailureStatus(error)); }
+});
 
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'index.html')));
 app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'favicon.ico')));
@@ -147,6 +164,7 @@ app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) 
         archiveWork = deletion.catch(() => {});
         const result = await deletion;
         if (!command.roundNumber && !command.videoId) {
+            await deleteSharedImage(imageStorage, room?.sharedImage);
             rooms.delete(command.code);
             for (const socket of await io.in(command.code).fetchSockets()) {
                 socket.data.roomId = undefined;
@@ -161,7 +179,10 @@ app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) 
     return database.savedVideo(id);
 }), res));
 
-function broadcast(room: Room) { io.to(room.code).emit('roomDataUpdate', roomSnapshot(room)); }
+function broadcast(room: Room) {
+    syncPhase(room);
+    for (const player of room.players) if (player.connected) io.to(player.connectionId || player.id).emit('roomDataUpdate', roomSnapshot(room, player.id));
+}
 
 function runGeneration(room: Room, generationId: string, image?: string) {
     let pending = false, uncertain = false;
@@ -174,7 +195,8 @@ function runGeneration(room: Room, generationId: string, image?: string) {
             if (rooms.get(room.code) === room && room.generationId === generationId) room.generationJob = job;
         }
     };
-    const generation = image ? generateAiVideo(image, room.currentPrompt, config, progress,
+    const generationConfig = qualityConfig(config, gameOptions(room.options).quality);
+    const generation = image ? generateAiVideo(image, room.currentPrompt, generationConfig, progress,
         seconds => withBudget(() => budget.allowAttempt(room.code, seconds, generationId)), lifecycle)
         : resumeAiVideo(room.generationJob!, config, progress, lifecycle);
     void generation.then(videoUrl => {
@@ -211,8 +233,10 @@ async function refreshLobbyQuota(room: Room) {
     if (room.state !== 'LOBBY' && room.state !== 'GAME_OVER') return;
     const state = room.state, video = room.videoNumber;
     const players = room.players.length;
-    const capacity = await withBudget(() => budget.capacity(players));
-    if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length) return;
+    const quality = gameOptions(room.options).quality;
+    const mode = gameOptions(room.options).mode;
+    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive() || [], players) : await withBudget(() => budget.capacity(players, quality));
+    if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length || quality !== gameOptions(room.options).quality || mode !== gameOptions(room.options).mode) return;
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
         room.quota = capacity;
@@ -232,6 +256,7 @@ function persist(room: Room, action: () => Promise<void>) {
 }
 
 function persistMembers(room: Room) {
+    if (isArchiveGame(room) || room.state === 'LOBBY') return;
     const snapshot = structuredClone(room);
     persist(room, async () => {
         await saveRoom(snapshot.code, snapshot.hostId, snapshot.maxRounds);
@@ -242,12 +267,33 @@ function persistMembers(room: Room) {
 
 function checkVotingComplete(room: Room, confirmedSolo = false) {
     if (!finishVoting(room, confirmedSolo)) return;
+    completeVoting(room);
+}
+function completeVoting(room: Room) {
     if (room.state === 'GAME_OVER') void withBudget(() => budget.release(room.code));
     const snapshot = structuredClone(room);
     broadcast(room);
-    persist(room, () => saveRound(roundInput(snapshot)));
+    if (!isArchiveGame(room)) persist(room, () => saveRound(roundInput(snapshot)));
     if (room.state === 'GAME_OVER') void refreshLobbyQuota(room);
 }
+
+function endPhase(room: Room) {
+    const result = closePhase(room);
+    if (result === 'voted') completeVoting(room);
+    else if (result) {
+        if (result === 'skipped' && !isArchiveGame(room)) void withBudget(() => budget.drop(room.code, 1));
+        if (room.state === 'GAME_OVER') {
+            void withBudget(() => budget.release(room.code));
+            if (!isArchiveGame(room)) persist(room, () => markRoomFinished(room.code, finalStandings(room)));
+            void refreshLobbyQuota(room);
+        }
+        broadcast(room);
+    }
+}
+const phaseClock = setInterval(() => {
+    for (const room of rooms.values()) if (room.phaseDeadline && room.phaseDeadline <= Date.now()) endPhase(room);
+}, 500);
+phaseClock.unref();
 
 function leave(room: Room, player: Player) {
     const timer = disconnectTimers.get(player.sessionId);
@@ -255,13 +301,14 @@ function leave(room: Room, player: Player) {
     disconnectTimers.delete(player.sessionId);
     const wasOver = room.state === 'GAME_OVER';
     const skipped = removePlayer(room, player.id);
+    playArchiveVideo(room);
     if (skipped) void withBudget(() => budget.drop(room.code, skipped));
-    if (!room.players.length) { rooms.delete(room.code); void withBudget(() => budget.release(room.code)); return; }
+    if (!room.players.length) { rooms.delete(room.code); void deleteSharedImage(imageStorage, room.sharedImage); void withBudget(() => budget.release(room.code)); return; }
     io.to(room.code).emit('roomNotice', `${player.name} hat das Spiel verlassen.`);
     if (!wasOver && room.state === 'GAME_OVER') {
         void withBudget(() => budget.release(room.code));
         const standings = finalStandings(room);
-        persist(room, () => markRoomFinished(room.code, standings));
+        if (!isArchiveGame(room)) persist(room, () => markRoomFinished(room.code, standings));
     }
     checkVotingComplete(room);
     broadcast(room);
@@ -315,14 +362,13 @@ io.on('connection', (socket: Socket) => {
         socket.data.creatingRoom = true;
         try {
             const capacity = await withBudget(() => budget.capacity());
-            if (capacity.aiRoundLimit < 1) throw new Error('Kein kostenloses KI-Kontingent verfügbar.');
             let code: string;
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
             if (!socket.connected) return;
             const player: Player = { id: socket.id, accountId: socket.data.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || randomUUID(), name, score: 0, connected: true };
             const room: Room = { code, hostId: player.id, players: [player], state: 'LOBBY',
-                activeCreatorIndex: 0, currentVotes: {}, currentRound: 1, maxRounds: maxRounds(payload.maxRounds, capacity.aiRoundLimit),
-                currentPrompt: '', currentVideoUrl: '', quota: capacity };
+                activeCreatorIndex: 0, currentVotes: {}, currentRound: 1, maxRounds: capacity.aiRoundLimit ? maxRounds(payload.maxRounds, capacity.aiRoundLimit) : 0,
+                currentPrompt: '', currentVideoUrl: '', quota: capacity, options: gameOptions(), imageProfile: 'bounded' };
             rooms.set(code, room);
             enter(socket, room, player, 'roomCreated');
             persistMembers(room);
@@ -373,6 +419,30 @@ io.on('connection', (socket: Socket) => {
     });
 
     on('refreshQuota', async payload => { const { room } = member(socket, payload); await refreshLobbyQuota(room); });
+    on('setGameOptions', async payload => {
+        const { room, player } = member(socket, payload);
+        if (room.state !== 'LOBBY' || room.hostId !== player.id || pendingStarts.has(room.code)) return;
+        room.options = gameOptions(payload.options); room.quota = undefined; broadcast(room);
+        await refreshLobbyQuota(room); persistMembers(room);
+    });
+    on('setSharedImage', async payload => {
+        const { room, player } = member(socket, payload);
+        const recovering = room.state === 'IDLE' && gameOptions(room.options).sharedImage && (!room.sharedImage || room.sharedImage.expiresAt <= Date.now());
+        if ((!['LOBBY', 'GAME_OVER'].includes(room.state) && !recovering) || room.hostId !== player.id || pendingStarts.has(room.code)) return;
+        const state = room.state;
+        pendingStarts.add(room.code);
+        try {
+            const image = await writeSharedImage(imageStorage, payload.imageBase64), old = room.sharedImage;
+            if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== state) { await deleteSharedImage(imageStorage, image); return; }
+            room.sharedImage = image; await deleteSharedImage(imageStorage, old); broadcast(room);
+            setTimeout(() => {
+                if (room.sharedImage?.id === image.id && image.expiresAt <= Date.now()) {
+                    room.sharedImage = undefined; void deleteSharedImage(imageStorage, image);
+                    if (rooms.get(room.code) === room) broadcast(room);
+                }
+            }, Math.max(0, image.expiresAt - Date.now())).unref();
+        } finally { pendingStarts.delete(room.code); }
+    });
     on('setRoundCount', async payload => {
         const { room, player } = member(socket, payload);
         if (room.state !== 'LOBBY' || room.hostId !== player.id || pendingStarts.has(room.code)) return;
@@ -392,11 +462,14 @@ io.on('connection', (socket: Socket) => {
         pendingStarts.add(room.code);
         const roster = room.players.map(p => p.id).join(',');
         try {
+            if (gameOptions(room.options).sharedImage) await readSharedImage(imageStorage, room.sharedImage);
             await refreshLobbyQuota(room);
             if (!room.maxRounds || roster !== room.players.map(p => p.id).join(',')) throw new Error('Das Kontingent oder die Spielerzahl hat sich geändert. Bitte prüfe die Rundenauswahl.');
-            await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length));
+            if (isArchiveGame(room)) prepareArchive(room, await getDatabase()?.playableArchive() || []);
+            else await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length, gameOptions(room.options).quality));
             if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== 'LOBBY' || roster !== room.players.map(p => p.id).join(',') || room.players.some(p => !p.connected)) { await withBudget(() => budget.release(room.code)); return; }
             startRounds(room);
+            playArchiveVideo(room);
             broadcast(room);
             persistMembers(room);
         }
@@ -405,10 +478,13 @@ io.on('connection', (socket: Socket) => {
 
     on('sendImage', async payload => {
         const { room, player } = member(socket, payload);
-        if (room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
+        if (isArchiveGame(room) || room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
         const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim().slice(0, 150) : '';
         if (!prompt) throw new Error('Bitte gib einen Prompt ein.');
-        validateImage(payload.imageBase64);
+        const imageBase64 = gameOptions(room.options).sharedImage ? await readSharedImage(imageStorage, room.sharedImage) : payload.imageBase64;
+        const image = validateImage(imageBase64);
+        if (room.imageProfile === 'bounded') preparedImageSize(image.base64);
+        if (room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
         if (AI_PROVIDER !== 'mock' && !archiveEnabled(config)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
         const generationId = randomUUID();
         room.generationId = generationId;
@@ -420,17 +496,19 @@ io.on('connection', (socket: Socket) => {
         room.currentPrompt = prompt; room.currentVideoUrl = ''; room.currentVotes = {};
         broadcast(room);
         room.generationJob = undefined;
-        runGeneration(room, generationId, payload.imageBase64 as string);
+        runGeneration(room, generationId, imageBase64 as string);
     });
 
     on('submitVote', payload => {
         const { room, player } = member(socket, payload);
-        if (room.state !== 'VOTING' || activeCreator(room)?.id === player.id || room.currentVotes[player.id] !== undefined) return;
-        const points = Number(payload.points);
-        if (!Number.isInteger(points) || points < 1 || points > 5) throw new Error('Bitte vergib 1 bis 5 Punkte.');
-        room.currentVotes[player.id] = points;
+        if (room.state !== 'VOTING' || room.currentVotes[player.id] !== undefined) return;
+        recordVote(room, player, payload);
         checkVotingComplete(room);
         broadcast(room);
+    });
+    on('judgeGuesses', payload => {
+        const { room, player } = member(socket, payload);
+        if (judgeGuesses(room, player, payload)) { checkVotingComplete(room); broadcast(room); }
     });
 
     on('finishPreview', payload => {
@@ -444,20 +522,29 @@ io.on('connection', (socket: Socket) => {
         const { room, player } = member(socket, payload);
         if (room.hostId !== player.id || room.state !== 'RESULTS') return;
         advanceTurn(room);
+        playArchiveVideo(room);
         broadcast(room);
+    });
+
+    on('closePhase', payload => {
+        const { room, player } = member(socket, payload);
+        if (room.hostId !== player.id || payload.phaseKey !== room.phaseKey) return;
+        endPhase(room);
     });
 
     on('extendGame', async payload => {
         const { room, player } = member(socket, payload);
+        if (isArchiveGame(room)) throw new Error('Starte für weitere Archivvideos eine neue Partie.');
         if (room.state !== 'GAME_OVER' || room.hostId !== player.id || pendingStarts.has(room.code)) return;
         if (Number(payload.completedVideo) !== (room.videoNumber || room.currentRound)) return;
         if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
         pendingStarts.add(room.code);
         const roster = room.players.map(p => p.id).join(',');
         try {
+            if (gameOptions(room.options).sharedImage) await readSharedImage(imageStorage, room.sharedImage);
             await refreshLobbyQuota(room);
             if (room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== room.players.map(p => p.id).join(',')) throw new Error('Die Spielerzahl hat sich geändert. Bitte versuche es erneut.');
-            await withBudget(() => budget.extend(room.code, room.players.length));
+            await withBudget(() => budget.extend(room.code, room.players.length, gameOptions(room.options).quality));
             if (rooms.get(room.code) !== room || room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== room.players.map(p => p.id).join(',') || room.players.some(p => !p.connected)) {
                 await withBudget(() => budget.drop(room.code, roster.split(',').length));
                 throw new Error('Die Spielerzahl oder Verbindung hat sich geändert. Bitte versuche es erneut.');

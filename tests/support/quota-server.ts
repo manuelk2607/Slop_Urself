@@ -14,7 +14,7 @@ globalThis.fetch = async (input, options) => {
 process.stdin.on('data', data => { seconds = Number(String(data).trim()); });
 if (extensions) {
     require('../../dist/ai/generation.js').generateAiVideo = async (_image: string, _prompt: string, _config: unknown, _progress: unknown, allowAttempt: (seconds: number) => Promise<void>) => {
-        await allowAttempt(92);
+        await allowAttempt(70);
         await new Promise(resolve => setTimeout(resolve, 100));
         seconds = Math.max(0, seconds - 20); remaining--;
         return '/assets/mock-video.mp4';

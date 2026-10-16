@@ -1,4 +1,6 @@
 import { fetchGpuQuota } from './quota';
+import { preparedImageSize } from './images';
+import { GradioProviderError as AiProviderError, readQueueResult } from './gradio';
 import { logAiEvent, type AiTelemetry } from './telemetry';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
@@ -25,6 +27,7 @@ export interface AiJob {
     root: string;
     endpoint: string;
     eventId?: string;
+    sessionHash?: string;
     submittedAt: number;
     status: 'submitting' | 'running' | 'complete' | 'failed';
     seed: number;
@@ -43,10 +46,10 @@ export class AiPendingError extends Error {
 export class AiExpiredError extends Error {
     constructor() { super('Der KI-Auftrag konnte nicht wiederhergestellt werden. Bitte versuche es später erneut.'); }
 }
-class AiProviderError extends Error {}
 class AiHttpError extends Error {
     constructor(public status: number) { super(`Hugging Face HTTP ${status}`); }
 }
+const HF_SPACE_ROOT = /^https:\/\/[a-z0-9-]+\.hf\.space(?:\/--replicas\/[a-z0-9][a-z0-9-]{0,79})?$/;
 const jobFields = (job: AiJob, lifecycle: AiLifecycle) => ({ ...lifecycle.context, provider: job.provider,
     steps: job.steps, durationSeconds: job.durationSeconds, elapsedMs: Math.max(0, Date.now() - job.submittedAt) });
 interface ApiParameter {
@@ -85,8 +88,13 @@ export function extractVideoUrl(result: unknown, root: string): string {
     const file = item?.video ?? item;
     const value = typeof first === 'string' ? first : file?.url || (file?.path ? `${root}/gradio_api/file=${file.path}` : '');
     if (!value) throw new Error('KI hat keine Video-URL zurückgegeben.');
-    const url = new URL(value, root);
+    const url = new URL(value, `${root}/`);
     if (url.protocol !== 'https:') throw new Error('KI hat eine ungültige Video-URL geliefert.');
+    const source = new URL(root);
+    // Gradio returns origin-only file URLs even when the job is pinned to a replica.
+    if (HF_SPACE_ROOT.test(root) && source.pathname !== '/' && url.origin === source.origin && !url.pathname.startsWith('/--replicas/')) {
+        url.pathname = source.pathname + url.pathname;
+    }
     return url.href;
 }
 
@@ -144,8 +152,9 @@ export function orderProviderValues(parameters: ApiParameter[], values: Record<s
 }
 
 export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (step: string) => void = () => {}, lifecycle: AiLifecycle = {}) {
-    if (!/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(job.root) || !/^\/[a-zA-Z0-9_-]+$/.test(job.endpoint)
-        || (job.eventId && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.eventId))) throw new Error('Ungültiger gespeicherter KI-Auftrag.');
+    if (!HF_SPACE_ROOT.test(job.root) || !/^\/[a-zA-Z0-9_-]+$/.test(job.endpoint)
+        || (job.eventId && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.eventId))
+        || (job.sessionHash && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.sessionHash))) throw new Error('Ungültiger gespeicherter KI-Auftrag.');
     if (job.status === 'complete' && job.videoUrl) return job.videoUrl;
     if (job.status === 'failed') throw new AiProviderError('Der KI-Provider hat die Generierung abgebrochen.');
     if (Date.now() - job.submittedAt >= AI_JOB_MAX_AGE_MS) {
@@ -157,12 +166,15 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (ste
     progress('Videoerstellung wird fortgesetzt...');
     logAiEvent('result_requested', jobFields(job, lifecycle));
     try {
-        const response = await fetch(`${job.root}/gradio_api/call${job.endpoint}/${job.eventId}`, {
+        const resultUrl = job.sessionHash ? `${job.root}/gradio_api/queue/data?session_hash=${encodeURIComponent(job.sessionHash)}`
+            : `${job.root}/gradio_api/call${job.endpoint}/${job.eventId}`;
+        const response = await fetch(resultUrl, {
             headers: config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {},
             signal: AbortSignal.timeout(lifecycle.resultTimeoutMs || 180_000)
         });
         if (!response.ok) throw new AiHttpError(response.status);
-        const videoUrl = extractVideoUrl(parseServerSentResult(await response.text()), job.root);
+        const result = job.sessionHash ? await readQueueResult(response, job.eventId, progress) : parseServerSentResult(await response.text());
+        const videoUrl = extractVideoUrl(result, job.root);
         const completed: AiJob = { ...job, status: 'complete', videoUrl };
         await lifecycle.saveJob?.(completed);
         logAiEvent('completed', jobFields(completed, lifecycle));
@@ -170,16 +182,17 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (ste
     } catch (error) {
         if (error instanceof AiProviderError) {
             await lifecycle.saveJob?.({ ...job, status: 'failed' });
-            logAiEvent('failed', { ...jobFields(job, lifecycle), errorCode: 'provider_error' });
+            logAiEvent('failed', { ...jobFields(job, lifecycle), stage: 'result', errorCode: error.code });
             throw error;
         }
-        logAiEvent('retrieval_retry', { ...jobFields(job, lifecycle), errorCode: error instanceof AiHttpError ? `http_${error.status}` : 'connection_or_result_incomplete' });
+        logAiEvent('retrieval_retry', { ...jobFields(job, lifecycle), stage: 'result', httpStatus: error instanceof AiHttpError ? error.status : undefined, errorCode: error instanceof AiHttpError ? `http_${error.status}` : 'connection_or_result_incomplete' });
         throw new AiPendingError(job);
     }
 }
 
 export async function generateAiVideo(imageBase64: string, prompt: string, config: AiConfig, progress: (step: string) => void = () => {}, allowAttempt?: (seconds: number) => Promise<void>, lifecycle: AiLifecycle = {}) {
     const image = validateImage(imageBase64);
+    const size = config.AI_IMAGE_PROFILE === 'bounded' ? preparedImageSize(image.base64) : undefined;
     if (config.AI_PROVIDER === 'mock') {
         await new Promise(resolve => setTimeout(resolve, 200));
         return '/assets/mock-video.mp4';
@@ -192,16 +205,18 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
         if (!response.ok) throw new Error('Hugging-Face-Anmeldung ist momentan nicht erreichbar.');
     }
     const errors: string[] = [];
+    let providerError: AiProviderError | undefined;
     let attempt = 0;
     for (const provider of parseProviderChain(config.AI_PROVIDER_CHAIN || config.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN)) {
         attempt++;
         let job: AiJob | undefined;
+        let stage: NonNullable<AiTelemetry['stage']> = 'quota';
         const startedAt = Date.now();
         logAiEvent('attempt', { ...lifecycle.context, provider, attempt, steps: providerSteps(provider), durationSeconds: videoDuration(config) });
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 180_000);
         try {
-            const needed = providerGpuSeconds(provider, config);
+            const needed = providerGpuSeconds(provider, config, provider.startsWith('wan22') ? size : undefined);
             if (!Number.isFinite(needed)) throw new Error('Dieser Space unterstützt keine Videos mit mindestens 5 Sekunden.');
             const quota = await fetchGpuQuota(config);
             if (quota.current < needed || quota.runs?.remaining === 0) throw new Error('Das kostenlose GPU-Kontingent ist aufgebraucht.');
@@ -214,46 +229,64 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
                 if (!response.ok) throw new AiHttpError(response.status);
                 return response;
             };
+            stage = 'metadata';
             const metadata = await (await get(`https://huggingface.co/api/spaces/${space}`)).json() as { host?: string };
             if (!metadata.host || !/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(metadata.host)) throw new Error('Space ist nicht erreichbar.');
-            const root = metadata.host;
+            let root = metadata.host;
             const endpoint = providerEndpoint(provider, config);
-            const info = await (await get(`${root}/gradio_api/info`)).json() as { named_endpoints: Record<string, { parameters: ApiParameter[] }> };
+            stage = 'configuration';
+            const infoResponse = await get(`${root}/gradio_api/info`);
+            const replica = infoResponse.headers.get('x-proxied-replica');
+            // Uploads, queue state and generated files are local to the selected replica.
+            if (replica && /^[a-z0-9][a-z0-9-]{0,79}$/.test(replica)) root += `/--replicas/${replica}`;
+            const info = await infoResponse.json() as { named_endpoints: Record<string, { parameters: ApiParameter[] }> };
             const parameters = info.named_endpoints[endpoint]?.parameters;
             if (!parameters) throw new Error('Space bietet den erwarteten Video-Endpunkt nicht an.');
+            const queue = provider === 'wan22' || provider === 'wan22-fast';
+            let fnIndex: number | undefined;
+            if (queue) {
+                const settings = await (await get(`${root}/config`)).json() as { dependencies?: { id?: number; api_name?: string }[] };
+                fnIndex = settings.dependencies?.find(dependency => dependency.api_name === endpoint.slice(1))?.id;
+                if (typeof fnIndex !== 'number' || !Number.isInteger(fnIndex) || fnIndex < 0) throw new Error('Space bietet die erwartete Video-Queue nicht an.');
+            }
             // Validate before uploading, including the requested minimum duration.
             orderProviderValues(parameters, buildProviderValues(provider, prompt, null, config));
             const bytes = Uint8Array.from(atob(image.base64), char => char.charCodeAt(0));
             const form = new FormData();
             const filename = `input.${image.mime.split('/')[1]}`;
             form.append('files', new Blob([bytes], { type: image.mime }), filename);
+            stage = 'upload';
             const uploaded = await (await get(`${root}/gradio_api/upload`, { method: 'POST', body: form })).json() as string[];
             if (!uploaded[0]) throw new Error('Hugging Face hat keinen Upload-Pfad geliefert.');
             const file = { path: uploaded[0], orig_name: filename, mime_type: image.mime, meta: { _type: 'gradio.FileData' } };
             const data = orderProviderValues(parameters, buildProviderValues(provider, prompt, file, config));
             job = { provider, root, endpoint, submittedAt: Date.now(), status: 'submitting',
+                ...(queue ? { sessionHash: crypto.randomUUID() } : {}),
                 seed: Number(data[parameters.findIndex(p => p.parameter_name === (provider === 'ltx' ? 'seed_ui' : 'seed'))]) || 0,
                 steps: providerSteps(provider), durationSeconds: videoDuration(config) };
             await lifecycle.saveJob?.(job);
-            const started = await (await get(`${root}/gradio_api/call${endpoint}`, {
-                method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ data })
+            stage = 'submit';
+            const started = await (await get(`${root}/gradio_api/${queue ? 'queue/join' : `call${endpoint}`}`, {
+                method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(queue ? { data, fn_index: fnIndex, session_hash: job.sessionHash } : { data })
             })).json() as { event_id?: string };
             if (!started.event_id) throw new Error('Hugging Face hat keine Event-ID geliefert.');
             job = { ...job, eventId: started.event_id, status: 'running' };
             await lifecycle.saveJob?.(job);
             logAiEvent('submitted', { ...jobFields(job, lifecycle), attempt });
+            stage = 'result';
             return await resumeAiVideo(job, config, progress, lifecycle);
         } catch (error) {
             if (error instanceof AiPendingError || error instanceof AiExpiredError) throw error;
             if (job?.status === 'submitting' && !(error instanceof AiHttpError && error.status >= 400 && error.status < 500)) throw new AiPendingError(job);
             if (job?.status === 'running' && !(error instanceof AiProviderError)) throw new AiPendingError(job);
             if (job) await lifecycle.saveJob?.({ ...job, status: 'failed' });
+            if (error instanceof AiProviderError) providerError = error;
             errors.push(provider);
-            logAiEvent('attempt_failed', { ...lifecycle.context, provider, attempt, elapsedMs: Date.now() - startedAt,
-                errorCode: error instanceof AiHttpError ? `http_${error.status}` : job ? 'provider_error' : 'preflight_or_budget' });
+            logAiEvent('attempt_failed', { ...lifecycle.context, provider, attempt, stage, httpStatus: error instanceof AiHttpError ? error.status : undefined, elapsedMs: Date.now() - startedAt,
+                errorCode: error instanceof AiHttpError ? `http_${error.status}` : error instanceof AiProviderError ? error.code : job ? 'provider_error' : 'preflight_or_budget' });
         } finally {
             clearTimeout(timer);
         }
     }
-    throw new Error(`Alle kostenlosen KI-Provider sind derzeit nicht verfügbar (${errors.join(', ')}). Bitte versuche es später erneut.`);
+    throw new Error(`Alle kostenlosen KI-Provider sind derzeit nicht verfügbar (${errors.join(', ')}). ${providerError?.message || 'Bitte versuche es später erneut.'}`);
 }

@@ -3,11 +3,17 @@ import { cloudflareAuth } from './profiles';
 import { getDatabase } from '../../database/neon';
 import { roundInput } from '../../game/persistence';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, validateImage } from '../../ai/generation';
+import { qualityConfig } from '../../ai/providers';
+import { preparedImageSize } from '../../ai/images';
+import { gameOptions } from '../../game/options';
+import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from '../../game/archive-play';
+import { closePhase, syncPhase } from '../../game/phases';
+import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse } from '../../game/images';
 import { logAiEvent } from '../../ai/telemetry';
 import { archiveEnabled } from '../../storage/archive';
 import { takeRateLimit, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
 import { type QuotaCapacity } from '../../ai/quota';
-import { type Room as RoomState, type Player, activeCreator, playerForConnection, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, extendRound } from '../../game/rules';
+import { type Room as RoomState, type Player, activeCreator, playerForConnection, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, extendRound, recordVote, judgeGuesses } from '../../game/rules';
 import { service } from './runtime';
 import { deleteStoredHistory, historyVideo, HistoryError, historyJson, type HistoryDeletion } from '../statistics';
 import type { DurableObjectState, CloudflareWebSocket, ConnectionMeta, Env, PendingRoomWrite } from './types';
@@ -61,6 +67,13 @@ export class RoomDurableObject {
     }
 
     async fetch(request: Request): Promise<Response> {
+        if (/^\/api\/rooms\/[A-Z0-9]{4}\/image$/.test(new URL(request.url).pathname)) {
+            try {
+                const account = await requestAccount(request, cloudflareAuth(this.env));
+                if (!this.room || (!authDisabled(this.env) && !this.room.players.some(player => player.accountId === account?.id))) return new Response(null, { status: 403 });
+                return sharedImageResponse(request, this.state.storage, this.room.sharedImage);
+            } catch { return new Response(null, { status: 401 }); }
+        }
         if (request.url === 'https://internal/statistics/delete' && request.method === 'POST') {
             return this.enqueue(async () => {
                 const command = await request.json() as HistoryDeletion;
@@ -131,12 +144,16 @@ export class RoomDurableObject {
                     if (message.type === 'leaveRoom') await this.leaveRoom(socket, player);
                     else if (message.type === 'refreshQuota') await this.refreshLobbyQuota();
                     else if (message.type === 'setRoundCount') await this.setRoundCount(player, payload);
+                    else if (message.type === 'setGameOptions') await this.setGameOptions(player, payload);
+                    else if (message.type === 'setSharedImage') await this.setSharedImage(player, payload);
                     else if (message.type === 'startGame') await this.startGame(player);
                     else if (message.type === 'sendImage') await this.sendImage(player, payload);
                     else if (message.type === 'submitVote') await this.submitVote(player, payload);
+                    else if (message.type === 'judgeGuesses' && judgeGuesses(this.room!, player, payload)) await this.checkVotingComplete();
                     else if (message.type === 'finishPreview' && this.room?.players.length === 1 && activeCreator(this.room)?.id === player.id
                         && Number(payload.videoNumber) === (this.room.videoNumber || this.room.currentRound)) await this.checkVotingComplete(true);
                     else if (message.type === 'startNextRound') await this.startNextRound(player);
+                    else if (message.type === 'closePhase' && this.room!.hostId === player.id && payload.phaseKey === this.room!.phaseKey) await this.endPhase();
                     else if (message.type === 'extendGame') await this.extendGame(player, payload);
                 }
             } catch (error) {
@@ -165,12 +182,12 @@ export class RoomDurableObject {
             return;
         }
         const capacity = await service(this.env, '/quota/capacity');
-        if (capacity.aiRoundLimit < 1) throw new Error(capacity.error || 'Das kostenlose KI-Kontingent ist aufgebraucht.');
         const player: Player = { id: meta.socketId, accountId: meta.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || crypto.randomUUID(), name: username, score: 0, connected: true };
         this.room = {
             code: this.roomCode, hostId: player.id, players: [player], state: 'LOBBY',
             activeCreatorIndex: 0, currentVotes: {}, currentRound: 1,
-            maxRounds: maxRounds(payload.maxRounds, capacity.aiRoundLimit), currentPrompt: '', currentVideoUrl: '', quota: capacity as QuotaCapacity
+            maxRounds: capacity.aiRoundLimit ? maxRounds(payload.maxRounds, capacity.aiRoundLimit) : 0, currentPrompt: '', currentVideoUrl: '', quota: capacity as QuotaCapacity,
+            options: gameOptions(), imageProfile: 'bounded'
         };
         this.bind(socket, meta, player);
         await this.saveRoom();
@@ -224,6 +241,7 @@ export class RoomDurableObject {
         const room = this.room;
         const wasOver = room.state === 'GAME_OVER';
         const skipped = removePlayer(room, player.id);
+        if (room.players.length) playArchiveVideo(room);
         if (skipped) await service(this.env, '/quota/drop', { code: room.code, generations: skipped });
         this.sockets.delete(socket);
         if (!this.room.players.length) { await service(this.env, '/quota/release', { code: this.roomCode }); this.room = null; }
@@ -242,10 +260,13 @@ export class RoomDurableObject {
         const room = this.room!;
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
         if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
+        if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
         if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
-        await service(this.env, '/quota/reserve', { code: room.code, rounds: room.maxRounds, players: room.players.length });
+        if (isArchiveGame(room)) prepareArchive(room, await getDatabase(this.env.DATABASE_URL)?.playableArchive() || []);
+        else await service(this.env, '/quota/reserve', { code: room.code, rounds: room.maxRounds, players: room.players.length, quality: gameOptions(room.options).quality });
         startRounds(room);
+        playArchiveVideo(room);
         await this.saveRoom();
         this.broadcastRoomUpdate();
         await this.persistMembers();
@@ -254,7 +275,8 @@ export class RoomDurableObject {
     private async refreshLobbyQuota() {
         const room = this.room;
         if (!room || (room.state !== 'LOBBY' && room.state !== 'GAME_OVER')) return;
-        const capacity = await service(this.env, '/quota/capacity', { players: room.players.length }) as QuotaCapacity;
+        const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive() || [], room.players.length)
+            : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality }) as QuotaCapacity;
         if (room.state === 'GAME_OVER') room.extensionQuota = capacity;
         else {
             room.quota = capacity;
@@ -275,12 +297,33 @@ export class RoomDurableObject {
         await this.persistMembers();
     }
 
+    private async setGameOptions(player: Player, payload: Record<string, unknown>) {
+        const room = this.room!;
+        if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
+        room.options = gameOptions(payload.options);
+        await this.refreshLobbyQuota(); await this.persistMembers();
+    }
+
+    private async setSharedImage(player: Player, payload: Record<string, unknown>) {
+        const room = this.room!;
+        const recovering = room.state === 'IDLE' && gameOptions(room.options).sharedImage && (!room.sharedImage || room.sharedImage.expiresAt <= Date.now());
+        if ((!['LOBBY', 'GAME_OVER'].includes(room.state) && !recovering) || room.hostId !== player.id) return;
+        const image = await writeSharedImage(this.state.storage, payload.imageBase64), old = room.sharedImage;
+        room.sharedImage = image;
+        try { await this.saveRoom(); }
+        catch (error) { room.sharedImage = old; await deleteSharedImage(this.state.storage, image); throw error; }
+        await deleteSharedImage(this.state.storage, old);
+        this.broadcastRoomUpdate(); await this.scheduleAlarm();
+    }
+
     private async sendImage(player: Player, payload: Record<string, unknown>) {
         const room = this.room!;
-        if (room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
+        if (isArchiveGame(room) || room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
         const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim().slice(0, 150) : '';
         if (!prompt) throw new Error('Bitte gib einen Prompt ein.');
-        validateImage(payload.imageBase64);
+        const imageBase64 = gameOptions(room.options).sharedImage ? await readSharedImage(this.state.storage, room.sharedImage) : payload.imageBase64;
+        const image = validateImage(imageBase64);
+        if (room.imageProfile === 'bounded') preparedImageSize(image.base64);
         if (this.env.AI_PROVIDER !== 'mock' && !archiveEnabled(this.env)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
         const generationId = crypto.randomUUID();
         await service(this.env, '/quota/begin', { code: room.code, generations: remainingVideos(room), jobId: generationId });
@@ -292,7 +335,7 @@ export class RoomDurableObject {
         room.generationJob = undefined;
         await this.saveRoom();
         this.broadcastRoomUpdate();
-        this.runGeneration(room, payload.imageBase64 as string);
+        this.runGeneration(room, imageBase64 as string);
     }
 
     private runGeneration(room: RoomState, image?: string) {
@@ -313,7 +356,7 @@ export class RoomDurableObject {
                 await this.saveRoom();
             })
         };
-        const generation = image ? generateAiVideo(image, room.currentPrompt, this.env, progress,
+        const generation = image ? generateAiVideo(image, room.currentPrompt, qualityConfig(this.env, gameOptions(room.options).quality), progress,
             seconds => service(this.env, '/quota/attempt', { code: room.code, seconds, jobId: generationId }).then(() => {}), lifecycle)
             : resumeAiVideo(room.generationJob!, this.env, progress, lifecycle);
         const work = generation
@@ -405,11 +448,9 @@ export class RoomDurableObject {
 
     private async submitVote(player: Player, payload: Record<string, unknown>) {
         const room = this.room!;
-        if (room.state !== 'VOTING' || activeCreator(room)?.id === player.id) return;
+        if (room.state !== 'VOTING') return;
         if (room.currentVotes[player.id] !== undefined) return;
-        const points = Number(payload.points);
-        if (!Number.isInteger(points) || points < 1 || points > 5) throw new Error('Bitte vergib 1 bis 5 Punkte.');
-        room.currentVotes[player.id] = points;
+        recordVote(room, player, payload);
         await this.saveRoom();
         await this.checkVotingComplete();
         this.broadcastRoomUpdate();
@@ -419,17 +460,20 @@ export class RoomDurableObject {
         const room = this.room!;
         if (room.state !== 'RESULTS' || room.hostId !== player.id) return;
         advanceTurn(room);
+        playArchiveVideo(room);
         await this.saveRoom();
         this.broadcastRoomUpdate();
     }
 
     private async extendGame(player: Player, payload: Record<string, unknown>) {
         const room = this.room!;
+        if (isArchiveGame(room)) throw new Error('Starte für weitere Archivvideos eine neue Partie.');
         if (room.state !== 'GAME_OVER' || room.hostId !== player.id) return;
         if (Number(payload.completedVideo) !== (room.videoNumber || room.currentRound)) return;
         if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
+        if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
-        await service(this.env, '/quota/extend', { code: room.code, players: room.players.length });
+        await service(this.env, '/quota/extend', { code: room.code, players: room.players.length, quality: gameOptions(room.options).quality });
         extendRound(room);
         this.pendingRounds.push({ ...structuredClone(room), writeAction: 'continue' });
         await this.state.storage.put('pendingRounds', this.pendingRounds);
@@ -440,9 +484,15 @@ export class RoomDurableObject {
 
     private async checkVotingComplete(confirmedSolo = false) {
         const room = this.room;
-        if (!room || !finishVoting(room, confirmedSolo)) return;
+        if (!room) return;
+        if (!finishVoting(room, confirmedSolo)) { await this.saveRoom(); return; }
+        await this.completeVoting();
+    }
+
+    private async completeVoting() {
+        const room = this.room!;
         if (room.state === 'GAME_OVER') await service(this.env, '/quota/release', { code: room.code });
-        this.pendingRounds.push(structuredClone(room));
+        if (!isArchiveGame(room)) this.pendingRounds.push(structuredClone(room));
         await this.state.storage.put('pendingRounds', this.pendingRounds);
         await this.saveRoom();
         this.broadcastRoomUpdate();
@@ -453,7 +503,7 @@ export class RoomDurableObject {
     private async queueFinal() {
         if (!this.room) return;
         await service(this.env, '/quota/release', { code: this.room.code });
-        this.pendingRounds.push(structuredClone(this.room));
+        if (!isArchiveGame(this.room)) this.pendingRounds.push(structuredClone(this.room));
         await this.state.storage.put('pendingRounds', this.pendingRounds);
         await this.flushPendingRounds();
         await this.refreshLobbyQuota();
@@ -461,12 +511,12 @@ export class RoomDurableObject {
 
     private async persistMembers() {
         const room = this.room;
-        if (!room) return;
+        if (!room || isArchiveGame(room) || room.state === 'LOBBY') return;
         try {
             const database = getDatabase(this.env.DATABASE_URL);
             await database?.saveRoom(room.code, room.hostId, room.maxRounds);
             await database?.saveScores(room.code, room.players, room.hostId);
-            if (room.state !== 'LOBBY') await database?.markRoomStarted(room.code);
+            await database?.markRoomStarted(room.code);
         } catch (error) {
             console.error('[DB] Members not saved', error instanceof Error ? error.message : 'Database error');
             this.broadcast('roomNotice', 'Die Statistik-Speicherung ist momentan nicht erreichbar.');
@@ -512,6 +562,10 @@ export class RoomDurableObject {
         await this.enqueue(async () => {
             const room = this.room;
             if (room) {
+                if (room.phaseDeadline && room.phaseDeadline <= Date.now()) await this.endPhase();
+                if (room.sharedImage && room.sharedImage.expiresAt <= Date.now()) {
+                    await deleteSharedImage(this.state.storage, room.sharedImage); room.sharedImage = undefined;
+                }
                 const wasOver = room.state === 'GAME_OVER';
                 for (const p of [...room.players]) {
                     if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt >= DISCONNECT_GRACE_MS) {
@@ -520,6 +574,7 @@ export class RoomDurableObject {
                     }
                 }
                 if (!room.players.length) { await service(this.env, '/quota/release', { code: room.code }); this.room = null; }
+                else playArchiveVideo(room);
                 await this.saveRoom();
                 if (this.room && !wasOver && room.state === 'GAME_OVER') await this.queueFinal();
                 await this.checkVotingComplete();
@@ -539,6 +594,8 @@ export class RoomDurableObject {
 
     private async scheduleAlarm() {
         const deadlines = this.room?.players.filter(p => !p.connected && p.disconnectedAt).map(p => p.disconnectedAt! + DISCONNECT_GRACE_MS) || [];
+        if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
+        if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
         if (this.quotaReleases.length) deadlines.push(Date.now() + 15_000);
         for (const [jobId, entry] of Object.entries(this.aiJobs)) {
@@ -554,11 +611,32 @@ export class RoomDurableObject {
     }
 
     private async saveRoom() {
+        if (this.room) syncPhase(this.room);
         if (this.room) await this.state.storage.put('room', this.room);
-        else await this.state.storage.delete('room');
+        else {
+            const previous = await this.state.storage.get<RoomState>('room');
+            await deleteSharedImage(this.state.storage, previous?.sharedImage);
+            await this.state.storage.delete('room');
+        }
     }
 
-    private broadcastRoomUpdate() { if (this.room) this.broadcast('roomDataUpdate', roomSnapshot(this.room)); }
+    private broadcastRoomUpdate() {
+        if (this.room) { syncPhase(this.room); this.state.waitUntil(this.scheduleAlarm()); }
+        if (this.room) for (const [socket, meta] of this.sockets) {
+            if (meta.playerId && this.room.players.some(player => player.id === meta.playerId)) this.send(socket, 'roomDataUpdate', roomSnapshot(this.room, meta.playerId));
+        }
+    }
+    private async endPhase() {
+        const room = this.room;
+        if (!room) return;
+        const result = closePhase(room);
+        if (result === 'voted') await this.completeVoting();
+        else if (result) {
+            if (result === 'skipped' && !isArchiveGame(room)) await service(this.env, '/quota/drop', { code: room.code, generations: 1 });
+            if (room.state === 'GAME_OVER') await this.queueFinal();
+            await this.saveRoom(); this.broadcastRoomUpdate();
+        }
+    }
     private broadcast(type: string, payload?: unknown) {
         for (const [socket, meta] of this.sockets) {
             if (meta.playerId && this.room?.players.some(p => p.id === meta.playerId)) this.send(socket, type, payload);

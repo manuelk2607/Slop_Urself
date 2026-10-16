@@ -31,6 +31,8 @@ export default {
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
         if (url.pathname === '/api/session') return sessionResponse(request, auth, serviceProfiles(env));
         if (url.pathname.startsWith('/api/admin/')) return accountsResponse(request, auth, serviceProfiles(env));
+        const imageRoom = /^\/api\/rooms\/([A-Z0-9]{4})\/image$/.exec(url.pathname);
+        if (imageRoom) return env.ROOMS.get(env.ROOMS.idFromName(imageRoom[1])).fetch(request);
 
         if (url.pathname === '/api/config') {
             let players: number;

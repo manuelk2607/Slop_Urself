@@ -79,6 +79,7 @@ try {
         const secondUrl = '/api/videos/videos/1234567890123-second.mp4';
         await saveRound({ ...input, roomCode: 'DELT', players: deletionPlayers, videoUrl: firstUrl });
         await saveRound({ ...input, roomCode: 'DELT', roundNumber: 2, players: deletionPlayers, videoUrl: secondUrl });
+        assert.equal((await getDatabase()!.playableArchive()).length, 2, 'Only stored, non-deleted, available videos may be replayed.');
         const deletedFiles: string[] = [];
         const removeFile = async (url: string) => { deletedFiles.push(url); };
         await assert.rejects(deleteStoredHistory(getDatabase(), { code: 'DELT', roundNumber: 1 }, async () => { throw new Error('Scheduler down'); }));
@@ -90,6 +91,7 @@ try {
         assert.ok(deletion.undoUntil! > Date.now());
         assert.ok((await getDatabase()!.protectedVideoUrls()).includes(firstUrl), 'A video inside its undo window must be protected from automatic eviction.');
         assert.equal((await getStats('delete-creator')).recentVideos.length, 1);
+        assert.equal((await getDatabase()!.playableArchive()).length, 1, 'Videos in the undo window must not enter new archive games.');
         assert.equal((await getStats()).players.find(player => player.id === 'delete-creator')?.totalScore, 9);
         assert.equal((await client.query('select count(*)::int as n from votes v join rounds r on r.id = v.round_id where r.room_code = $1', ['DELT'])).rows[0].n, 2);
         const profilesBefore = (await client.query('select count(*)::int as n from user_profiles')).rows[0].n;
@@ -168,6 +170,20 @@ try {
         await client.query('alter table video_history drop column evicted_at');
         await client.query(DATABASE_SCHEMA.find(sql => sql.startsWith('alter table video_history add column'))!);
         assert.equal((await client.query('select count(*)::int as n from video_history')).rows[0].n, historyCount);
+        await repository.saveRoom('MODE', 'author', 1); await repository.markRoomStarted('MODE');
+        const modeInput = { roomCode: 'MODE', roundNumber: 1, creatorSocketId: 'author', prompt: 'Spin around', videoUrl: '/assets/mock-video.mp4', roundPoints: 4,
+            taskText: 'Eine überraschende Drehung', guesses: [{ playerId: 'guesser', name: 'Guesser', text: 'Spin', correct: true, points: 2 }],
+            votes: [{ voterSocketId: 'guesser', points: 4, taskPoints: 5, funPoints: 3 }],
+            players: [{ id: 'author', accountId: 'mode-author', name: 'Author', score: 4, guessPoints: 0 }, { id: 'guesser', accountId: 'mode-guesser', name: 'Guesser', score: 2, guessPoints: 2 }],
+            hostId: 'author', standings: [{ playerSocketId: 'author', name: 'Author', score: 4, guessPoints: 0, finalRank: 1 }, { playerSocketId: 'guesser', name: 'Guesser', score: 2, guessPoints: 2, finalRank: 2 }] };
+        await repository.saveRound(modeInput); await repository.saveRound(modeInput);
+        assert.equal((await repository.getStats('mode-guesser')).players.find(player => player.id === 'mode-guesser')?.guessPoints, 2);
+        const roundDetails = (await client.query('select task_text, guesses from rounds where room_code = $1', ['MODE'])).rows[0];
+        assert.equal(roundDetails.task_text, modeInput.taskText); assert.equal(roundDetails.guesses[0].points, 2);
+        assert.equal((await client.query('select task_points from votes v join rounds r on r.id = v.round_id where r.room_code = $1', ['MODE'])).rows[0].task_points, 5);
+        await repository.deleteRoom('MODE');
+        assert.equal((await repository.getStats('mode-author')).recentVideos[0].taskText, modeInput.taskText);
+        console.log('PASS: task criteria, free-text guesses and idempotent bonus scores persist atomically; task metadata survives room deletion.');
         console.log('PASS: keyset history pagination across timestamp ties, creator filters, archive reconciliation preserving points/prompts and additive legacy schema migration.');
         console.log('PASS: PostgreSQL transactions, idempotent round saves, final standings, statistics and rollback; no production rows changed.');
     } finally {

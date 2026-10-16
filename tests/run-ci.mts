@@ -3,6 +3,7 @@ import { cloudflareRuntime } from './support/cloudflare';
 
 const children = new Set<ReturnType<typeof spawn>>();
 let cloudflare: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
+let cloudflareProfiles: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 const env = { ...process.env, DATABASE_URL: '', HF_TOKEN: '', AI_PROVIDER: 'mock', ADMIN_ACCOUNT_ID: '', ADMIN_ACCESS_KEY: '',
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', TEST_PROFILE_DB: 'false',
     AUTH_COOKIE_SECRET: 'ci-only-cookie-secret-at-least-32-characters' };
@@ -27,6 +28,7 @@ async function cleanup() {
     await Promise.all([...children].map(child => new Promise<void>(resolve => { child.once('exit', () => resolve()); child.kill('SIGTERM'); })));
     children.clear();
     await cloudflare?.dispose(); cloudflare = undefined;
+    await cloudflareProfiles?.dispose(); cloudflareProfiles = undefined;
 }
 process.once('SIGTERM', () => { void cleanup().then(() => process.exit(143)); });
 process.once('SIGINT', () => { void cleanup().then(() => process.exit(130)); });
@@ -35,18 +37,23 @@ try {
     await run(['tests/e2e/security.e2e.mts', 'http://127.0.0.1:3313']);
     await run(['tests/integration/cloudflare-runtime.mts']);
     cloudflare = await cloudflareRuntime({ port: 3311 });
+    cloudflareProfiles = await cloudflareRuntime({ port: 3314, bindings: { AUTH_MODE: '' } });
     for (const engine of (process.env.TEST_BROWSER_ENGINE ? [process.env.TEST_BROWSER_ENGINE] : ['chromium', 'webkit'])) {
         const browserEnv = { TEST_BROWSER_ENGINE: engine, TEST_BROWSER_PATH: engine === 'webkit' ? '' : process.env.TEST_BROWSER_PATH || '' };
         await run(['tests/e2e/browser.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/video.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/statistics.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/history.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
+        await run(['tests/e2e/variants.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
+        await run(['tests/e2e/party.e2e.mts'], browserEnv);
+        for (const port of [3310, 3311]) await run(['tests/e2e/ten-player.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/accounts.e2e.mts'], browserEnv);
         await run(['tests/e2e/startup.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/auth.e2e.mts', 'http://127.0.0.1:3312'], browserEnv);
+        for (const port of [3312, 3314]) await run(['tests/e2e/classic.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/quota.e2e.mts'], browserEnv);
         await run(['tests/e2e/extension.e2e.mts'], browserEnv);
-        for (const file of ['browser', 'video', 'statistics', 'history']) {
+        for (const file of ['browser', 'video', 'statistics', 'history', 'variants']) {
             await run([`tests/e2e/${file}.e2e.mts`, 'http://127.0.0.1:3311'], browserEnv);
         }
     }

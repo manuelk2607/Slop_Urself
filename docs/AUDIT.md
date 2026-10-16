@@ -1,4 +1,222 @@
-# Technische Prüfung vom 6./7. Oktober 2026
+# Technische Prüfung
+
+## Party-Erweiterungen vom 17. Oktober 2026
+
+- GPU-Planung nutzt weiterhin ausschließlich das echte HF-Restkontingent,
+  verbleibende Aufrufe, Spielerzahl und globale Reservierungen. Das kostenlose
+  Gesamtbudget wurde lesend mit `base=300` bestätigt; zum Prüfzeitpunkt waren
+  `current=152.376604` Sekunden und sechs Aufrufe übrig, Reset am
+  17. Oktober um 17:27:29 UTC. Kein neuer GPU-Auftrag wurde gestartet.
+  Die xlarge-Gewichtung wird nicht doppelt angewandt. Die bisherigen
+  70/110-Sekunden-Schätzungen für vorbereitete Bilder unterschätzten die
+  gemessene Abrechnung; Reserven sind jetzt 79/126 Sekunden, quadratisch
+  67/100 Sekunden. Eine komplette Runde benötigt ein Video pro Spieler.
+  Das volle Fünf-Minuten-Budget garantiert daher nicht vier Videos.
+- Datenschutzfreundliche Fehlerdiagnose ergänzt die Pipeline-Phase und den
+  HTTP-Status. Speicherfehler, volle Queue, Serverneustart, fehlende und
+  nicht klassifizierbare Providerdetails sind unterscheidbar. Keine
+  Original-Fehlertexte, Tokens, Prompts, Upload-URLs oder Cookies in KI-Logs.
+  Die alte Ursache von `provider_error` wird dadurch nicht rückwirkend bewiesen.
+- Einladungslinks enthalten nur den Raumcode. Registrierung und Anmeldung
+  behalten die Einladung bei; ein erfolgreicher Beitritt verbraucht sie.
+  Alte gespeicherte Räume haben gegenüber einer anderen Einladung keinen
+  Vorrang. Neue Räume bleiben klassisch mit eigenen Bildern voreingestellt.
+- Optionale Zeitlimits und bestätigtes Abschließen durch den Host verwenden
+  dieselbe gemeinsame Zustandslogik in Node und im Room-Durable-Object.
+  Deadline und Phasenschlüssel überstehen DO-Neustart und Reload. Fehlende
+  Stimmen sind Enthaltungen, unbestätigte Treffer geben keine Bonuspunkte.
+  Unklare laufende Generierungen werden nicht übersprungen oder wiederholt.
+- Archiv-Best-of und Archiv-Prompt-Raten sind auch bei leerem KI-Budget
+  spielbar. Ein begrenzter SQL-Pool schließt gelöschte, evizierte und externe
+  Videos aus. Archivpartien schreiben keine neuen Erstellungspunkte, Runden
+  oder Videos in die Dauerstatistik. Best-of berücksichtigt alle Stimmen;
+  beim Raten rotiert die Auflösung. Keine neue Schemaänderung erforderlich.
+- 110 Unit-Tests bestanden. Echte PostgreSQL-Integration mit ausschließlich
+  temporären Tabellen bestanden, einschließlich des neuen Archiv-Pools und
+  Löschfilters; keine Produktivzeilen geändert. Browserprüfungen umfassen
+  beide Archivmodi ohne GPU, Einladungen mit Anmeldung, mobile Darstellung,
+  echte MP4-Wiedergabe und zehn getrennte gleichzeitige Mock-Spieler mit
+  Host-Skip, neun Videos, 81 Bewertungen, Reload und identischer Endwertung.
+  Nativer Safari-Gesamtablauf ist nicht bestätigt; dafür wird automatisiert
+  WebKit geprüft. Der Versuch im nativen Safari wurde bei einem Wechsel des
+  aktiven Fensters beendet, ohne andere Tabs weiter zu bedienen.
+
+- Vollständiges `npm run test:ci` mit Chromium und WebKit auf Node und dem
+  echten lokalen workerd-Runtime bestanden, einschließlich der neuen
+  Archivtests und der Zehn-Spieler-Tests auf beiden Backends. Browser- und
+  API-Tests verwenden ausschließlich isolierte Fixtures/Mock-AI; der
+  PostgreSQL-Test beschränkt alle Tabellen auf `pg_temp`.
+- Getesteter Build auf Cloudflare veröffentlicht, Version
+  `6bb89ef7-b192-4a4b-8366-5cd3308b40a1`, unter
+  `https://slopurself.maki26.workers.dev/`. Gefilterte Live-Logs bestätigten
+  exakt diese ausführende Version für Worker, RoomDurableObject und
+  ServiceDurableObject, ohne Exceptions im Release-Check.
+- Produktiver Release-Check mit dem vorhandenen Profil LiveTestA1015 und
+  flüchtigem Raum FCD4: Archiv-Best-of gestartet, gespeichertes MP4 als
+  authentifizierter Range mit 206 und exakt 128 Bytes abgerufen, getrennte
+  WebSocket-Verbindung wieder aufgenommen, identische Deadline/Video,
+  vier Punkte nur für die Videowertung, keine neuen Spielerpunkte.
+  Dauerstatistik vor/nach identisch und kein zusätzlicher Raum in der DB.
+  Anschließend den flüchtigen Raum verlassen. Keine bestehenden Daten gelöscht,
+  kein GPU-Auftrag gestartet. Dieser Release-Check war API-/WebSocket-basiert,
+  keine zusätzliche Browserwiedergabe auf Produktion.
+- SHA-256-Vergleich von produktivem HTML, CSS und Client-Bundle mit dem lokal
+  getesteten Cloudflare-Build bestanden. Der konfigurierte Provider bleibt
+  echtes Wan 2.2; Mock-AI wurde nicht produktiv aktiviert. Die fünf Minuten
+  Gesamtbudget und 152 verbleibenden Sekunden werden auch von der
+  veröffentlichten API getrennt zurückgegeben.
+
+## Geplanter Live-Test am 16. Oktober 2026, 19:20 Uhr
+
+**Bestanden:** Eine vollständige klassische Zwei-Spieler-Runde auf
+`https://slopurself.maki26.workers.dev/`, Raum **8FC7**, mit echter KI,
+dauerhaftem Archiv, gegenseitigen Bewertungen und gespeicherter Endwertung.
+Dieser neue Prüfstand ersetzt die unten dokumentierte frühere Live-Blockade,
+ohne deren Ursache nachträglich als geklärt darzustellen.
+
+- Startkontingent: 300 GPU-Sekunden und acht verfügbare Aufrufe. Die gefilterten
+  Live-Logs bestätigten Version `5bed741c-44c1-43e5-b6fe-ffbf633dc8bb` für
+  Worker, RoomDurableObject und ServiceDurableObject, nicht nur die
+  Deployment-Konfiguration.
+- Vorhandene Profile LiveTestA1015 und LiveTestB1015, getrennt authentifiziert:
+  Spieler A im In-App-Browser, Spieler B über einen eigenständigen WebSocket-
+  und HTTP-Testclient. Ein geplanter Durchgang, klassische Regeln, Sparmodus,
+  keine Zusatzvarianten, kein Mock und keine kostenpflichtigen Dienste.
+- Zwei einzelne Bild-/Prompt-Aufträge mit dem öffentlichen Wan-Beispielbild,
+  je ein eigener Upload pro Ersteller. Beide Wan-2.2-Aufträge mit vier Schritten
+  wurden ohne Fallback, Fehler oder erneute GPU-Beauftragung abgeschlossen.
+  Vom Speichern des Auftrags bis zum KI-Ergebnis vergingen rund 36,9 bzw.
+  37,8 Sekunden. Die sichtbare Kopfbewegung des zweiten Clips entspricht der
+  einfachen Bewegungsanweisung; dies ist kein allgemeiner Modellqualitätstest.
+- Beide Clips wurden als verschiedene Dateien dauerhaft archiviert: 730.193
+  und 779.440 Bytes. Im Browser jeweils 5,0625 Sekunden, 624 × 832 Pixel,
+  laufende Wiedergabe und kein MediaError. Beide authentifizierten Range-
+  Abrufe lieferten HTTP 206, `video/mp4` und genau die angeforderten 128 Bytes.
+- Beide Clients erhielten die erwarteten Spielphasen. Host-Reloads in Lobby,
+  Bewertung, während der zweiten Generierung und nach Spielende behielten
+  Spieler-ID, Raum, Spielphase, Videos und Punkte bei. Kein verfrühter Sprung
+  zur Endwertung und kein zusätzlicher KI-Auftrag nach Wiederverbindung.
+- Gegenseitige Bewertungen: B vergab vier Punkte an A, A drei Punkte an B.
+  Endwertung auf beiden Clients: A gewinnt 4:3. Eine ausschließlich lesende
+  Neon-Transaktion bestätigte `GAME_OVER`, Gewinner, Endzeit, Platzierungen
+  1/2, genau zwei Runden, je eine Stimme mit passendem Punktwert und zwei
+  Video-Historieneinträge mit korrekten Erstellern. Keine doppelten Punkte.
+- Statistik-API und Browseransicht zeigen beide Videos, die kumulierten
+  Punktestände 4/3 und den Sieg von A. Beide neuen Clips lassen sich auch nach
+  dem Verlassen des Spiels aus der Statistik abspielen. Die bestehende Partie
+  und das ältere Archivvideo blieben erhalten. Keine Löschung von Testdaten.
+- HF-Abschlussstand: 152,376604 GPU-Sekunden und sechs weitere Aufrufe;
+  tatsächlich verbraucht wurden 147,623396 Sekunden für genau zwei Aufträge.
+  Die Reservierungsformel hatte 140 Sekunden kalkuliert. Die Abrechnung kann
+  also auch im Sparmodus höher ausfallen; zusätzliche Budgetreserve bleibt
+  eine offene Verbesserung. Der Test hat weder Limits umgangen noch einen
+  nicht budgetgedeckten Auftrag gestartet.
+- Grenzen: echte Browserwiedergabe hier in Chromium, kein neuer nativer
+  Safari-Live-Test, kein Lasttest mit zehn Spielern. Die frühere Ursache von
+  `provider_error` ist weiterhin nicht sicher bestimmt; ein erfolgreicher
+  Durchgang garantiert keine dauerhafte Verfügbarkeit des kostenlosen Space.
+  Für diesen Test wurden nur der Prüfbericht und temporäre Testhilfen geändert,
+  keine Anwendungskorrektur deployed und nichts zu Git gepusht.
+
+## Frühere Live-Prüfung vom 16. Oktober 2026, nachts
+
+- Die aktuelle Cloudflare-Adresse ist `https://slopurself.maki26.workers.dev/`.
+  Die frühere Adresse unter `manuelk2607.workers.dev` ist nicht mehr gültig.
+- Ein echter Wan-2.2-Aufruf mit einem öffentlichen Testbild erzeugte beim
+  direkten Space-Test ein 5,0625 Sekunden langes, im Browser abspielbares Video.
+  Die gewünschte langsame Kopfbewegung war erkennbar. Dieser direkte Test
+  bestätigt noch nicht den vollständigen Spielablauf über Cloudflare.
+- Ein echter Spielversuch erreichte die Archivierung, scheiterte aber mit
+  HTTP 403/404 beim Abruf der temporären HF-Datei. Upload, Queue und Dateiabruf
+  sind jetzt an dieselbe Space-Replik gebunden; diese URL bleibt im KI-Journal
+  erhalten. Die Korrektur ist mit Cloudflare-Version
+  `5bed741c-44c1-43e5-b6fe-ffbf633dc8bb` veröffentlicht.
+- Neue Wan-Aufträge verwenden die vollständige Gradio-Queue. Ein inkrementeller
+  SSE-Parser prüft die Event-ID und übernimmt nur bestätigte Endergebnisse,
+  ohne auf das Schließen der Verbindung zu warten. Fehlertexte werden nur in
+  feste, datensparsame Hinweise übersetzt. Legacy-Aufträge bleiben abrufbar;
+  unklare Antworten starten nicht blind einen weiteren GPU-Auftrag.
+- Ein gezielt bildloser Queue-Vertragstest gegen den echten Space wurde vor
+  jeder GPU-Berechnung korrekt abgelehnt. Queue-Ereignisse und Fehlerstruktur
+  sind damit auch ohne weiteren Kontingentverbrauch geprüft.
+- Die vom Nutzer bereitgestellten Logs zeigen: Sowohl Raum 36F8 als auch Raum
+  1380 liefen noch mit Version `90762bf6-d3a3-4862-a4aa-9758d2dd0ab6`. Der
+  unmittelbare Nach-Deployment-Test von 1380 hatte die Queue-Korrektur daher
+  entgegen der ersten zeitlichen Einordnung noch nicht geprüft. Cloudflare
+  dokumentiert die kurzzeitig verzögerte Verteilung von Worker-/DO-Code unter
+  [Known issues](https://developers.cloudflare.com/durable-objects/platform/known-issues/#code-updates).
+- Um 01:58 Uhr wurde die tatsächlich ausgeführte Version über datensparsam
+  gefilterte Live-Logs geprüft: Worker, RoomDurableObject und ServiceDurableObject
+  liefen mit `5bed741c-44c1-43e5-b6fe-ffbf633dc8bb`. Der neue Einzeltest in Raum
+  98EC erreichte die vollständige Queue mit Warte-/Start-Ereignissen, endete
+  aber bereits rund 0,7 Sekunden nach Auftragserfassung mit `provider_error`.
+  Kein Video wurde publiziert. Die aktuelle Klassifizierung unbekannter
+  Anbietermeldungen lässt die konkrete Ursache weiterhin offen; weder
+  Kontingentmangel noch ein Modell-/GPU-Ausfall sind damit sicher belegt.
+- Eine vollständige neue Zwei-Spieler-Partie mit echter KI, Archivierung und
+  Endwertung ist deshalb weiterhin **nicht bestanden**. Der rückwirkende
+  Observability-API-Abruf wird von der vorhandenen CLI-Berechtigung mit HTTP 403
+  abgelehnt; Live-Tailing funktioniert nun, WebSocket-Logs erscheinen erst nach
+  dem Schließen der Verbindung. Dabei wurden nur Versions-/Ereignisnamen und
+  technische KI-Felder ausgegeben, keine IPs, Cookies oder Anfrageinhalte.
+  Auch der neu geprüfte Fehlversuch verbrauchte laut anschließendem HF-Abruf
+  keine weitere GPU-Zeit; es blieben unverändert rund 113 Sekunden und sechs
+  mögliche Aufrufe. Es wurde kein weiterer Generierungsversuch gestartet.
+- Das vorhandene Produktionsvideo aus Raum F6ED wurde über die aktuelle
+  Cloudflare-Adresse aus dem privaten Archiv abgespielt: 5,0625 Sekunden,
+  624 × 832 Pixel, `readyState = 4`, Wiedergabe bis zum Ende. Das ist ein
+  Chromium-Nachweis; ein echter Safari-Live-Test ist damit nicht ersetzt.
+  Der authentifizierte Range-Abruf lieferte HTTP 206, `video/mp4` und genau die
+  angeforderten 128 Bytes mit passendem `Content-Range`.
+- Nach den Queue-Anpassungen erneut bestanden: TypeScript-Build, alle 103
+  Unit-Tests und die vollständige CI in Chromium und WebKit gegen Node und
+  workerd/Cloudflare. Abgedeckt sind unter anderem der klassische Zwei-Spieler-
+  Ablauf, mehrere Runden, Varianten, Wiederverbindung, Wertung und Archiv-UI.
+  Diese Browserabläufe verwenden ausdrücklich Mock-KI.
+- Die Budgetformel folgt der angeforderten Space-Laufzeit, ist aber keine
+  Garantie der tatsächlichen Abrechnung: Der direkte Acht-Schritte-Test
+  verbrauchte rund 121,9 GPU-Sekunden statt der kalkulierten 110. Für knappe
+  Automatik-Upgrades bleibt eine zusätzliche Reserve bzw. Kalibrierung offen.
+- Die isolierten Tests verwenden Mock-Videos und verändern keine produktiven
+  Spielstände. Die ausdrücklich für den Live-Test angelegten Profile und
+  begonnenen Testpartien bleiben erhalten; es wurde nichts ohne Freigabe gelöscht.
+
+## Ergänzung vom 15. Oktober 2026
+
+- Drei kombinierbare Spielvarianten: gemeinsames Ausgangsbild, geheime Aufträge
+  mit getrennter Aufgaben-/Unterhaltungswertung und Freitext-Promptraten.
+  Nur der Ersteller bestätigt Treffer; je Treffer werden genau einmal zwei
+  Bonuspunkte vergeben. Private Aufgaben und Rateversuche werden gezielt pro
+  Spieler gesendet. Die neue Prüfphase bleibt nach Reload/Object-Neustart erhalten.
+- Aufgaben, Bewertungskriterien und kumulierte Ratepunkte werden mit der Runde
+  atomar gespeichert. PostgreSQL-Tests mit temporären Tabellen bestätigen
+  Wiederholbarkeit und den Erhalt von Video-Aufgaben nach einer Raumlöschung.
+- Wan 2.2 bleibt das einzige Modell für neue Partien: Automatik (8/4 Schritte),
+  Qualität (8) oder Sparmodus (4). LTX ist aus der automatischen Kette und der
+  Cloudflare-Konfiguration entfernt; bereits gestartete Legacy-Aufträge bleiben
+  wiederaufnehmbar. Keine parallele Vorbereitung oder Generierung eingebaut.
+- Bilder werden ohne Beschnitt auf 832 × 624, 624 × 832 oder 640 × 640
+  vorbereitet und serverseitig geprüft. Die Fünf-Sekunden-Reserve beträgt damit
+  höchstens 70 Sekunden im Sparmodus statt 92; acht Schritte benötigen höchstens
+  110 statt 154. Bei vollen 300 Sekunden und genügend Aufrufen passen vier
+  Videos bzw. zwei vollständige Zwei-Spieler-Runden ins Budget. Ein teilweise
+  verbrauchtes Kontingent wird nicht künstlich größer gerechnet.
+- Gemeinsame Bilder liegen temporär in 64-KiB-DO-Chunks, nicht im Videoarchiv
+  oder in Postgres. Austausch, Ablauf nach zwei Stunden und leerer Raum räumen
+  die Bildteile auf. Ein abgelaufenes Bild lässt sich vor der nächsten Erstellung
+  ohne Spielneustart ersetzen.
+- Verifikation ohne echte GPU-Aufträge: Unit-Tests prüfen private Snapshots,
+  idempotente Bonuspunkte, Bildgrenzen und tatsächliche I2V-Parameter/Budgetkosten;
+  Browser-Tests prüfen kombinierte Varianten und Kontingentwechsel. Die
+  Bildqualität des Vier-Schritte-Modus ist weiterhin nicht live neu bewertet.
+- Der klassische Ablauf bleibt ausdrücklich Standard: eigenes Bild plus Prompt
+  pro Ersteller, normale Bewertungen ohne Bonusphase. Zusatzregeln sind
+  zugeklappt und gemeinsam zurücksetzbar. Der normale lokale Start nutzt dieselbe
+  Profil-Anmeldung wie die veröffentlichte Seite, auch bei Mock-Videos.
+- Erfolgreich: TypeScript-Build, 96 Unit-Tests, komplette CI in Chromium/WebKit
+  gegen Node und Cloudflare, PostgreSQL-Integration mit temporären Tabellen.
+  Die Varianten wurden nach den letzten Anpassungen auf allen vier Kombinationen
+  erneut geprüft; Desktop- und Mobilansichten visuell kontrolliert.
 
 ## Ergänzung vom 14. Oktober 2026
 

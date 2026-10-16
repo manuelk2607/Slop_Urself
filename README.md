@@ -32,25 +32,31 @@ JavaScript-Dateien werden nicht von Hand bearbeitet oder eingecheckt.
 
 ```bash
 npm ci
-AI_PROVIDER=mock AUTH_MODE=disabled npm run dev
+AI_PROVIDER=mock npm run dev
 ```
 
 URL: http://127.0.0.1:3000. Ist der Port belegt, z. B. mit
-`PORT=3001 AI_PROVIDER=mock AUTH_MODE=disabled npm run dev` starten.
+`PORT=3001 AI_PROVIDER=mock npm run dev` starten.
 Der lokale Server verwendet Socket.IO und dieselbe Spiellogik und KI-Anbindung
 wie Cloudflare. Ohne DATABASE_URL gibt es keine dauerhafte Statistik.
+Mock-KI und Profil-Anmeldung sind unabhängig: Der normale Benutzername-Einstieg
+bleibt auch mit Mock-Videos aktiv. `AUTH_MODE=disabled` ist ausschließlich ein
+ausdrücklicher Testmodus für automatisierte Tests, nicht der normale lokale Start.
+Die Profil-Anmeldung benötigt auch lokal einen `AUTH_COOKIE_SECRET` mit mindestens
+32 Zeichen in .env.local. Ohne Datenbank sind lokale Testprofile vom veröffentlichten
+Spiel getrennt und bleiben nur bis zum nächsten Server-Neustart erhalten.
 
 ## Cloudflare
 
 ```bash
 npm run cf:local
-npm run cf:dev -- --var AI_PROVIDER:mock --var AUTH_MODE:disabled
+npm run cf:dev -- --var AI_PROVIDER:mock
 npm run cf:secrets
 npm run cf:deploy
 ```
 
 Für lokale Cloudflare-Tests direkt:
-`npx wrangler dev --config cloudflare/wrangler.toml --var AI_PROVIDER:mock --var AUTH_MODE:disabled`
+`npx wrangler dev --config cloudflare/wrangler.toml --var AI_PROVIDER:mock`
 (nach `npm run cf:build`).
 
 `npm run cf:secrets` überträgt die benötigten Secrets aus der ignorierten
@@ -101,13 +107,13 @@ dient ausschließlich lokalen Tests.
 
 ## Kostenlose KI
 
-Standard: `wan22,wan22-fast,ltx`, über kostenlose Hugging-Face-Spaces.
+Standard: `wan22,wan22-fast`, über einen kostenlosen Hugging-Face-Space.
 
 - Wan 2.2: Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom
 - `wan22-fast`: nativer 4-Schritte-Modus desselben Wan-2.2-Spaces.
-- LTX: Lightricks/ltx-video-distilled
-- Optional `wan`: multimodalart/wan2-1-fast. Dieser Space unterstützt derzeit
-  nur bis zu 3,4 Sekunden und wird bei der Mindestdauer von 5 Sekunden übersprungen.
+
+LTX ist kein automatischer Fallback mehr. Der bisherige Adapter bleibt nur für
+alte Konfigurationen und die Wiederaufnahme bereits gestarteter Aufträge erhalten.
 
 Die Host-Adresse und Parameterreihenfolge werden aus der aktuellen Space-API
 gelesen. Parameter werden über Namen zugeordnet, gegen Wertebereiche geprüft
@@ -118,44 +124,89 @@ Lokale Konfiguration in der ignorierten .env.local:
 
 ```dotenv
 AI_PROVIDER=wan22
-AI_PROVIDER_CHAIN=wan22,wan22-fast,ltx
+AI_PROVIDER_CHAIN=wan22,wan22-fast
+AI_IMAGE_PROFILE=bounded
 HF_TOKEN=DEIN_GUELTIGER_HF_READ_TOKEN
 AI_ROUND_LIMIT=5
 AI_GPU_SECONDS_PER_ROUND=0
 LTX_DURATION=5
-LTX_HEIGHT=512
-LTX_WIDTH=704
-LTX_GUIDANCE=1
 DATABASE_URL=DEINE_NEON_POSTGRES_URL
 ```
 
-Wan 2.2 nutzt bevorzugt 8 Schritte. Reicht das Budget unter Berücksichtigung
-aller reservierten Videos nicht, folgt der native 4-Schritte-Sparmodus, danach
-LTX. Weniger Schritte können die Qualität verringern; alle Modi erzeugen
-mindestens 5 Sekunden. Wan verwendet Guidance 1 und keine Frame-Interpolation,
-LTX Guidance 1 und Texture-Verbesserung. Die LTX-Option ui_frames_to_use betrifft
-Eingabevideos und bestimmt bei Image-to-Video nicht die Ausgabelänge.
+Der Host wählt in der Raum-Lobby zwischen Automatik, Qualität (nur 8 Schritte)
+und Sparmodus (nur 4 Schritte). Automatik bevorzugt 8 Schritte, sofern dadurch
+kein reserviertes Video gefährdet wird; sonst nutzt sie den nativen
+4-Schritte-Modus desselben Wan-2.2-Modells. Weniger Schritte können die Qualität
+verringern. Alle Modi erzeugen mindestens 5 Sekunden, mit Guidance 1 und ohne
+Frame-Interpolation. `LTX_DURATION` ist der historische Konfigurationsname für
+die Dauer auch bei Wan.
+
+Der Browser bereitet Bilder ohne Abschneiden oder Verzerren vor: 832 × 624 im
+Querformat, 624 × 832 im Hochformat, 640 × 640 bei quadratischen Bildern.
+Abweichende Seitenverhältnisse werden mit schwarzen Rändern ergänzt. Neue Räume
+prüfen diese Abmessungen serverseitig; beliebige größere Inputs können die
+kleinere Budgetreserve daher nicht umgehen. Es werden JPEGs mit Qualität 92 %
+übertragen; Originaldateien bleiben lokal.
 
 Die Rundengrenze wird aus dem echten Restkontingent unter
 https://huggingface.co/api/spaces/zero-gpu/quota berechnet: verbleibende
 GPU-Zeit und verbleibende Aufrufe, abzüglich Budgets laufender Partien.
 Eine Runde ist ein vollständiger Durchgang: jeder Spieler erstellt ein Video.
 Die Kostenberechnung ist für Generierung und Rundenauswahl identisch:
-Wan 2.2 mit 8 Schritten benötigt konservativ 154 GPU-Sekunden, der
-4-Schritte-Modus 92 und LTX 120. Grundlage ist die GPU-Dauer im jeweiligen
-Space-Quellcode, einschließlich maximalem Bildformat und 2x-Kosten für xlarge.
-Reserviert wird der günstigste konfigurierte Modus mit mindestens 5 Sekunden.
+Für die vorbereiteten Bilder plant Wan 2.2 mit 8 Schritten
+126 GPU-Sekunden ein, der 4-Schritte-Modus 79. Quadratische Bilder benötigen
+100 bzw. 67 Sekunden. Grundlage ist die GPU-Dauer im
+[Space-Quellcode](https://huggingface.co/spaces/Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom/blob/main/app.py),
+einschließlich 2x-Kosten für xlarge, kalibriert mit den Live-Messungen vom
+16. Oktober (etwa 73–75 Sekunden für vier Schritte und 122 Sekunden für acht
+Schritte) plus Reserve. Das ist eine Planung, keine Laufzeitgarantie. Die Lobby reserviert den größten zulässigen
+Bildtyp und den günstigsten Modus der gewählten Qualitätseinstellung.
 Die Grenze ist `floor(verfügbare Videos / Spielerzahl)`;
 die verfügbaren Videos ergeben sich aus GPU-Zeit, Aufrufen und Reservierungen.
-Bei 185 GPU-Sekunden passen zwei Videos im 4-Schritte-Modus ins Budget:
-eine vollständige Runde für zwei Spieler (184 GPU-Sekunden). Für drei
-Spieler sind mindestens 276 GPU-Sekunden erforderlich. Die UI zeigt nur die
+Das kostenlose Gesamtbudget beträgt derzeit fünf Minuten, also 300 Sekunden.
+Es wird aus `quota.base` gelesen, nicht mit dem Restbudget verwechselt oder
+pro Fallback addiert. `quota.current` ist bereits GPU-gewichtet und wird nicht
+noch einmal halbiert. Bei vollen 300 Sekunden passen nach dieser sicheren
+Planung drei Sparmodus-Videos oder zwei Qualitätsvideos ins Budget. Für zwei
+Spieler ist damit zunächst ein vollständiger Durchgang reservierbar, nicht
+zwei garantierte Durchgänge. Zusätzliche Runden werden nach Abschluss erneut
+anhand der wirklichen Restzeit geprüft. Bei 185 verbleibenden Sekunden passt
+ein Durchgang für zwei Spieler; drei Spieler benötigen mindestens 237 Sekunden. Die UI zeigt nur die
 aktuell maximale Rundenzahl. Acht Schritte werden nur versucht, wenn sie die
 noch ausstehenden Videos nicht gefährden.
 Längere Videos erhöhen das Budget automatisch.
 AI_GPU_SECONDS_PER_ROUND ist trotz des historischen Namens eine optionale
 Untergrenze je Video: 0 nutzt die modellabhängigen Kosten, ein höherer Wert
 erhöht sie. AI_ROUND_LIMIT gilt nur im Mock-Modus.
+
+### Einladungen, Zeitlimits und Archivpartien
+
+Der Kopierknopf im Raum erzeugt einen Link wie `/?room=AB12`. Der Raumcode
+bleibt während Anmeldung und Registrierung erhalten. Beitreten erfolgt bewusst
+über den Beitrittsknopf; nach erfolgreichem Beitritt oder beim Erstellen eines
+anderen Raums wird der Parameter entfernt, damit ein altes Spiel nicht erneut
+geöffnet wird. Es werden keine Sitzungs- oder Anmeldeschlüssel geteilt.
+
+Optional kann der Host 1, 2, 3 oder 5 Minuten pro Eingabe-, Bewertungs- und
+Rateauflösungsphase einstellen. Standard ist ohne Zeitlimit. Die Frist kommt
+vom Server, bleibt bei Reload erhalten und wird auf Cloudflare durch Alarme
+ausgeführt. Fehlende Stimmen sind Enthaltungen und werden nicht als
+Null-Sterne-Bewertungen gespeichert. Unbestätigte Rateversuche bekommen keinen
+Bonus. Der Host kann eine Phase mit Bestätigung vorzeitig abschließen.
+Laufende KI-Generierungen werden dabei nie übersprungen oder erneut gestartet.
+
+Die Raum-Lobby bietet außerdem `Archiv: Best-of wählen` und `Archiv: Prompt
+erraten`. Beide nutzen bis zu 200 aktuelle, verfügbare, nicht zum Löschen
+markierte Archivvideos, ohne Wiederholung innerhalb einer Partie. Sie
+funktionieren auch bei leerem GPU-Kontingent. Best-of erlaubt allen Spielern
+eine Stimme; die Rangfolge ergibt sich aus der Durchschnittsbewertung der
+Videos. Beim Prompt-Raten wechselt die Person für die Auflösung nach jedem
+Video und bestätigt Treffer wie bei der normalen Ratevariante.
+Archivwertungen gelten nur für diese Partie; weder neue Videos noch neue
+Erstellungspunkte werden in der Dauerstatistik angelegt. Die Originalvideos,
+ihre Ersteller und bisherigen Punkte bleiben unverändert. Zum Weiterspielen
+wird eine neue Archivpartie erstellt. Klassisch mit eigenen Bildern bleibt
+immer die Voreinstellung neuer Räume.
 
 Die Rundenzahl wird ausschließlich in der Raum-Lobby eingestellt; neue Räume
 starten mit einer Runde. Die Grenze wird dort regelmäßig und bei Beitritt oder
@@ -193,6 +244,38 @@ trotzdem reduzieren. ZeroGPU-Limits gelten für den HF-Account; mehrere Spaces
 vervielfachen dieses Kontingent nicht. Warteschlangen und fremde Space-Ausfälle
 können die Generierung blockieren. Bild und Prompt werden an externe Spaces
 übertragen; deren Löschfristen kann die App nicht erzwingen.
+
+## Spielvarianten
+
+Neue Räume starten immer klassisch: Jeder lädt bei seinem Zug ein eigenes Bild
+hoch, gibt einen Prompt ein und die Mitspieler bewerten das daraus erstellte
+Video. Die Lobby zeigt diesen Standard als „Klassisch“ an. Optionale Zusatzregeln
+sind zunächst zugeklappt; ein Zurücksetzen auf „Klassisch“ deaktiviert alle drei
+Regeln, ohne den KI-Qualitätsmodus zu verändern.
+
+Der Host kann die folgenden Optionen in der Raum-Lobby einzeln oder kombiniert
+aktivieren. Sie benötigen keine zusätzlichen KI-Aufrufe und verändern nicht die
+Reihenfolge: Es ist weiterhin immer genau ein Spieler an der Reihe.
+
+- **Gemeinsames Ausgangsbild:** Der Host lädt ein Bild hoch, das für alle
+  Erstellungen der Partie verbindlich ist. Es bleibt bei einem Seiten-Reload
+  erhalten. Auf Cloudflare liegt es vorübergehend in 64-KiB-Stücken im
+  Raum-Durable-Object, nicht in der Statistik oder im Videoarchiv. Es wird
+  nach zwei Stunden, beim Austausch oder nach Verlassen aller Spieler entfernt.
+  Ist es während einer Partie abgelaufen, kann der Host vor der nächsten
+  Erstellung ein Ersatzbild hochladen; Punkte und Runde bleiben erhalten.
+- **Geheime Aufträge:** Jeder Ersteller erhält einen eigenen zufälligen Auftrag.
+  Andere Spieler sehen ihn erst beim fertigen Video und bewerten Umsetzung
+  und Unterhaltung getrennt mit je 1 bis 5 Punkten. Der gerundete Mittelwert
+  zählt als normale Bewertung; Auftrag und Einzelwerte bleiben gespeichert.
+- **Prompt erraten:** Die Mitspieler geben zusammen mit ihrer Bewertung einen
+  optionalen Freitext-Tipp ab. Danach markiert ausschließlich der Ersteller
+  richtige Antworten. Jeder Treffer bringt dem Ratenden zwei Bonuspunkte;
+  anschließend werden Prompt und Tipps aufgelöst. Eingaben, Prüfphase und
+  Punkte überstehen einen Reload. Die Statistik zeigt Rate-Bonuspunkte separat.
+
+Geheime Aufträge und noch nicht aufgelöste Tipps werden pro Spieler ausgeliefert,
+nicht in einem gemeinsamen öffentlichen Raum-Snapshot.
 
 ## KI-Wiederaufnahme und Diagnose
 
@@ -321,8 +404,12 @@ innerhalb des Raums gegen einen Mock-Testserver.
 auf Port 3315 und prüft die spielerabhängige Begrenzung mit simuliertem
 HF-Kontingent. Es werden keine echten Videos erzeugt oder Produktivdaten gespeichert.
 `node --import tsx tests/e2e/extension.e2e.mts` prüft auf Port 3316 freiwillige
-Zusatzrunden mit zwei Spielern, sechs simulierten Videos, gemeinsamen Punkten,
-Reload und erschöpfftem Kontingent. Auch dieser Test verbraucht keine GPU-Zeit.
+Zusatzrunden mit zwei Spielern, acht simulierten Videos, gemeinsamen Punkten,
+Reload und erschöpftem Kontingent. Auch dieser Test verbraucht keine GPU-Zeit.
+`tests/e2e/variants.e2e.mts` prüft die kombinierten Varianten einschließlich
+Bildvorbereitung, Gastgeberrechten, privaten Rateversuchen, Wiederherstellung
+und Bonuspunkten. Die CI führt ihn gegen Node und echte Cloudflare-Durable-Objects
+in Chromium und WebKit aus, ohne echte KI-Aufrufe.
 `npm run test:auth` prüft einen lokalen Server auf Port 3312 mit aktivem
 Profileinstieg, Mock-KI und ohne Datenbank. `TEST_PROFILE_DB=true` aktiviert
 einen gezielten Datenbank-Test gegen einen solchen Server mit Neon: Dabei

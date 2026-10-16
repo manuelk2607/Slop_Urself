@@ -91,6 +91,7 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
             playerInfo.classList.add('stats-player-info');
             details.className = 'stat-details';
             details.innerText = `${player.gamesPlayed} ${player.gamesPlayed === 1 ? 'Spiel' : 'Spiele'} · ${player.wins} ${player.wins === 1 ? 'Sieg' : 'Siege'} · ${player.roundsCreated} ${player.roundsCreated === 1 ? 'Video' : 'Videos'} · Ø ${player.averageReceivedPoints} Pkt./Video · Ø Bewertung ${player.averageVoteGiven}`;
+            if (player.guessPoints) details.innerText += ` · ${player.guessPoints} Ratepunkte`;
 
             const score = document.createElement('span');
             score.className = 'score-badge';
@@ -158,6 +159,7 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
 
             const selection = videoSelection.checkbox(videoUrl(video), `Video ${video.roundNumber} von ${video.creatorName} in Raum ${video.roomCode} auswählen`);
             meta.append(title, prompt, points, selection);
+            if (video.taskText) { const task = document.createElement('small'); task.textContent = `Auftrag: ${video.taskText}`; meta.append(task); }
             if (!video.evictedAt && /^(\/api\/videos\/videos\/\d{13}-[a-z0-9-]+\.mp4|\/assets\/[a-z0-9-]+\.mp4)$/.test(video.videoUrl)) {
                 const download = document.createElement('a');
                 download.className = 'video-download';

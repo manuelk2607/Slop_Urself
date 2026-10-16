@@ -31,6 +31,11 @@ export class GameRepository {
     async roomExists(code: string) {
         return (await this.query('select code from rooms where code = $1', [code])).length > 0;
     }
+    async playableArchive() {
+        return this.query<import('../game/archive-play').ArchiveClip>(`select id::text as id, creator_id as "creatorId", creator_name as "creatorName", prompt, video_url as "videoUrl"
+            from video_history where video_url like '/api/videos/videos/%' and delete_after is null and evicted_at is null
+            order by created_at desc, id desc limit 200`);
+    }
     async saveRoom(code: string, hostId: string, rounds: number) {
         await this.query(`insert into rooms (code, host_socket_id, max_rounds, status)
             values ($1, $2, $3, 'LOBBY') on conflict (code) do update set max_rounds = excluded.max_rounds
@@ -55,9 +60,9 @@ export class GameRepository {
     async markRoomFinished(code: string, standings: FinalStandingInput[]) {
         const winner = standings[0];
         await this.transaction([
-            statement(`update players set score = p.score, final_rank = p.rank
-                from jsonb_to_recordset($2::jsonb) as p(id text, score integer, rank integer)
-                where room_code = $1 and socket_id = p.id`, [code, JSON.stringify(standings.map(p => ({ id: p.playerSocketId, score: p.score, rank: p.finalRank })))]),
+            statement(`update players set score = p.score, final_rank = p.rank, guess_points = p.bonus
+                from jsonb_to_recordset($2::jsonb) as p(id text, score integer, rank integer, bonus integer)
+                where room_code = $1 and socket_id = p.id`, [code, JSON.stringify(standings.map(p => ({ id: p.playerSocketId, score: p.score, rank: p.finalRank, bonus: p.guessPoints || 0 })))]),
             statement(finalSql, [code, winner?.playerSocketId ?? null, winner?.name ?? null])
         ]);
     }
@@ -72,29 +77,29 @@ export class GameRepository {
         const ranks = new Map(input.standings?.map(p => [p.playerSocketId, p.finalRank]));
         const players = JSON.stringify((input.players || []).map(p => ({
             id: p.id, account: p.accountId ?? null, name: p.name, score: p.score,
-            host: p.id === input.hostId, rank: ranks.get(p.id) ?? null
+            host: p.id === input.hostId, rank: ranks.get(p.id) ?? null, bonus: p.guessPoints || 0
         })));
         // Batch each table without per-player/vote round trips, retaining one transaction.
         const queries = [
-            statement(`insert into players (room_code, socket_id, name, score, is_host, final_rank, account_id)
-                select $1, p.id, p.name, p.score, p.host, p.rank, p.account
-                from jsonb_to_recordset($2::jsonb) as p(id text, account text, name text, score integer, host boolean, rank integer)
+            statement(`insert into players (room_code, socket_id, name, score, is_host, final_rank, account_id, guess_points)
+                select $1, p.id, p.name, p.score, p.host, p.rank, p.account, p.bonus
+                from jsonb_to_recordset($2::jsonb) as p(id text, account text, name text, score integer, host boolean, rank integer, bonus integer)
                 on conflict (room_code, socket_id) do update set score = excluded.score,
-                    is_host = excluded.is_host, final_rank = excluded.final_rank,
+                    is_host = excluded.is_host, final_rank = excluded.final_rank, guess_points = excluded.guess_points,
                     account_id = coalesce(players.account_id, excluded.account_id)`, [input.roomCode, players]),
             statement(`with saved_round as (
-                insert into rounds (room_code, round_number, creator_socket_id, prompt, video_url, round_points)
-                values ($1, $2, $3, $4, $5, $6) on conflict (room_code, round_number) do update set
+                insert into rounds (room_code, round_number, creator_socket_id, prompt, video_url, round_points, task_text, guesses)
+                values ($1, $2, $3, $4, $5, $6, $8, $9::jsonb) on conflict (room_code, round_number) do update set
                     creator_socket_id = excluded.creator_socket_id, prompt = excluded.prompt,
-                    video_url = excluded.video_url, round_points = excluded.round_points returning id
-            ) insert into votes (round_id, voter_socket_id, points)
-            select r.id, v."voterSocketId", v.points from saved_round r,
-                jsonb_to_recordset($7::jsonb) as v("voterSocketId" text, points integer)
-            on conflict (round_id, voter_socket_id) do update set points = excluded.points`,
-            [input.roomCode, input.roundNumber, input.creatorSocketId, input.prompt, input.videoUrl, input.roundPoints, JSON.stringify(input.votes)]),
+                    video_url = excluded.video_url, round_points = excluded.round_points, task_text = excluded.task_text, guesses = excluded.guesses returning id
+            ) insert into votes (round_id, voter_socket_id, points, task_points, fun_points)
+            select r.id, v."voterSocketId", v.points, v."taskPoints", v."funPoints" from saved_round r,
+                jsonb_to_recordset($7::jsonb) as v("voterSocketId" text, points integer, "taskPoints" integer, "funPoints" integer)
+            on conflict (round_id, voter_socket_id) do update set points = excluded.points, task_points = excluded.task_points, fun_points = excluded.fun_points`,
+            [input.roomCode, input.roundNumber, input.creatorSocketId, input.prompt, input.videoUrl, input.roundPoints, JSON.stringify(input.votes), input.taskText || '', JSON.stringify(input.guesses || [])]),
             statement(`${COPY_VIDEO_HISTORY_SQL} and r.room_code = $1 and r.round_number = $2
                 on conflict (id) do update set prompt = excluded.prompt, video_url = excluded.video_url,
-                    round_points = excluded.round_points, creator_id = excluded.creator_id, creator_name = excluded.creator_name
+                    round_points = excluded.round_points, creator_id = excluded.creator_id, creator_name = excluded.creator_name, task_text = excluded.task_text
                 where video_history.delete_after is null and video_history.evicted_at is null`, [input.roomCode, input.roundNumber])
         ];
         if (input.standings) {
@@ -140,7 +145,7 @@ export class GameRepository {
     }
     async finalizeVideoDeletion(id: string) {
         // Keep a small tombstone so migrations and delayed round writes cannot revive a deleted video.
-        await this.query(`with purged as (update video_history set video_url = '', prompt = '', creator_name = '', creator_id = '', round_points = 0
+        await this.query(`with purged as (update video_history set video_url = '', prompt = '', task_text = '', creator_name = '', creator_id = '', round_points = 0
             where id = $1::bigint and delete_after <= clock_timestamp() returning id)
             update rounds r set video_url = '' from purged p where r.id = p.id`, [id]);
     }

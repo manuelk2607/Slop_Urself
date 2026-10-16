@@ -41,9 +41,13 @@
             <span>Runden: <strong id="roundCounter">1/1</strong></span>
             <span id="turnInfo" style="display:none;">Video: <strong id="turnCounter">1/1</strong></span>
         </div>
-        <button id="copyRoomCodeButton" class="icon-button" type="button" title="Raumcode kopieren">Code kopieren</button>
+        <button id="copyRoomCodeButton" class="icon-button" type="button" title="Einladungslink kopieren" aria-label="Einladungslink kopieren">Einladungslink kopieren</button>
         <button id="leaveRoomButton" class="icon-button danger" type="button" title="Spiel verlassen">Spiel verlassen</button>
         <p id="roomNotice" class="room-notice"></p>
+        <div id="phaseToolbar" class="phase-toolbar" hidden>
+            <output id="phaseCountdown" aria-live="off"></output>
+            <button id="closePhaseButton" class="btn-muted" type="button">Phase abschließen</button>
+        </div>
     </header>
 
     <section id="screenLobby" class="game-screen active-screen" style="display:none;">
@@ -61,6 +65,7 @@
             <button id="joinRoomButton" class="btn-secondary">Beitreten</button>
         </div>
         <p id="lobbyError" class="error-msg" role="alert"></p>
+        <p id="invitationNotice" class="room-notice" hidden></p>
     </section>
 
     <section id="screenStats" class="game-screen" style="display: none;">
@@ -124,7 +129,47 @@
         <p id="hostNotice" class="subtitle">Warte auf den Host...</p>
 
         <ul id="lobbyPlayerList" class="scoreboard-list"></ul>
+        <div class="room-mode">
+            <span>Spielmodus: <strong id="gameModeName">Klassisch</strong></span>
+            <button id="classicModeButton" class="icon-button" type="button" title="Klassisch spielen" aria-label="Klassisch spielen" hidden></button>
+        </div>
+        <label class="field-label" for="gameMode">Spielmodus</label>
+        <select id="gameMode">
+            <option value="classic">Klassisch: Bild + Prompt</option>
+            <option value="archive-vote">Archiv: Best-of wählen</option>
+            <option value="archive-guess">Archiv: Prompt erraten</option>
+        </select>
+        <details id="variantSettings" class="variant-settings">
+            <summary id="variantSettingsLabel">Optionale Zusatzregeln</summary>
+            <fieldset id="gameOptions" class="game-options">
+                <legend>Zusatzregeln</legend>
+                <label><input id="sharedImageOption" type="checkbox"> Gemeinsames Ausgangsbild</label>
+                <label><input id="secretTasksOption" type="checkbox"> Geheime Aufgaben</label>
+                <label><input id="guessPromptOption" type="checkbox"> Prompt erraten</label>
+            </fieldset>
+        </details>
+        <label class="field-label" for="generationQuality">KI-Modus</label>
+        <select id="generationQuality">
+            <option value="auto">Automatisch: Qualität nach Budget</option>
+            <option value="quality">Hohe Qualität (8 Schritte)</option>
+            <option value="economy">Sparmodus (4 Schritte)</option>
+        </select>
+        <div id="sharedImageLobbySlot">
+            <div id="sharedImagePanel" class="shared-image-panel" hidden>
+                <strong>Gemeinsames Ausgangsbild</strong>
+                <input id="sharedImageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                <button id="chooseSharedImage" class="btn-muted" type="button" title="Gemeinsames Bild auswählen">Bild auswählen</button>
+                <img id="sharedImagePreview" alt="Gemeinsames Ausgangsbild" hidden>
+                <p id="sharedImageStatus" class="hint-text" role="status">Noch kein gemeinsames Bild vorhanden.</p>
+            </div>
+        </div>
 
+        <label class="field-label" for="phaseSeconds">Zeit pro Eingabe, Bewertung und Rateauflösung</label>
+        <select id="phaseSeconds">
+            <option value="0">Ohne Zeitlimit</option>
+            <option value="60">1 Minute</option><option value="120">2 Minuten</option>
+            <option value="180">3 Minuten</option><option value="300">5 Minuten</option>
+        </select>
         <label class="field-label" for="roomRoundCountInput">Runden pro Spieler</label>
         <input type="number" id="roomRoundCountInput" min="1" value="1" disabled>
         <p id="roomRoundLimitHint" class="hint-text" role="status">Rundenlimit wird geprüft.</p>
@@ -133,14 +178,18 @@
     </section>
 
     <section id="screenCreate" class="game-screen" style="display: none;">
+        <div id="sharedImageCreateSlot"></div>
         <div id="creatorControls" style="display: none;">
             <h2>🎨 Du bist an der Reihe!</h2>
-            <p class="subtitle">Wähle ein Bild und gib eine Anweisung ein:</p>
+            <p id="secretTask" class="task-assignment" hidden></p>
+            <img id="sharedCreationImage" class="shared-creation-image" alt="Gemeinsames Ausgangsbild" hidden>
 
             <div class="upload-section">
+                <div id="personalImagePicker">
                 <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" style="display: none;">
                 <label for="imageInput" class="custom-file-btn" tabindex="0" role="button">📸 Bild auswählen</label>
                 <img id="imagePreview" alt="Vorschau" style="display: none;">
+                </div>
 
                 <input
                         type="text"
@@ -172,6 +221,7 @@
     <section id="screenVoting" class="game-screen" style="display: none;">
         <h2 id="votingTitle">🎬 Film ab!</h2>
         <p id="authorNotice" class="subtitle"></p>
+        <p id="votingTask" class="task-assignment" hidden></p>
 
         <div class="video-container">
             <video id="votingVideoPlayer" controls autoplay muted loop playsinline>
@@ -183,6 +233,10 @@
         <button id="finishPreviewButton" class="btn-secondary" type="button" hidden>Ergebnis ansehen</button>
 
         <div id="votingActionBox">
+            <div id="guessEntry" hidden>
+                <label class="field-label" for="guessInput">Was war der Prompt?</label>
+                <input id="guessInput" type="text" maxlength="150" placeholder="Dein Rateversuch (optional)" autocomplete="off">
+            </div>
             <h3>Bewerte das Meisterwerk:</h3>
             <div class="vote-buttons">
                 <button class="voteBtn" data-points="1">⭐ 1</button>
@@ -191,7 +245,23 @@
                 <button class="voteBtn" data-points="4">⭐⭐⭐⭐ 4</button>
                 <button class="voteBtn" data-points="5">⭐⭐⭐⭐⭐ 5</button>
             </div>
+            <div id="taskVoteControls" hidden>
+                <label class="field-label" for="taskRating">Auftrag umgesetzt</label>
+                <input id="taskRating" type="range" min="1" max="5" step="1" value="3">
+                <output id="taskRatingValue" for="taskRating">3</output>
+                <label class="field-label" for="funRating">Unterhaltungswert</label>
+                <input id="funRating" type="range" min="1" max="5" step="1" value="3">
+                <output id="funRatingValue" for="funRating">3</output>
+                <output id="combinedRating">3 Punkte</output>
+                <button id="submitTaskVote" class="btn-secondary" type="button">Bewertung abgeben</button>
+            </div>
         </div>
+        <section id="guessReview" hidden>
+            <h3>Rateversuche bewerten</h3>
+            <p id="reviewPrompt"></p>
+            <ul id="guessReviewList" class="guess-list"></ul>
+            <button id="confirmGuesses" class="btn-secondary" type="button">Ratepunkte vergeben</button>
+        </section>
 
         <div id="votingWaitingBox" style="display: none;">
             <div class="pulse-dot"></div>
@@ -208,6 +278,7 @@
         </div>
 
         <h3>Rangliste</h3>
+        <div id="roundReveal" class="round-reveal" hidden></div>
         <ul id="scoreList" class="scoreboard-list"></ul>
 
         <button id="nextRoundButton" class="btn-primary">Nächste Runde starten 🚀</button>
@@ -222,6 +293,9 @@
         </div>
 
         <ul id="finalScoreList" class="scoreboard-list"></ul>
+        <ol id="archiveRanking" class="scoreboard-list" hidden></ol>
+        <div id="finalReveal" class="round-reveal" hidden></div>
+        <div id="sharedImageFinalSlot"></div>
 
         <p id="extensionQuotaHint" class="hint-text" role="status">Rundenlimit wird geprüft.</p>
         <button id="extendGameButton" class="btn-secondary" type="button" disabled>Zusatzrunde spielen</button>

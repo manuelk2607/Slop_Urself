@@ -10,14 +10,15 @@ export const VIDEO_HISTORY_SCHEMA = `create table if not exists video_history (
     round_points integer not null,
     created_at timestamptz not null,
     delete_after timestamptz,
-    evicted_at timestamptz
+    evicted_at timestamptz,
+    task_text text not null default ''
 )`;
 
 export const COPY_VIDEO_HISTORY_SQL = `insert into video_history
-    (id, room_code, round_number, creator_id, creator_name, prompt, video_url, round_points, created_at)
+    (id, room_code, round_number, creator_id, creator_name, prompt, video_url, round_points, created_at, task_text)
     select r.id, r.room_code, r.round_number,
         coalesce(p.account_id, 'legacy:' || lower(p.name), 'unknown:' || r.creator_socket_id),
-        coalesce(p.name, 'Unbekannt'), r.prompt, r.video_url, r.round_points, r.created_at
+        coalesce(p.name, 'Unbekannt'), r.prompt, r.video_url, r.round_points, r.created_at, r.task_text
     from rounds r left join players p on p.room_code = r.room_code and p.socket_id = r.creator_socket_id
     where r.video_url <> ''`;
 
@@ -25,5 +26,5 @@ export const VIDEO_PROJECTION = `h.id::text as id, h.room_code as "roomCode", h.
     h.creator_id as "creatorId", h.creator_name as "creatorName", h.prompt,
     h.video_url as "videoUrl", h.round_points as "roundPoints",
     to_char(h.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",
-    h.evicted_at::text as "evictedAt",
+    h.evicted_at::text as "evictedAt", h.task_text as "taskText",
     not exists (select 1 from rounds r where r.id = h.id) as "roomDeleted"`;

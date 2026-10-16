@@ -1,15 +1,16 @@
-import { ProviderConfig, ProviderBudget, providerBudgets, providerGpuSeconds } from './providers';
+import { ProviderConfig, ProviderBudget, providerBudgets, providerGpuSeconds, qualityConfig, type GenerationQuality } from './providers';
 
 export interface QuotaConfig extends ProviderConfig { HF_TOKEN?: string; AI_ROUND_LIMIT?: string }
 export interface GpuQuota { base: number; current: number; resetsAt: string | null; runs?: { remaining: number; resetsAt?: string } }
-export interface Reservation { rounds: number; active: number; expiresAt: number; reset: string | null; gpuSecondsPerVideo?: number; activeJobs?: Record<string, number> }
+export interface Reservation { rounds: number; active: number; expiresAt: number; reset: string | null; gpuSecondsPerVideo?: number; activeJobs?: Record<string, number>; quality?: GenerationQuality }
 export interface BudgetStorage { get<T>(key: string): Promise<T | undefined>; put<T>(key: string, value: T): Promise<void> }
 export interface QuotaCapacity {
     aiRoundLimit: number;
     playerCount: number;
-    quotaMode: 'mock' | 'live' | 'unavailable';
+    quotaMode: 'mock' | 'live' | 'unavailable' | 'archive';
     availableGenerations?: number;
     remainingGpuSeconds?: number;
+    totalGpuSeconds?: number;
     reservedRounds?: number;
     resetsAt?: string | null;
     gpuSecondsPerVideo?: number;
@@ -58,13 +59,13 @@ const reservationSeconds = (entry: Reservation) => entry.rounds * reservationCos
 
 // All hosted rooms use one Durable Object, so simultaneous starts cannot reserve the same quota.
 export class QuotaBudget {
-    private display?: { players: number; expiresAt: number; value: QuotaCapacity };
+    private display?: { players: number; quality: GenerationQuality; expiresAt: number; value: QuotaCapacity };
     constructor(private storage: BudgetStorage, private config: QuotaConfig) {}
-    async displayCapacity(players = 1) {
+    async displayCapacity(players = 1, quality: GenerationQuality = 'auto') {
         players = playerCount(players);
-        if (this.display?.players === players && this.display.expiresAt > Date.now()) return structuredClone(this.display.value);
-        const value = await this.capacity(players);
-        this.display = { players, expiresAt: Date.now() + (value.quotaMode === 'unavailable' ? 1000 : 5000), value };
+        if (this.display?.players === players && this.display.quality === quality && this.display.expiresAt > Date.now()) return structuredClone(this.display.value);
+        const value = await this.capacity(players, quality);
+        this.display = { players, quality, expiresAt: Date.now() + (value.quotaMode === 'unavailable' ? 1000 : 5000), value };
         return structuredClone(value);
     }
     private async state() {
@@ -76,22 +77,22 @@ export class QuotaBudget {
         }
         return { quota, reservations };
     }
-    async capacity(players = 1): Promise<QuotaCapacity> {
+    async capacity(players = 1, quality: GenerationQuality = 'auto'): Promise<QuotaCapacity> {
         players = playerCount(players);
         if (this.config.AI_PROVIDER === 'mock') return { aiRoundLimit: Number(this.config.AI_ROUND_LIMIT) || 5, playerCount: players, quotaMode: 'mock' };
         try {
             const { quota, reservations } = await this.state();
             const reserved = Object.values(reservations).reduce((sum, entry) => sum + entry.rounds, 0);
-            const providers = providerBudgets(this.config);
+            const providers = providerBudgets(qualityConfig(this.config, quality));
             const cheapest = [...providers].sort((a, b) => a.gpuSeconds - b.gpuSeconds)[0];
             if (!cheapest) throw new Error('Kein konfigurierter KI-Provider unterstützt Videos mit mindestens 5 Sekunden.');
             const availableGenerations = freeGenerations(quota, reservations, cheapest.gpuSeconds);
-            return { aiRoundLimit: roundsForPlayers(availableGenerations, players), playerCount: players, availableGenerations, quotaMode: 'live', remainingGpuSeconds: Math.floor(quota.current), reservedRounds: reserved, resetsAt: quota.resetsAt, gpuSecondsPerVideo: cheapest.gpuSeconds, gpuSecondsPerRound: cheapest.gpuSeconds * players, providers, budgetProvider: cheapest.name, sharedQuota: true };
+            return { aiRoundLimit: roundsForPlayers(availableGenerations, players), playerCount: players, availableGenerations, quotaMode: 'live', totalGpuSeconds: quota.base, remainingGpuSeconds: Math.floor(quota.current), reservedRounds: reserved, resetsAt: quota.resetsAt, gpuSecondsPerVideo: cheapest.gpuSeconds, gpuSecondsPerRound: cheapest.gpuSeconds * players, providers, budgetProvider: cheapest.name, sharedQuota: true };
         } catch (error) {
             return { aiRoundLimit: 0, playerCount: players, quotaMode: 'unavailable', error: error instanceof Error ? error.message : 'KI-Kontingent nicht erreichbar.' };
         }
     }
-    async reserve(code: string, rounds: number, players = 1) {
+    async reserve(code: string, rounds: number, players = 1, quality: GenerationQuality = 'auto') {
         this.display = undefined;
         players = playerCount(players);
         const generations = rounds * players;
@@ -99,9 +100,9 @@ export class QuotaBudget {
         if (this.config.AI_PROVIDER === 'mock') return;
         const { quota, reservations } = await this.state();
         delete reservations[code];
-        const seconds = secondsPerRound(this.config);
+        const seconds = secondsPerRound(qualityConfig(this.config, quality));
         if (!Number.isFinite(seconds) || generations > freeGenerations(quota, reservations, seconds)) throw new Error(`Das kostenlose KI-Kontingent reicht nicht für ${rounds} Runden mit ${players} Spielern (${generations} Videos). Bitte weniger Runden wählen.`);
-        reservations[code] = { rounds: generations, active: 0, expiresAt: Date.now() + 2 * 60 * 60_000, reset: quota.resetsAt, gpuSecondsPerVideo: seconds };
+        reservations[code] = { rounds: generations, active: 0, expiresAt: Date.now() + 2 * 60 * 60_000, reset: quota.resetsAt, gpuSecondsPerVideo: seconds, quality };
         await this.storage.put('reservations', reservations);
     }
     async consume(code: string, jobId?: string) {
@@ -119,17 +120,18 @@ export class QuotaBudget {
         }
         await this.storage.put('reservations', reservations);
     }
-    async extend(code: string, players: number) {
+    async extend(code: string, players: number, quality: GenerationQuality = 'auto') {
         this.display = undefined;
         players = playerCount(players);
         if (this.config.AI_PROVIDER === 'mock') return;
         const { quota, reservations } = await this.state();
         const entry = reservations[code];
-        const seconds = entry?.active ? Math.max(reservationCost(entry), secondsPerRound(this.config)) : secondsPerRound(this.config);
+        const cost = secondsPerRound(qualityConfig(this.config, quality));
+        const seconds = entry?.active ? Math.max(reservationCost(entry), cost) : cost;
         if (!Number.isFinite(seconds) || freeGenerations(quota, reservations, seconds) < players) throw new Error('Das kostenlose KI-Kontingent reicht nicht für eine Zusatzrunde mit allen Spielern.');
         // Preserve abandoned jobs still using GPU time while adding one complete cycle.
         reservations[code] = { ...entry, rounds: (entry?.rounds || 0) + players, active: entry?.active || 0,
-            gpuSecondsPerVideo: seconds, expiresAt: Date.now() + 2 * 60 * 60_000, reset: quota.resetsAt };
+            gpuSecondsPerVideo: seconds, quality, expiresAt: Date.now() + 2 * 60 * 60_000, reset: quota.resetsAt };
         await this.storage.put('reservations', reservations);
     }
     async release(code: string) {
