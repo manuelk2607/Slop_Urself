@@ -15,11 +15,19 @@ function fixture() {
         HF_TOKEN: 'central', AI_PROVIDER: 'wan22', AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded' as const };
     const tokens: Record<string, { id: string; name: string }> = { central: { id: 'self', name: 'owner' } };
     const seconds: Record<string, number> = { self: 300 };
-    let nextToken = '', exchanges = 0, quotaStatus = 200;
+    let nextToken = '', exchanges = 0, quotaStatus = 200, devicePolls = 0, deviceError = 'authorization_pending';
     const original = globalThis.fetch;
     globalThis.fetch = async (input, options) => {
         const url = String(input), token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '') || '';
-        if (url.endsWith('/oauth/token')) { exchanges++; return Response.json({ access_token: nextToken, token_type: 'Bearer', expires_in: 28800 }); }
+        if (url.endsWith('/oauth/device')) return Response.json({ device_code: 'secret-device-code', user_code: 'ABCD-1234', verification_uri: 'https://hf.co/oauth/device', expires_in: 300, interval: 5 });
+        if (url.endsWith('/oauth/token')) {
+            const body = new URLSearchParams(String(options?.body));
+            if (body.has('device_code')) {
+                devicePolls++; assert.equal(body.get('device_code'), 'secret-device-code');
+                if (deviceError) return Response.json({ error: deviceError }, { status: 400 });
+            }
+            exchanges++; return Response.json({ access_token: nextToken, token_type: 'Bearer', expires_in: 28800 });
+        }
         const user = tokens[token];
         if (!user) return new Response(null, { status: 401 });
         if (url.endsWith('/oauth/userinfo')) return Response.json({ sub: user.id, preferred_username: user.name });
@@ -38,6 +46,7 @@ function fixture() {
         return { id: accountId, accountId, hfConnectionId: result.connection };
     }
     return { storage, data, config, connections, tokens, seconds, connect, exchanges: () => exchanges,
+        devicePolls: () => devicePolls, deviceError(value: string) { deviceError = value; },
         setQuotaStatus(value: number) { quotaStatus = value; }, restore() { globalThis.fetch = original; } };
 }
 
@@ -70,6 +79,47 @@ test('HF OAuth uses PKCE, minimal scopes and one-time browser-bound state; secre
         await assert.rejects(f.connections.finish(pendingState, 'code', pending.nonce, 'https://game.test'));
         assert.equal(f.exchanges(), count, 'A replay cannot exchange another authorization code.');
     } finally { f.restore(); }
+});
+
+test('HF device approval survives reload, throttles provider polling, binds the browser and profile, and encrypts credentials', async () => {
+    const f = fixture(), originalNow = Date.now;
+    let now = originalNow(); Date.now = () => now;
+    try {
+        await f.connect('a', 'hf-a');
+        const account = { id: 'a', name: 'a', expiresAt: now + 60_000 }, origin = 'https://game.test';
+        const start = await f.connections.startDevice(account, origin);
+        assert.equal(start.userCode, 'ABCD-1234');
+        assert.equal(JSON.stringify([...f.data.values()]).includes('secret-device-code'), false);
+        assert.equal((await f.connections.deviceStatus(start.nonce, 'b', origin)).pending, false);
+        assert.equal((await f.connections.pollDevice('wrong-browser', account, origin)).connected, undefined);
+        assert.equal((await f.connections.pollDevice(start.nonce, account, origin)).pending, true);
+        assert.equal(f.devicePolls(), 0);
+        const resumed = new HfConnections(f.storage, f.config);
+        assert.equal((await resumed.deviceStatus(start.nonce, 'a', origin)).pending, true);
+        now += 5000;
+        assert.equal((await resumed.pollDevice(start.nonce, account, origin)).pending, true);
+        assert.equal(f.devicePolls(), 1);
+        f.deviceError('slow_down'); now += 5000;
+        assert.equal((await resumed.pollDevice(start.nonce, account, origin)).retryAfter, 10);
+        now += 5000;
+        await resumed.pollDevice(start.nonce, account, origin);
+        assert.equal(f.devicePolls(), 2);
+        f.deviceError(''); now += 5000;
+        const completed = await resumed.pollDevice(start.nonce, account, origin);
+        assert.equal(completed.connected, true);
+        assert.equal((await resumed.credential(completed.connection, 'a')).username, 'hf-a');
+        assert.deepEqual(await resumed.pollDevice(start.nonce, account, origin), completed, 'A lost browser response must not exchange or create another token.');
+        assert.equal(f.devicePolls(), 3);
+        await resumed.cancelDevice(start.nonce, 'a', origin);
+        assert.equal((await resumed.deviceStatus(start.nonce, 'a', origin)).pending, false);
+        for (const code of ['access_denied', 'expired_token']) {
+            const next = await resumed.startDevice(account, origin); now += 5000; f.deviceError(code);
+            assert.ok((await resumed.pollDevice(next.nonce, account, origin)).error);
+            assert.equal((await resumed.deviceStatus(next.nonce, 'a', origin)).pending, false);
+        }
+        const expired = await resumed.startDevice(account, origin); now += 301_000;
+        assert.ok((await resumed.pollDevice(expired.nonce, account, origin)).error);
+    } finally { Date.now = originalNow; f.restore(); }
 });
 
 test('HF connection is not saved when OAuth cannot read ZeroGPU quota, and expired secrets are purged', async () => {

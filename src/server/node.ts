@@ -107,6 +107,10 @@ async function webResponse(response: Response, res: express.Response) {
 }
 app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, res) => webResponse(await huggingFaceResponse(webRequest(req), config, (endpoint, data) => withBudget(async () => {
     if (endpoint === '/hf/start') return hf.start(data.account as any, data.origin as string);
+    if (endpoint === '/hf/device/start') return hf.startDevice(data.account as any, data.origin as string, data.nonce as string | undefined);
+    if (endpoint === '/hf/device/status') return hf.deviceStatus(data.nonce as string | undefined, data.accountId as string, data.origin as string);
+    if (endpoint === '/hf/device/poll') return hf.pollDevice(data.nonce as string | undefined, data.account as any, data.origin as string);
+    if (endpoint === '/hf/device/cancel') { await hf.cancelDevice(data.nonce as string | undefined, data.accountId as string, data.origin as string); return { ok: true }; }
     if (endpoint === '/hf/finish') return hf.finish(data.state, data.code, data.nonce, data.origin as string);
     if (endpoint === '/hf/status') return hf.status(data.connection as string | undefined, data.accountId as string);
     if (endpoint === '/hf/disconnect') { await hf.disconnect(data.connection as string | undefined, data.accountId as string); return { ok: true }; }

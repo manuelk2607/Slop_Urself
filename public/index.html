@@ -30,6 +30,12 @@
         </div>
         <p id="hfStatus" role="status"></p>
         <p id="hfError" class="error-msg" role="alert"></p>
+        <div id="hfDevice" hidden>
+            <div class="hf-device-code"><code id="hfDeviceCode"></code><button id="hfCopyCode" class="icon-button" type="button" title="Code kopieren" aria-label="Code kopieren"></button></div>
+            <p>Diesen Code bei Hugging Face bestätigen.</p>
+            <a id="hfDeviceLink" class="btn-primary" target="_blank" rel="noopener noreferrer">Bei Hugging Face bestätigen</a>
+            <button id="hfDeviceCancel" class="btn-muted" type="button">Abbrechen</button>
+        </div>
         <button id="hfConnectButton" class="btn-primary" type="button" disabled>Hugging Face verbinden</button>
         <button id="hfDisconnectButton" class="btn-muted" type="button" hidden>Verbindung trennen</button>
         <a href="https://huggingface.co/join" target="_blank" rel="noopener noreferrer">Kostenloses HF-Konto erstellen</a>

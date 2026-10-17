@@ -83,19 +83,22 @@ try {
         return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2 && Math.abs(box.y + box.height / 2 - innerHeight / 2) < 2;
     }), true, 'The HF dialog must remain centered on desktop.');
     await page.screenshot({ path: artifactPath('slopurself-hf-desktop.png'), fullPage: true });
-    let oauthRequests = 0;
-    await context.route('https://huggingface.co/oauth/authorize**', route => { oauthRequests++; return route.fulfill({ contentType: 'text/html', body: '<title>HF OAuth test</title>' }); });
-    await page.route('**/api/hf/connect', route => route.fulfill({ json: { url: 'https://huggingface.co/oauth/authorize?client_id=test&scope=openid%20profile&prompt=consent' } }));
-    const popupPromise = page.waitForEvent('popup');
+    await page.route('**/api/hf/device', route => route.fulfill({ json: route.request().method() === 'POST'
+        ? { pending: true, userCode: 'ABCD-1234', verificationUrl: 'https://huggingface.co/oauth/device', expiresAt: Date.now() + 300_000, retryAfter: 5 }
+        : { pending: false } }));
     await page.locator('#hfConnectButton').click();
-    const oauthPopup = await popupPromise;
-    await oauthPopup.waitForURL(/huggingface\.co\/oauth\/authorize/);
-    assert.equal(new URL(oauthPopup.url()).searchParams.get('prompt'), 'consent');
-    await new Promise(resolve => setTimeout(resolve, 1_100));
-    assert.equal(oauthRequests, 2, 'The OAuth tab retries the same idempotent authorization URL once.');
-    await oauthPopup.close();
-    await page.unroute('**/api/hf/connect');
-    await context.unroute('https://huggingface.co/oauth/authorize**');
+    await page.locator('#hfDevice').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#hfDeviceCode').innerText(), 'ABCD-1234');
+    assert.equal(await page.locator('#hfDeviceLink').getAttribute('href'), 'https://huggingface.co/oauth/device');
+    assert.equal(await page.locator('#hfDeviceLink').getAttribute('rel'), 'noopener noreferrer');
+    assert.equal(await page.locator('#hfConnectButton').isVisible(), false);
+    await page.setViewportSize({ width: 320, height: 740 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({ path: artifactPath('slopurself-hf-device-mobile.png'), fullPage: true });
+    await page.locator('#hfDeviceCancel').click();
+    await page.locator('#hfDevice').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('#hfConnectButton').isVisible(), true);
+    await page.unroute('**/api/hf/device');
     await page.locator('#hfCloseButton').click();
     await page.unroute('**/api/hf');
     await page.setViewportSize({ width: 375, height: 812 });

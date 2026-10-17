@@ -2,14 +2,14 @@
 
 ## Prüfstatus
 
-Die lokale Implementierung ist isoliert getestet. Zusätzlich funktionieren
-die echte HF-Anmeldung mit `openid profile read-billing`, die persönliche
-ZeroGPU-Kontingentabfrage und die Verbindung nach einem Seitenneuladen.
-Die zusätzliche Leseberechtigung wurde nach ausdrücklicher Freigabe aktiviert.
-Beim Live-Check waren noch 75 von 300 GPU-Sekunden verfügbar; deshalb wurde
-kein neuer Videoauftrag gestartet. Ein erfolgreicher persönlicher Live-Auftrag
-und dessen tatsächliche Kontingentabbuchung sind noch zu prüfen.
-Noch nicht auf Cloudflare veröffentlicht.
+Der Anmeldeweg verwendet den offiziellen OAuth-Gerätecodefluss. Der vorherige
+Callback-Aufruf lieferte bei HF auch nach der Zustimmung HTTP 404; ein
+automatisches Neuladen behob das nicht zuverlässig und wurde entfernt.
+Der Gerätecodefluss wurde mit der registrierten App, den Berechtigungen
+`openid profile read-billing` und der echten ZeroGPU-Abfrage erfolgreich
+geprüft (300 von 300 GPU-Sekunden). Die Anwendung prüft Profil und Kontingent,
+bevor sie die Verbindung speichert. Ein persönlicher Live-Videoauftrag und
+dessen tatsächliche Kontingentabbuchung sind weiterhin separat zu prüfen.
 
 ## Für Mitspieler
 
@@ -18,12 +18,16 @@ Noch nicht auf Cloudflare veröffentlicht.
    manuell angelegter API-Schlüssel ist nicht notwendig.
 2. Mit dem bisherigen Benutzernamen im Spiel anmelden. Unter **KI-Konto**
    auf **Hugging Face verbinden** klicken.
-3. Bei Hugging Face anmelden, die angezeigten Berechtigungen prüfen und
+3. Den angezeigten achtstelligen Code kopieren und **Bei Hugging Face
+   bestätigen** öffnen. Auf HF den Code eingeben und fortfahren.
+4. Bei Hugging Face anmelden, die angezeigten Berechtigungen prüfen und
    die Verbindung bestätigen. Neben dem öffentlichen Profil benötigt das
    Spiel `read-billing`, um das ZeroGPU-Kontingent zu lesen. Dieser Scope
    umfasst auch die Auskunft, ob eine Zahlungsmethode hinterlegt ist;
    das Spiel ruft nur das Kontingent ab. Er erlaubt keine Zahlungen.
-   Anschließend geht es zurück zum Spiel.
+   Anschließend zum Spiel-Tab zurückkehren. Das Spiel erkennt die Freigabe
+   automatisch. Der Code läuft nach spätestens zehn Minuten ab; dann erneut
+   verbinden. **Abbrechen** beendet die ausstehende Verbindung.
 
 Das HF-Passwort wird ausschließlich auf `huggingface.co` eingegeben, nie
 im Spiel. Die Verbindung gilt nur für diesen Browser auf diesem Gerät und
@@ -115,8 +119,13 @@ kein Nachweis dafür.
 
 ## Datenschutz und Prüfung
 
-PKCE, zufälliger einmaliger Zustand und ein zusätzliches HTTP-only-
-Browsercookie sichern die Rückleitung. Zugriffstokens werden mit AES-GCM
+Ein zufälliges HTTP-only-Browsercookie bindet den Gerätecodefluss an die
+angemeldete Spielprofil-ID und die Spieladresse. Der geheime `device_code`
+bleibt AES-GCM-verschlüsselt auf dem Server; nur der kurze Bestätigungscode
+gelangt ins UI. Die Abfragen halten das HF-Pollingintervall einschließlich
+`slow_down` ein. Offene Bestätigungen lassen sich nach Reload fortsetzen und
+laufen automatisch ab. Der frühere PKCE-Callback bleibt für bereits begonnene
+Anmeldungen verfügbar. Zugriffstokens werden ebenfalls mit AES-GCM
 verschlüsselt und nicht an den Browser, in Raumdaten, Statistiken oder
 Anwendungslogs ausgegeben. Die App speichert keine HF-Passwörter und fragt
 keine E-Mail-Adressen ab. Abgelaufene Zugangsdaten werden entfernt.

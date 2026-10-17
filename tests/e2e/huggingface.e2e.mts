@@ -34,11 +34,20 @@ try {
         await page.goto(base); await page.locator('#screenAuth').waitFor({ state: 'visible' });
         await page.locator('#authUsername').fill(i ? 'PersonalB' : 'PersonalA'); await page.locator('#authSubmit').click();
         await page.locator('#screenLobby').waitFor({ state: 'visible' });
-        const response = await page.request.post(`${base}/api/hf/connect`, { headers: { origin: base } });
-        assert.equal(response.status(), 200);
-        const authorization = new URL((await response.json()).url);
-        // Only the external identity provider is simulated; callback, vault, cookies and quota routing are real app code.
-        await page.goto(`${base}/api/hf/callback?state=${authorization.searchParams.get('state')}&code=${i ? 'hf-b' : 'hf-a'}`);
+        await page.locator('#hfAccountButton').click();
+        await page.locator('#hfConnectButton').click();
+        await page.locator('#hfDevice').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('#hfDeviceCode').innerText(), i ? 'EFGH-5678' : 'ABCD-1234');
+        const pending = await (await page.request.get(`${base}/api/hf/device`)).json();
+        assert.equal(pending.pending, true);
+        assert.equal('deviceCode' in pending, false);
+        if (i === 1) {
+            await page.reload(); await page.locator('#screenLobby').waitFor({ state: 'visible' });
+            await page.locator('#hfAccountButton').click(); await page.locator('#hfDevice').waitFor({ state: 'visible' });
+            assert.equal(await page.locator('#hfDeviceCode').innerText(), 'EFGH-5678');
+        }
+        // Only HF approval is simulated; device polling, vault, cookie and UI reload use real app code.
+        await page.waitForEvent('load');
         await page.locator('#screenLobby').waitFor({ state: 'visible' });
         await page.locator('#hfDialog').waitFor({ state: 'visible' });
         await page.waitForFunction(() => document.getElementById('hfStatus')?.textContent?.includes('300 / 300'));

@@ -32,6 +32,30 @@ export async function huggingFaceResponse(request: Request, config: HfConfig, se
     if (request.method !== 'GET' && request.headers.get('origin') !== url.origin) return json({}, 403);
     try {
         const connection = hfCookie(request), accountId = account.id;
+        const nonce = hfCookie(request, HF_STATE_COOKIE);
+        if (url.pathname === '/api/hf/device') {
+            if (request.method === 'GET') return json(await service('/hf/device/status', { nonce, accountId, origin: url.origin }));
+            if (request.method === 'POST') {
+                const { nonce: nextNonce, ...result } = await service('/hf/device/start', { account, origin: url.origin, nonce });
+                cookie(HF_STATE_COOKIE, nextNonce, Math.max(1, Math.ceil((result.expiresAt - Date.now()) / 1000)), true);
+                return json(result);
+            }
+            if (request.method === 'DELETE') {
+                await service('/hf/device/cancel', { nonce, accountId, origin: url.origin });
+                cookie(HF_STATE_COOKIE, '', 0, true);
+                return json({ ok: true });
+            }
+        }
+        if (url.pathname === '/api/hf/device-poll' && request.method === 'POST') {
+            const result = await service('/hf/device/poll', { nonce, account, origin: url.origin });
+            if (result.connected) {
+                cookie(HF_COOKIE, result.connection, Math.max(0, Math.floor((result.expiresAt - Date.now()) / 1000)));
+                cookie(HF_STATE_COOKIE, '', 0, true);
+                return json({ connected: true });
+            }
+            if (result.error) cookie(HF_STATE_COOKIE, '', 0, true);
+            return json(result);
+        }
         if (url.pathname === '/api/hf' && request.method === 'GET') {
             let configured = true;
             try { hfClient(hfOrigin(url.origin, config), config); } catch { configured = false; }
@@ -47,6 +71,7 @@ export async function huggingFaceResponse(request: Request, config: HfConfig, se
         }
         if (url.pathname === '/api/hf' && request.method === 'DELETE') {
             await service('/hf/disconnect', { connection, accountId });
+            await service('/hf/device/cancel', { nonce, accountId, origin: url.origin });
             cookie(HF_COOKIE, '', 0); cookie(HF_STATE_COOKIE, '', 0, true);
             return json({ ok: true });
         }

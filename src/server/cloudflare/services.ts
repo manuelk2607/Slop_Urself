@@ -32,6 +32,14 @@ export class ServiceDurableObject {
                 account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string };
             const quality = generationQuality(data.quality);
             if (path === '/hf/start') { const result = await this.hf.start(data.account, data.origin); await this.scheduleCleanup(Date.now() + 600_000); return json(result); }
+            if (path === '/hf/device/start') { const result = await this.hf.startDevice(data.account, data.origin, data.nonce); await this.scheduleCleanup(result.expiresAt); return json(result); }
+            if (path === '/hf/device/status') return json(await this.hf.deviceStatus(data.nonce, data.accountId, data.origin));
+            if (path === '/hf/device/poll') {
+                const result = await this.hf.pollDevice(data.nonce, data.account, data.origin);
+                if ('connected' in result && result.connected) await this.scheduleCleanup(result.expiresAt);
+                return json(result);
+            }
+            if (path === '/hf/device/cancel') { await this.hf.cancelDevice(data.nonce, data.accountId, data.origin); return json({ ok: true }); }
             if (path === '/hf/finish') { const result = await this.hf.finish(data.state, data.code, data.nonce, data.origin); await this.scheduleCleanup(result.expiresAt); return json(result); }
             if (path === '/hf/status') return json(await this.hf.status(data.connection, data.accountId));
             if (path === '/hf/disconnect') { await this.hf.disconnect(data.connection, data.accountId); return json({ ok: true }); }

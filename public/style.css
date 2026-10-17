@@ -871,6 +871,10 @@ body.statistics-open {
 .hf-dialog-heading button { width: 36px; height: 36px; padding: 8px; margin: 0; display: grid; place-items: center; flex: 0 0 36px; }
 #hfStatus, #hfError { overflow-wrap: anywhere; }
 #hfDialog a { color: #e6e9ee; display: inline-block; margin-top: 12px; }
+.hf-device-code { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+.hf-device-code code { font-size: 24px; letter-spacing: 0; white-space: nowrap; }
+.hf-device-code button { width: 36px; height: 36px; padding: 8px; margin: 0; flex: 0 0 36px; }
+#hfDialog #hfDeviceLink { display: block; text-align: center; text-decoration: none; padding: 12px; border-radius: 6px; }
 @media (max-width: 480px) {
     .account-bar #accountName { flex: 1 0 100%; }
     .account-bar button { flex: 1; }

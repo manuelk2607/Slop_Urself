@@ -1,5 +1,33 @@
 # Technische Prüfung
 
+## HF-Anmeldefehler und Gerätecodefluss vom 17. Oktober 2026
+
+- Den 404 auch im echten Safari reproduziert: Die Zustimmungsseite war
+  erreichbar, nach dem Absenden von HF selbst erschien aber erneut 404.
+  Die vorherigen Vermutungen zu Scope-Kodierung, `prompt=consent` und einem
+  kurzzeitigen Cachefehler waren damit kein ausreichender Ursachenbeleg.
+  Das erzwungene automatische Neuladen und das Skript-Popup wurden entfernt.
+- Offiziellen Gerätecodefluss mit derselben öffentlichen OAuth-App und
+  unveränderten Scopes `openid profile read-billing` geprüft. HF meldet
+  `/oauth/device/success`, Tokenaustausch und persönliche Kontingentabfrage
+  liefern HTTP 200 und 300 von 300 GPU-Sekunden. Auch im lokalen Spiel
+  erfolgreich bestätigt und automatisch als verbunden übernommen.
+- Die Spieloberfläche zeigt den Bestätigungscode, einen normalen externen
+  Link und Abbrechen. Gerätecode und Zugangstoken bleiben verschlüsselt auf
+  dem Server; öffentliche Antworten geben keine internen Capabilities aus.
+  Profil-ID, Spieladresse und HTTP-only-Cookie binden jede Bestätigung.
+  Pollingintervalle, `slow_down`, Ablehnung, Ablauf und Wiederaufnahme nach
+  Reload sind berücksichtigt. Ein wiederholter Poll nach verlorener Antwort
+  verwendet denselben bereits gespeicherten Zugang.
+- Verifikation: 119 Unit-Tests und die vollständige CI-Suite mit Chromium,
+  WebKit und echter lokaler Cloudflare-Laufzeit bestanden. Die abschließende
+  UI-Fassung zusätzlich in beiden Browsern geprüft: Codeanzeige, Abbruch,
+  Wiederaufnahme einer offenen Bestätigung nach Reload, automatische Anzeige
+  des verbundenen Kontos und drei vollständige Zwei-Spieler-Runden mit sechs
+  simulierten Videos und übereinstimmender Endwertung.
+- Kein echter GPU-Auftrag für diese Anmeldung gestartet. Die persönliche
+  Zuordnung eines tatsächlich generierten Videos bleibt separat zu prüfen.
+
 ## Persönliches HF-Kontingent vom 17. Oktober 2026
 
 - Optionale HF-Anbindung zusätzlich zur unveränderten Anmeldung mit einem

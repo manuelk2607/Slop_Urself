@@ -7,6 +7,7 @@ const runtime = await cloudflareRuntime({ bindings: { AI_PROVIDER: 'wan22', AI_P
     outboundService: async request => {
         const url = new URL(request.url), token = request.headers.get('authorization')?.replace('Bearer ', '');
         assert.equal(url.hostname, 'huggingface.co');
+        if (url.pathname === '/oauth/device') return Response.json({ device_code: 'private-device-code', user_code: 'ABCD-1234', verification_uri: 'https://hf.co/oauth/device', expires_in: 300, interval: 5 });
         if (url.pathname === '/oauth/token') return Response.json({ access_token: 'personal', token_type: 'Bearer', expires_in: 28800 });
         assert.ok(['personal', 'central'].includes(token || ''));
         if (url.pathname === '/oauth/userinfo') return Response.json({ sub: 'personal', preferred_username: 'HF_Test' });
@@ -46,6 +47,21 @@ try {
     assert.equal((await (await request('/api/hf', 'GET', auth)).json()).connected, false, 'The username alone cannot retrieve its HF connection.');
     assert.equal((await request('/api/hf', 'DELETE', cookie)).status, 200);
     assert.equal((await (await request('/api/hf', 'GET', cookie)).json()).connected, false);
+    assert.equal((await request('/api/hf/device', 'POST', '')).status, 401);
+    const deviceStart = await request('/api/hf/device', 'POST', auth);
+    assert.equal(deviceStart.status, 200);
+    const device = await deviceStart.json();
+    assert.equal(device.userCode, 'ABCD-1234');
+    assert.equal('deviceCode' in device, false); assert.equal('nonce' in device, false);
+    const deviceCookie = `${auth}; ${deviceStart.headers.getSetCookie()[0].split(';')[0]}`;
+    assert.equal((await (await request('/api/hf/device', 'GET', auth)).json()).pending, false);
+    await runtime.unsafeEvictDurableObject('slopurself-test', 'ServiceDurableObject', { name: 'global' });
+    assert.equal((await (await request('/api/hf/device', 'GET', deviceCookie)).json()).userCode, 'ABCD-1234');
+    await new Promise(resolve => setTimeout(resolve, 5100));
+    const approved = await request('/api/hf/device-poll', 'POST', deviceCookie);
+    assert.deepEqual(await approved.json(), { connected: true });
+    const deviceConnection = approved.headers.getSetCookie().find(value => value.startsWith('slop_hf='))!.split(';')[0];
+    assert.equal((await (await request('/api/hf', 'GET', `${auth}; ${deviceConnection}`)).json()).remainingSeconds, 300);
     assert.equal(generations, 0);
-    console.log('PASS: workerd OAuth routes, PKCE callback cookies, encrypted DO persistence after eviction, individual quota and disconnect; no GPU usage.');
+    console.log('PASS: workerd device approval and legacy callback cookies, encrypted DO persistence after eviction, individual quota and disconnect; no GPU usage.');
 } finally { await runtime.dispose(); }

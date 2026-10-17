@@ -16,6 +16,7 @@ export class HfOAuthError extends Error {
     constructor(readonly code: 'state_invalid' | 'exchange_failed' | 'token_invalid' | 'identity_failed' | 'identity_invalid' | 'validation_failed' | 'quota_forbidden' | 'quota_unavailable', message: string) { super(message); }
 }
 interface Pending { account: Account; verifier: string; nonce: string; origin: string; expiresAt: number }
+interface PendingDevice { account: Account; origin: string; client: string; deviceCode: string; userCode: string; verificationUrl: string; interval: number; nextPollAt: number; expiresAt: number; completed?: { connection: string; expiresAt: number } }
 interface Sealed { iv: string; data: string; expiresAt: number }
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const decode = (value: string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0));
@@ -52,7 +53,7 @@ export class HfConnections {
         return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('slopurself-hf-v1'), info: new TextEncoder().encode('oauth-vault') }, material,
             { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     }
-    private async save(id: string, value: Pending | HfCredential) {
+    private async save(id: string, value: Pending | PendingDevice | HfCredential) {
         await this.cleanup();
         const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
         if (!expiries[id] && Object.keys(expiries).length >= 512) throw new Error('Zu viele HF-Verbindungen. Bitte später erneut versuchen.');
@@ -102,7 +103,9 @@ export class HfConnections {
             body: new URLSearchParams({ grant_type: 'authorization_code', client_id: hfClient(pending.origin, this.config), code,
                 code_verifier: pending.verifier, redirect_uri: `${pending.origin}/api/hf/callback` }), signal: AbortSignal.timeout(15_000) });
         if (!response.ok) throw new HfOAuthError('exchange_failed', 'Hugging Face konnte die Anmeldung nicht abschließen. Bitte erneut verbinden.');
-        const result = await response.json() as { access_token?: unknown; expires_in?: unknown; token_type?: unknown };
+        return this.acceptToken(await response.json(), pending.account);
+    }
+    private async acceptToken(result: { access_token?: unknown; expires_in?: unknown; token_type?: unknown }, account: Account) {
         if (typeof result.access_token !== 'string' || result.access_token.length > 8192 || !result.access_token
             || !Number.isFinite(result.expires_in) || Number(result.expires_in) <= 0 || String(result.token_type).toLowerCase() !== 'bearer') throw new HfOAuthError('token_invalid', 'Ungültige HF-Zugangsdaten erhalten.');
         const identity = await fetch('https://huggingface.co/oauth/userinfo', { headers: { Authorization: `Bearer ${result.access_token}` }, signal: AbortSignal.timeout(10_000) });
@@ -119,8 +122,72 @@ export class HfConnections {
         catch (error) { throw new HfOAuthError(error instanceof GpuQuotaError && error.status === 403 ? 'quota_forbidden' : 'quota_unavailable', 'HF-Anmeldung erfolgreich, aber das ZeroGPU-Kontingent konnte nicht gelesen werden. Die Verbindung wurde nicht gespeichert.'); }
         const connection = random();
         const expiresAt = Date.now() + Math.min(Number(result.expires_in), 8 * 60 * 60) * 1000;
-        await this.save(`hf-connection:${connection}`, { token: result.access_token, subject: who.id, username: user.preferred_username, expiresAt, accountId: pending.account.id });
+        await this.save(`hf-connection:${connection}`, { token: result.access_token, subject: who.id, username: user.preferred_username, expiresAt, accountId: account.id });
         return { connection, expiresAt };
+    }
+    async startDevice(account: Account, requestOrigin: string, previous?: string) {
+        const origin = hfOrigin(requestOrigin, this.config), client = hfClient(origin, this.config);
+        await this.cancelDevice(previous, account.id, origin);
+        const response = await fetch('https://huggingface.co/oauth/device', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ client_id: client, scope: 'openid profile read-billing' }), signal: AbortSignal.timeout(15_000) });
+        if (!response.ok) throw new Error('Hugging Face konnte die Verbindung nicht starten. Bitte später erneut versuchen.');
+        const result = await response.json() as { device_code?: unknown; user_code?: unknown; verification_uri?: unknown; verification_uri_complete?: unknown; interval?: unknown; expires_in?: unknown };
+        const verification = new URL(String(result.verification_uri_complete || result.verification_uri));
+        if (!['https://huggingface.co', 'https://hf.co'].includes(verification.origin) || verification.pathname !== '/oauth/device' || verification.username || verification.password
+            || typeof result.device_code !== 'string' || !result.device_code || result.device_code.length > 8192
+            || typeof result.user_code !== 'string' || !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(result.user_code)
+            || !Number.isFinite(result.expires_in) || Number(result.expires_in) <= 0) throw new Error('Ungültige HF-Verbindungsantwort.');
+        const nonce = random(), interval = Math.max(5, Number.isFinite(result.interval) ? Number(result.interval) : 5);
+        const pending: PendingDevice = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt }, origin, client,
+            deviceCode: result.device_code, userCode: result.user_code, verificationUrl: verification.href, interval, nextPollAt: Date.now() + interval * 1000,
+            expiresAt: Date.now() + Math.min(600, Number(result.expires_in)) * 1000 };
+        await this.save(`hf-device:${nonce}`, pending);
+        return { ...this.deviceView(pending), nonce };
+    }
+    private deviceView(pending: PendingDevice) {
+        return { pending: true, userCode: pending.userCode, verificationUrl: pending.verificationUrl, expiresAt: pending.expiresAt,
+            retryAfter: Math.max(1, Math.ceil((pending.nextPollAt - Date.now()) / 1000)) };
+    }
+    private async device(nonce: string | undefined, accountId: string, origin: string) {
+        if (!secretId(nonce)) return;
+        const pending = await this.load<PendingDevice>(`hf-device:${nonce}`);
+        if (!pending || pending.account.id !== accountId || pending.origin !== hfOrigin(origin, this.config)) return;
+        return pending;
+    }
+    async deviceStatus(nonce: string | undefined, accountId: string, origin: string) {
+        const pending = await this.device(nonce, accountId, origin);
+        return pending ? this.deviceView(pending) : { pending: false };
+    }
+    async cancelDevice(nonce: string | undefined, accountId: string, origin: string) {
+        if (await this.device(nonce, accountId, origin)) await this.storage.delete(`hf-device:${nonce}`);
+    }
+    async pollDevice(nonce: string | undefined, account: Account, origin: string) {
+        const pending = await this.device(nonce, account.id, origin);
+        if (!pending) return { error: 'Der HF-Code ist abgelaufen. Bitte erneut verbinden.' };
+        if (pending.account.expiresAt <= Date.now() || (this.config.validateAccount && !await this.config.validateAccount(pending.account))) throw new Error('Bitte melde dich zuerst erneut im Spiel an.');
+        if (pending.completed) return { connected: true, ...pending.completed };
+        if (pending.nextPollAt > Date.now()) return { pending: true, retryAfter: this.deviceView(pending).retryAfter };
+        pending.nextPollAt = Date.now() + pending.interval * 1000;
+        await this.save(`hf-device:${nonce}`, pending);
+        const response = await fetch('https://huggingface.co/oauth/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ client_id: pending.client, grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: pending.deviceCode }), signal: AbortSignal.timeout(15_000) });
+        const result = await response.json() as { error?: unknown; access_token?: unknown; expires_in?: unknown; token_type?: unknown };
+        if (!response.ok) {
+            if (result.error === 'authorization_pending') return { pending: true, retryAfter: pending.interval };
+            if (result.error === 'slow_down') {
+                pending.interval += 5; pending.nextPollAt = Date.now() + pending.interval * 1000;
+                await this.save(`hf-device:${nonce}`, pending);
+                return { pending: true, retryAfter: pending.interval };
+            }
+            if (result.error === 'access_denied' || result.error === 'expired_token') {
+                await this.storage.delete(`hf-device:${nonce}`);
+                return { error: result.error === 'access_denied' ? 'HF-Verbindung wurde abgelehnt.' : 'Der HF-Code ist abgelaufen. Bitte erneut verbinden.' };
+            }
+            throw new Error('HF-Verbindung konnte gerade nicht geprüft werden. Bitte erneut versuchen.');
+        }
+        pending.completed = await this.acceptToken(result, pending.account);
+        await this.save(`hf-device:${nonce}`, pending);
+        return { connected: true, ...pending.completed };
     }
     async credential(connection: string | undefined, accountId: string | undefined) {
         if (!secretId(connection) || !accountId) throw new Error('Bitte verbinde dein Hugging-Face-Konto erneut.');
