@@ -111,6 +111,7 @@ test('HF HTTP endpoints enforce origin, use Lax state cookies and never expose c
         assert.match(start.headers.getSetCookie()[0], /HttpOnly; SameSite=Lax;.*Secure/);
         const nonceCookie = start.headers.getSetCookie()[0].split(';')[0];
         const url = new URL((await start.json()).url);
+        assert.equal(url.searchParams.get('prompt'), 'consent');
         const player = await f.connect('not-this-account', 'hf-a'); // Prepare the fake token response.
         const callback = await handle(`/api/hf/callback?state=${url.searchParams.get('state')}&code=callback-code`, 'GET', nonceCookie);
         assert.equal(callback.status, 303); assert.equal(callback.headers.get('location'), '/?hf=connected');
