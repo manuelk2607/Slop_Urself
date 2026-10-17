@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { artifactPath } from '../support/artifacts';
+import { testImage } from '../support/images';
 import { chromium, webkit, Page } from 'playwright';
 
 const base = process.argv[2] || 'http://127.0.0.1:3311';
@@ -20,10 +21,11 @@ for (const page of pages) {
     }));
 }
 const [host, guest, third] = pages;
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=', 'base64');
+const png = testImage(320, 240);
 const visible = (page: Page, id: string) => page.locator(`#${id}`).waitFor({ state: 'visible', timeout: 15_000 });
 const upload = async (page: Page) => {
     await page.locator('#imageInput').setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: png });
+    await visible(page, 'imagePreview');
     await page.locator('#promptInput').fill('The subject waves.');
     await page.locator('#uploadButton').click();
 };
@@ -155,6 +157,7 @@ try {
     await visible(host, 'creatorControls');
     // An unrelated membership update must not clear an image already selected by the creator.
     await host.locator('#imageInput').setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: png });
+    await visible(host, 'imagePreview');
     await host.locator('#promptInput').fill('The subject waves.');
     await guest.reload(); await visible(guest, 'screenCreate');
     assert.equal(await host.locator('#imageInput').evaluate((i: HTMLInputElement) => i.files?.length), 1);

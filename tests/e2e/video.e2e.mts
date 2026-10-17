@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium, webkit } from 'playwright';
 import { artifactPath } from '../support/artifacts';
+import { testImage } from '../support/images';
 
 const base = process.argv[2] || 'http://127.0.0.1:3310';
 const engine = process.env.TEST_BROWSER_ENGINE === 'webkit' ? webkit : chromium;
@@ -21,7 +22,8 @@ try {
         ? route.fulfill({ status: 503, contentType: 'text/plain', body: 'Temporarily unavailable' })
         : route.continue());
     await page.locator('#imageInput').setInputFiles({ name: 'test.png', mimeType: 'image/png',
-        buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=', 'base64') });
+        buffer: testImage(320, 240) });
+    await page.locator('#imagePreview').waitFor({ state: 'visible' });
     await page.locator('#promptInput').fill('The subject waves.');
     await page.locator('#uploadButton').click();
     await page.locator('#videoPlaybackNotice').waitFor({ state: 'visible' });

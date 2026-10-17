@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { artifactPath } from '../support/artifacts';
+import { testImage } from '../support/images';
 import { spawn } from 'node:child_process';
 import { chromium, webkit, Page } from 'playwright';
 
@@ -35,9 +36,10 @@ try {
         } else await page.locator('#usernameInput').fill(i ? 'ExtraGuest' : 'ExtraHost');
         await page.locator('#screenLobby').waitFor({ state: 'visible' });
     }
-    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=', 'base64');
+    const png = testImage(320, 240);
     const upload = async (page: Page) => {
         await page.locator('#imageInput').setInputFiles({ name: 'test.png', mimeType: 'image/png', buffer: png });
+        await page.locator('#imagePreview').waitFor({ state: 'visible' });
         await page.locator('#promptInput').fill('The subject waves.');
         await page.locator('#uploadButton').click();
         await Promise.all(pages.map(p => p.locator('#screenVoting').waitFor({ state: 'visible' })));

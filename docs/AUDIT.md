@@ -1,5 +1,22 @@
 # Technische Prüfung
 
+## Korrektur des GitHub-Testbilds vom 17. Oktober 2026
+
+Der GitHub-Actions-Lauf 38981968541 scheiterte im ersten Linux-WebKit-
+Spielablauf, bevor ein Video erzeugt wurde: `Decoding error.`, anschließend
+fehlende Bildauswahl und Timeout beim Warten auf `screenVoting`. Chromium
+und die vorherigen Tests desselben Laufs waren erfolgreich. Das alte inline
+gespeicherte 1x1-PNG ist beschädigt; auch der strikte pngjs-Decoder weist
+seine Bytes zurück. Lokales macOS-WebKit hatte dieses Bild noch akzeptiert.
+
+Die drei betroffenen Browser-Tests (Spielablauf, Videowiedergabe, Zusatzrunden)
+verwenden jetzt den bestehenden Generator für vollständige PNG-Dateien und
+warten vor dem Absenden auf die vorbereitete Bildvorschau. Ein zusätzlicher
+Unit-Test prüft Prüfsummen, Abmessungen und Pixelinhalt der gemeinsamen
+Bild-Fixtures. Keine Tests wurden abgeschwächt oder übersprungen. Keine
+Anwendung, KI-Konfiguration oder Produktivdatenbank geändert; ein neues
+Cloudflare-Deployment ist für diese reine Testkorrektur nicht erforderlich.
+
 ## Party-Erweiterungen vom 17. Oktober 2026
 
 - GPU-Planung nutzt weiterhin ausschließlich das echte HF-Restkontingent,
