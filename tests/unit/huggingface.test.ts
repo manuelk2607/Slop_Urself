@@ -47,6 +47,8 @@ test('HF OAuth uses PKCE, minimal scopes and one-time browser-bound state; secre
         const account = { id: 'a', name: 'a', expiresAt: Date.now() + 60_000 };
         const start = await f.connections.start(account, 'https://game.test'), url = new URL(start.url);
         assert.equal(url.origin, 'https://huggingface.co');
+        assert.match(start.url, /scope=openid%20profile%20read-billing/);
+        assert.doesNotMatch(start.url, /scope=openid\+profile/);
         assert.equal(url.searchParams.get('scope'), 'openid profile read-billing');
         assert.equal(url.searchParams.get('prompt'), 'consent');
         assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
@@ -111,6 +113,7 @@ test('HF HTTP endpoints enforce origin, use Lax state cookies and never expose c
         assert.match(start.headers.getSetCookie()[0], /HttpOnly; SameSite=Lax;.*Secure/);
         const nonceCookie = start.headers.getSetCookie()[0].split(';')[0];
         const url = new URL((await start.json()).url);
+        assert.match(url.href, /scope=openid%20profile%20read-billing/);
         assert.equal(url.searchParams.get('prompt'), 'consent');
         const player = await f.connect('not-this-account', 'hf-a'); // Prepare the fake token response.
         const callback = await handle(`/api/hf/callback?state=${url.searchParams.get('state')}&code=callback-code`, 'GET', nonceCookie);

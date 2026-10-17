@@ -43,7 +43,7 @@ export async function huggingFaceResponse(request: Request, config: HfConfig, se
             if (authorization.origin !== 'https://huggingface.co' || authorization.pathname !== '/oauth/authorize') throw new Error('Ungültige HF-Anmelde-URL.');
             authorization.searchParams.set('prompt', 'consent');
             cookie(HF_STATE_COOKIE, result.nonce, 600, true);
-            return json({ url: authorization.href });
+            return json({ url: authorization.href.replaceAll('+', '%20') });
         }
         if (url.pathname === '/api/hf' && request.method === 'DELETE') {
             await service('/hf/disconnect', { connection, accountId });
