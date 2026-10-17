@@ -99,6 +99,8 @@ test('admin cookies expire, reject wrong roles, are revoked by key rotation and 
     const lock = await s.handle('/api/admin/session', 'DELETE', cookie);
     assert.match(lock.headers.get('set-cookie')!, /Max-Age=0/);
     const logout = await sessionResponse(s.request('/api/session', 'DELETE', cookie), s.config, s.profiles);
-    assert.equal(logout.headers.getSetCookie().length, 2);
+    assert.equal(logout.headers.getSetCookie().length, 4);
     assert.match(logout.headers.getSetCookie()[1], /slop_admin=.*Max-Age=0/);
+    assert.match(logout.headers.getSetCookie()[2], /slop_hf=.*Max-Age=0/);
+    assert.match(logout.headers.getSetCookie()[3], /slop_hf_oauth=.*Max-Age=0/);
 });

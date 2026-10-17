@@ -10,6 +10,7 @@ export const DISCONNECT_GRACE_MS = 15_000;
 export interface Player {
     id: string;
     accountId?: string;
+    hfConnectionId?: string;
     sessionId: string;
     connectionId?: string;
     name: string;
@@ -98,6 +99,10 @@ export function remainingVideos(room: Room) {
     return room.pendingCreators
         ? room.pendingCreators.length + Math.max(0, room.maxRounds - room.currentRound) * room.roundPlayers!.length
         : Math.max(0, room.maxRounds - room.currentRound + 1);
+}
+
+export function remainingVideosFor(room: Room, playerId: string) {
+    return room.pendingCreators ? Math.max(0, room.maxRounds - room.currentRound) + Number(room.pendingCreators.includes(playerId)) : remainingVideos(room);
 }
 
 function selectNextCreator(room: Room) {

@@ -5,6 +5,7 @@ const children = new Set<ReturnType<typeof spawn>>();
 let cloudflare: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 let cloudflareProfiles: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 const env = { ...process.env, DATABASE_URL: '', HF_TOKEN: '', AI_PROVIDER: 'mock', ADMIN_ACCOUNT_ID: '', ADMIN_ACCESS_KEY: '',
+    HF_OAUTH_CLIENT_ID: '', HF_OAUTH_ORIGIN: '', HF_OAUTH_ENCRYPTION_KEY: '',
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', TEST_PROFILE_DB: 'false',
     AUTH_COOKIE_SECRET: 'ci-only-cookie-secret-at-least-32-characters' };
 async function run(args: string[], extra: Record<string, string> = {}) {
@@ -36,6 +37,7 @@ try {
     await start(3310, false); await start(3312, true); await start(3313, false);
     await run(['tests/e2e/security.e2e.mts', 'http://127.0.0.1:3313']);
     await run(['tests/integration/cloudflare-runtime.mts']);
+    await run(['tests/integration/hf-runtime.mts']);
     cloudflare = await cloudflareRuntime({ port: 3311 });
     cloudflareProfiles = await cloudflareRuntime({ port: 3314, bindings: { AUTH_MODE: '' } });
     for (const engine of (process.env.TEST_BROWSER_ENGINE ? [process.env.TEST_BROWSER_ENGINE] : ['chromium', 'webkit'])) {
@@ -50,6 +52,7 @@ try {
         await run(['tests/e2e/accounts.e2e.mts'], browserEnv);
         await run(['tests/e2e/startup.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/auth.e2e.mts', 'http://127.0.0.1:3312'], browserEnv);
+        await run(['tests/e2e/huggingface.e2e.mts'], browserEnv);
         for (const port of [3312, 3314]) await run(['tests/e2e/classic.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/quota.e2e.mts'], browserEnv);
         await run(['tests/e2e/extension.e2e.mts'], browserEnv);

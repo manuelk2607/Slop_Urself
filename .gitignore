@@ -2,6 +2,7 @@
 .env
 .env.local
 .admin-access.txt
+.local/
 dist/
 public/script.js
 public/startup.js

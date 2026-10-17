@@ -14,6 +14,8 @@ export function takeRateLimit(buckets: RateBuckets, key: string, rule: RateRule,
 }
 
 export function httpRateRule(path: string, method: string): RateRule | undefined {
+    if (path === '/api/hf/connect' || path === '/api/hf/callback') return { limit: 12, windowMs: 60_000 };
+    if (path === '/api/hf') return { limit: 60, windowMs: 60_000 };
     if (path === '/api/session' && method === 'POST') return { limit: 60, windowMs: 60_000 };
     if (path === '/api/admin/session' && method === 'POST') return { limit: 5, windowMs: 60_000 };
     if (path.startsWith('/api/admin/')) return { limit: 60, windowMs: 60_000 };

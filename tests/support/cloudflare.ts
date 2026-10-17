@@ -14,7 +14,7 @@ export async function cloudflareRuntime(options: { port?: number; bindings?: Rec
             env: { ...Object.fromEntries(Object.entries(bindings).map(([key, value]) => [key, { type: 'text' as const, value }])),
                 ASSETS: { type: 'assets' }, ROOMS: { type: 'durable-object', worker: 'slopurself-test', exportName: 'RoomDurableObject' },
                 SERVICES: { type: 'durable-object', worker: 'slopurself-test', exportName: 'ServiceDurableObject' } },
-            assets: { directory: resolve('cloudflare/public'), hasUserWorker: true, notFoundHandling: 'none', runWorkerFirst: ['/api/*', '/ws/*', '/socket.io/*'] } },
+            assets: { directory: resolve('cloudflare/public'), hasUserWorker: true, notFoundHandling: 'none', runWorkerFirst: ['/api/*', '/ws/*', '/socket.io/*', '/.well-known/oauth-cimd'] } },
             dev: { outboundService: { type: 'fetcher', handler: options.outboundService ?? (() => new Response('External network is disabled in tests.', { status: 503 })) } } }] });
     try { await runtime.ready; return runtime; }
     catch (error) { await runtime.dispose(); throw error; }

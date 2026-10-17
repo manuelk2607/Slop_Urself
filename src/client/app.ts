@@ -1,4 +1,5 @@
 import { initializeAccount, refreshAccount } from './auth';
+import { huggingFaceConnection } from './huggingface';
 import { createRealtimeClient, type SocketPayload } from './realtime';
 import { statisticsView } from './statistics';
 import type { HistoryKind } from './history-selection';
@@ -15,6 +16,7 @@ import type { HistoryPage } from '../database/pagination';
 
 const socket = createRealtimeClient(() => currentRoomId);
 const accounts = accountManagement();
+const hfConnection = huggingFaceConnection();
 const party = partyControls(() => currentPlayerId, payload => socket.emit('closePhase', { ...payload, roomId: currentRoomId }));
 const variants = gameVariants(() => currentRoomId, () => currentPlayerId,
     (event, payload) => socket.emit(event, { ...payload, roomId: currentRoomId }));
@@ -43,6 +45,7 @@ const screenGameOver = document.getElementById('screenGameOver') as HTMLElement;
 // Lobby-Elemente
 const usernameInput = document.getElementById('usernameInput') as HTMLInputElement;
 const roomRoundCountInput = document.getElementById('roomRoundCountInput') as HTMLInputElement;
+let editingRoundCount = false;
 const roomRoundLimitHint = document.getElementById('roomRoundLimitHint') as HTMLElement;
 const createRoomButton = document.getElementById('createRoomButton') as HTMLButtonElement;
 const joinRoomButton = document.getElementById('joinRoomButton') as HTMLButtonElement;
@@ -155,6 +158,8 @@ function saveSession(roomId: string, sessionId: string) {
 }
 
 function clearSession(preserveStored = false) {
+    editingRoundCount = false;
+    hfConnection.lock(false);
     party.clear();
     currentRoomId = '';
     currentSessionId = '';
@@ -262,17 +267,19 @@ usernameInput.addEventListener('input', () => {
 
 function quotaHint(quota: QuotaCapacity, additional = false) {
     const limit = quota.aiRoundLimit;
-    if (quota.quotaMode === 'unavailable') return 'Rundenlimit momentan nicht verfügbar.';
+    if (quota.quotaMode === 'unavailable') return quota.sharedQuota === false ? 'Bitte prüft eure HF-Verbindungen.' : 'Rundenlimit momentan nicht verfügbar.';
     const roundLabel = `${additional ? 'Zusatzrunde' : 'Runde'}${limit === 1 ? '' : 'n'}`;
     return `${additional ? 'Noch' : 'Aktuell'} maximal ${limit} ${roundLabel}.`;
 }
 
 function refreshQuota() {
-    if (currentRoomId && (screenRoomLobby.style.display !== 'none' || (screenGameOver.style.display !== 'none' && isCurrentSocket(currentHostId)))) socket.emit('refreshQuota', { roomId: currentRoomId });
+    if (currentRoomId && isCurrentSocket(currentHostId) && (screenRoomLobby.style.display !== 'none' || screenGameOver.style.display !== 'none')) socket.emit('refreshQuota', { roomId: currentRoomId });
 }
 window.setInterval(refreshQuota, 30_000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshQuota(); void refreshAccount(); } });
+roomRoundCountInput.addEventListener('input', () => { editingRoundCount = true; });
 roomRoundCountInput.addEventListener('change', () => {
+    editingRoundCount = false;
     if (currentRoomId && !roomRoundCountInput.disabled) socket.emit('setRoundCount', { roomId: currentRoomId, rounds: Number(roomRoundCountInput.value) });
 });
 
@@ -406,6 +413,7 @@ socket.on('roomDataUpdate', (data: {
     lastResult?: { authorName: string; roundPoints: number };
 } & VariantSnapshot & PartySnapshot & { archiveAuthor?: string }) => {
     if (!currentRoomId || (data.roomId && data.roomId !== currentRoomId)) return;
+    hfConnection.lock(!['LOBBY', 'GAME_OVER'].includes(data.gameState));
     const phaseKey = `${currentRoomId}:${data.currentRound}:${data.activeCreatorId}`;
     const phaseChanged = phaseKey !== currentPhaseKey;
     currentPhaseKey = phaseKey;
@@ -430,7 +438,9 @@ socket.on('roomDataUpdate', (data: {
         roomRoundCountInput.disabled = !isHost || !data.quota?.aiRoundLimit;
         roomRoundCountInput.min = data.quota?.aiRoundLimit ? '1' : '0';
         roomRoundCountInput.max = String(data.quota?.aiRoundLimit || 0);
-        roomRoundCountInput.value = String(data.maxRounds);
+        const editingValidCount = editingRoundCount && document.activeElement === roomRoundCountInput && isHost
+            && roomRoundCountInput.validity.valid && Boolean(data.quota?.aiRoundLimit);
+        if (!editingValidCount) { roomRoundCountInput.value = String(data.maxRounds); editingRoundCount = false; }
         roomRoundLimitHint.innerText = data.quota ? quotaHint(data.quota) : 'Rundenlimit wird geprüft.';
         showScreen(screenRoomLobby);
     } else if (data.gameState === 'IDLE' || data.gameState === 'GENERATING') {
@@ -839,6 +849,8 @@ restartButton.addEventListener('click', () => {
 socket.on('authExpired', () => { void refreshAccount(); showRoomNotice('Anmeldung wird erneuert. Bitte die Aktion erneut ausführen.'); });
 void initializeAccount({
     signedIn: async name => {
+        hfConnection.lock(false);
+        hfConnection.signedIn();
         if (name) usernameInput.value = name.slice(0, 15);
         usernameInput.type = name ? 'hidden' : 'text';
         showScreen(screenLobby);
@@ -850,6 +862,7 @@ void initializeAccount({
         if (socket.isNativeWebSocket) await resumeStoredSession(); else await socket.connectToRoom('');
     },
     signedOut: async () => {
+        await hfConnection.signedOut();
         if (currentRoomId) { socket.emit('leaveRoom', { roomId: currentRoomId }); await new Promise(resolve => setTimeout(resolve, 200)); }
         clearSession(); gameHeader.style.display = 'none';
     },

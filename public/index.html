@@ -19,8 +19,20 @@
     </section>
     <div id="accountBar" class="account-bar" hidden>
         <span id="accountName"></span>
+        <button id="hfAccountButton" class="btn-muted" type="button" title="Hugging-Face-Konto verwalten">KI-Konto</button>
         <button id="signOutButton" class="btn-muted" type="button">Abmelden</button>
     </div>
+    <dialog id="hfDialog" aria-labelledby="hfTitle">
+        <div class="hf-dialog-heading">
+            <h2 id="hfTitle">KI-Konto</h2>
+            <button id="hfCloseButton" class="icon-button" type="button" aria-label="Schließen" title="Schließen">Schließen</button>
+        </div>
+        <p id="hfStatus" role="status"></p>
+        <p id="hfError" class="error-msg" role="alert"></p>
+        <button id="hfConnectButton" class="btn-primary" type="button" disabled>Hugging Face verbinden</button>
+        <button id="hfDisconnectButton" class="btn-muted" type="button" hidden>Verbindung trennen</button>
+        <a href="https://huggingface.co/join" target="_blank" rel="noopener noreferrer">Kostenloses HF-Konto erstellen</a>
+    </dialog>
     <section id="screenAuth" class="game-screen" style="display:none;">
         <h1>Slop Urself!</h1>
         <h2>Anmelden oder registrieren</h2>

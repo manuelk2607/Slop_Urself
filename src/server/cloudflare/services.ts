@@ -1,7 +1,9 @@
 import { sqlProfiles, storedProfiles, type Profile, type ManagedProfileStore } from '../../auth/profiles';
 import { getSql, getDatabase } from '../../database/neon';
 import { purgeDeletedVideos, deleteStoredHistory, HistoryError, type HistoryDeletion } from '../statistics';
-import { QuotaBudget } from '../../ai/quota';
+import { PlayerQuotaBudget, type BudgetPlayer } from '../../ai/player-quota';
+import { HfConnections, HfOAuthError } from '../../auth/huggingface';
+import { profileAuthConfig, type Account } from '../../auth/session';
 import { generationQuality } from '../../ai/providers';
 import { archiveVideo, deleteArchivedVideo } from '../../storage/archive';
 import { archiveStatus } from '../archive';
@@ -15,16 +17,24 @@ export class ServiceDurableObject {
     private profileOperations: Promise<unknown> = Promise.resolve();
     private securityOperations: Promise<unknown> = Promise.resolve();
     private profiles: ManagedProfileStore;
-    private budget: QuotaBudget;
+    private budget: PlayerQuotaBudget;
+    private hf: HfConnections;
     constructor(private state: DurableObjectState, private env: Env) {
-        this.budget = new QuotaBudget(state.storage, env);
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
+        this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
+        this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {
         const path = new URL(request.url).pathname;
         const action = async () => {
-            const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion };
+            const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
+                participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number;
+                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string };
             const quality = generationQuality(data.quality);
+            if (path === '/hf/start') { const result = await this.hf.start(data.account, data.origin); await this.scheduleCleanup(Date.now() + 600_000); return json(result); }
+            if (path === '/hf/finish') { const result = await this.hf.finish(data.state, data.code, data.nonce, data.origin); await this.scheduleCleanup(result.expiresAt); return json(result); }
+            if (path === '/hf/status') return json(await this.hf.status(data.connection, data.accountId));
+            if (path === '/hf/disconnect') { await this.hf.disconnect(data.connection, data.accountId); return json({ ok: true }); }
             if (path === '/video-trash/schedule') {
                 await this.scheduleCleanup(data.time);
                 return json({ ok: true });
@@ -36,14 +46,15 @@ export class ServiceDurableObject {
                 await this.state.storage.put('rateBuckets', buckets);
                 return json({ retryAfter });
             }
-            if (path === '/quota/display') return json(await this.budget.displayCapacity(data.players, quality));
-            if (path === '/quota/capacity') return json(await this.budget.capacity(data.players, quality));
-            if (path === '/quota/reserve') await this.budget.reserve(data.code, data.rounds, data.players, quality);
-            else if (path === '/quota/extend') await this.budget.extend(data.code, data.players!, quality);
-            else if (path === '/quota/begin') await this.budget.begin(data.code, data.generations, data.jobId);
+            if (path === '/quota/display') return json(await this.budget.displayCapacity(data.players, quality, data.participants));
+            if (path === '/quota/capacity') return json(await this.budget.capacity(data.players, quality, data.participants));
+            if (path === '/quota/token') return json({ token: await this.budget.tokenForJob(data.code, data.jobId!) });
+            if (path === '/quota/reserve') await this.budget.reserve(data.code, data.rounds, data.players, quality, data.participants);
+            else if (path === '/quota/extend') await this.budget.extend(data.code, data.players!, quality, data.participants);
+            else if (path === '/quota/begin') await this.budget.begin(data.code, data.generations, data.jobId, data.playerId, data.ownRemaining, data.participant);
             else if (path === '/quota/consume') await this.budget.consume(data.code, data.jobId);
             else if (path === '/quota/release') await this.budget.release(data.code);
-            else if (path === '/quota/drop') await this.budget.drop(data.code, data.generations);
+            else if (path === '/quota/drop') await this.budget.drop(data.code, data.generations, data.playerId);
             else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
@@ -58,9 +69,12 @@ export class ServiceDurableObject {
             else if (path === '/profiles/remove') return json({ profile: await this.profiles.remove(data.id) || null });
             return json({ ok: true });
         };
-        const result = (path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.' }, { status: error instanceof HistoryError ? error.status : 503 }));
+        const result = (path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') || path.startsWith('/hf/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => {
+            if (error instanceof HfOAuthError) console.info('[HF] OAuth callback failed', error.code);
+            return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.' }, { status: error instanceof HistoryError ? error.status : 503 });
+        });
         if (path.startsWith('/security/')) this.securityOperations = result;
-        else if (path.startsWith('/quota/')) this.quotaOperations = result;
+        else if (path.startsWith('/quota/') || path.startsWith('/hf/')) this.quotaOperations = result;
         else if (path.startsWith('/profiles/')) this.profileOperations = result;
         else this.archiveOperations = result;
         return result;
@@ -77,6 +91,10 @@ export class ServiceDurableObject {
             await purgeDeletedVideos(database, url => deleteArchivedVideo(url, this.env));
             const next = await database?.nextVideoDeletion();
             if (next !== undefined) await this.state.storage.setAlarm(Math.max(Date.now() + 100, next));
+            const cleanup = this.quotaOperations.then(() => this.hf.cleanup());
+            this.quotaOperations = cleanup.catch(() => {});
+            const hfCleanup = await cleanup;
+            if (hfCleanup !== undefined) await this.scheduleCleanup(hfCleanup);
         }).catch(async () => { await this.state.storage.setAlarm(Date.now() + 30_000); });
         this.archiveOperations = result;
         await result;

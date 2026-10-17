@@ -2,6 +2,9 @@ import { ProviderConfig, ProviderBudget, providerBudgets, providerGpuSeconds, qu
 
 export interface QuotaConfig extends ProviderConfig { HF_TOKEN?: string; AI_ROUND_LIMIT?: string }
 export interface GpuQuota { base: number; current: number; resetsAt: string | null; runs?: { remaining: number; resetsAt?: string } }
+export class GpuQuotaError extends Error {
+    constructor(readonly status: number) { super(status === 403 ? 'Der HF-Zugang benötigt Leserechte für Kontingent und Nutzungsdaten (read-billing).' : 'KI-Kontingent momentan nicht erreichbar.'); }
+}
 export interface Reservation { rounds: number; active: number; expiresAt: number; reset: string | null; gpuSecondsPerVideo?: number; activeJobs?: Record<string, number>; quality?: GenerationQuality }
 export interface BudgetStorage { get<T>(key: string): Promise<T | undefined>; put<T>(key: string, value: T): Promise<void> }
 export interface QuotaCapacity {
@@ -33,7 +36,7 @@ export async function fetchGpuQuota(config: QuotaConfig): Promise<GpuQuota> {
     const response = await fetch('https://huggingface.co/api/spaces/zero-gpu/quota', {
         headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(10_000)
     });
-    if (!response.ok) throw new Error(response.status === 403 ? 'HF_TOKEN benötigt die Berechtigung zum Lesen des Kontingents.' : 'KI-Kontingent momentan nicht erreichbar.');
+    if (!response.ok) throw new GpuQuotaError(response.status);
     const quota = await response.json() as GpuQuota;
     if (!Number.isFinite(quota.current) || quota.current < 0 || !Number.isFinite(quota.base) || quota.base < 0 ||
         (quota.runs && (!Number.isInteger(quota.runs.remaining) || quota.runs.remaining < 0)) ||

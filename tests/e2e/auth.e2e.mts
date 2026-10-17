@@ -24,6 +24,7 @@ try {
     assert.equal((await context.request.get(`${base}/api/session`)).status(), 401);
     await page.locator('#authUsername').fill(username);
     await page.setViewportSize({ width: 320, height: 740 });
+    assert.equal(await page.locator('#accountName').evaluate(element => element.getBoundingClientRect().height < 50), true, 'A mobile username must not be squeezed between both account buttons.');
     const buttonHeights = await Promise.all(['authSubmit', 'existingNameButton'].map(id => page.locator(`#${id}`).evaluate(button => button.getBoundingClientRect().height)));
     let releaseLogin!: () => void;
     const heldLogin = new Promise<void>(resolve => { releaseLogin = resolve; });
@@ -55,6 +56,36 @@ try {
     assert.equal(await page.locator('#usernameInput').isVisible(), false, 'The lobby must not ask for a second name.');
     await page.reload(); await page.locator('#screenLobby').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#accountName').innerText(), username);
+
+    await page.locator('#hfAccountButton').click();
+    await page.waitForFunction(() => document.getElementById('hfStatus')?.textContent?.includes('noch nicht eingerichtet'));
+    assert.equal(await page.locator('#hfConnectButton').isDisabled(), true);
+    assert.equal(await page.locator('#hfDisconnectButton').isVisible(), false);
+    await page.locator('#hfCloseButton').click();
+    await page.route('**/api/hf', async route => {
+        if (route.request().method() !== 'GET') { await route.continue(); return; }
+        await route.fulfill({ json: { configured: true, connected: true, username: 'HF_Testspieler', remainingSeconds: 300, totalSeconds: 300 } });
+    });
+    await page.locator('#hfAccountButton').click();
+    await page.waitForFunction(() => document.getElementById('hfStatus')?.textContent?.includes('HF_Testspieler'));
+    assert.equal(await page.locator('#hfDisconnectButton').isVisible(), true);
+    assert.equal(await page.locator('#hfConnectButton').innerText(), 'HF-Verbindung erneuern');
+    await page.setViewportSize({ width: 320, height: 740 });
+    assert.equal(await page.locator('#hfDialog').evaluate(element => element.getBoundingClientRect().right <= innerWidth && element.scrollWidth <= element.clientWidth), true);
+    assert.equal(await page.locator('#hfDialog').evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2 && Math.abs(box.y + box.height / 2 - innerHeight / 2) < 2;
+    }), true, 'The HF dialog must remain centered on mobile.');
+    await page.screenshot({ path: artifactPath('slopurself-hf-mobile.png'), fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    assert.equal(await page.locator('#hfDialog').evaluate(element => {
+        const box = element.getBoundingClientRect();
+        return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2 && Math.abs(box.y + box.height / 2 - innerHeight / 2) < 2;
+    }), true, 'The HF dialog must remain centered on desktop.');
+    await page.screenshot({ path: artifactPath('slopurself-hf-desktop.png'), fullPage: true });
+    await page.locator('#hfCloseButton').click();
+    await page.unroute('**/api/hf');
+    await page.setViewportSize({ width: 375, height: 812 });
 
     const second = await browser.newContext();
     try {

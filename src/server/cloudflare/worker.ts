@@ -10,6 +10,7 @@ import { service, json } from './runtime';
 import { historyResponse, historyListing, HistoryError } from '../statistics';
 import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
+import { huggingFaceResponse } from '../huggingface';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
@@ -28,6 +29,7 @@ export default {
             } catch { return json({ error: 'Das Spiel ist gerade nicht erreichbar.' }, { status: 503 }); }
         }
 
+        if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
         if (url.pathname === '/api/session') return sessionResponse(request, auth, serviceProfiles(env));
         if (url.pathname.startsWith('/api/admin/')) return accountsResponse(request, auth, serviceProfiles(env));
@@ -37,9 +39,10 @@ export default {
         if (url.pathname === '/api/config') {
             let players: number;
             try { players = playerCount(url.searchParams.get('players') ?? 1); } catch { return json({ error: 'Ungültige Spielerzahl.' }, { status: 400 }); }
-            const signedIn = authDisabled(env) || Boolean(await requestAccount(request, auth).catch(() => undefined));
+            const account = await requestAccount(request, auth).catch(() => undefined);
+            const signedIn = authDisabled(env) || Boolean(account);
             return json({
-                ...(signedIn ? await service(env, '/quota/display', { players }) : { aiRoundLimit: 0, quotaMode: 'unavailable' }),
+                ...(signedIn ? await service(env, '/quota/display', { players, participants: account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined }) : { aiRoundLimit: 0, quotaMode: 'unavailable' }),
                 authEnabled: !authDisabled(env),
                 aiProvider: env.AI_PROVIDER === 'mock' ? 'mock' : env.AI_PROVIDER_CHAIN || env.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN,
                 mockAi: env.AI_PROVIDER === 'mock',

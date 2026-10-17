@@ -1,5 +1,122 @@
 # Technische Prüfung
 
+## Persönliches HF-Kontingent vom 17. Oktober 2026
+
+- Optionale HF-Anbindung zusätzlich zur unveränderten Anmeldung mit einem
+  Benutzernamen. Öffentliche OAuth-App ohne Client-Secret, PKCE S256,
+  einmaliger Zustand und eigenes HTTP-only-Lax-Cookie für die Rückleitung.
+  Die vom Nutzer freigegebene echte App wurde im HF-Konto angelegt;
+  Rückleitungen sind auf Loopback und die bestehende Spieladresse begrenzt.
+- Echte Profilanmeldung nach gesonderter Freigabe getestet: Tokenaustausch,
+  Userinfo und kanonische Identitätsprüfung erfolgreich. Im ersten Versuch
+  schlug die ZeroGPU-Kontingentabfrage mit den Scopes `openid profile` fehl;
+  dabei wurde keine Verbindung gespeichert.
+  Laut HF-Dokumentation benötigt der Kontingentendpunkt zusätzlich die
+  Leseberechtigung für Nutzungsdaten und Zahlungsstatus (`read-billing`).
+  Nach ausdrücklicher Freigabe die echte OAuth-App um `read-billing`
+  erweitert und die lokale Verbindung mit Manuel2607 erneut autorisiert.
+  Erfolg: echtes persönliches Restkontingent von 75 / 300 GPU-Sekunden
+  angezeigt, verschlüsselte Verbindung gespeichert und nach Seitenneuladen
+  erneut korrekt abgerufen. Keine zusätzlichen Repository-, Inference-,
+  Jobs-, Kauf- oder Schreibrechte angefordert. Anwendungscode liest nur
+  Profil und Kontingent, keine Zahlungsdetails. Keine kostenpflichtigen
+  Aufträge oder Zahlungen freigegeben.
+- Zugangsdaten serverseitig AES-GCM-verschlüsselt, mit konto- und
+  browsergebundener zufälliger Capability statt Token im Browser.
+  Maximal acht Stunden Laufzeit, Trennen und Bereinigung nach Ablauf.
+  Spielzustände und öffentliche Kontoantworten enthalten keine HF-Capability,
+  Tokens oder persönlichen Kontingentdaten anderer Spieler. Lokal
+  verschlüsselte Dateien unter `.local/hf/`, von Git ausgeschlossen;
+  Cloudflare nutzt das Service-Durable-Object. Kein DB-Schema geändert.
+- Reservierungen und Aufträge werden nach verifizierter HF-Identität
+  getrennt. Mehrere Spielprofile mit demselben HF-Konto, einschließlich des
+  gemeinsamen Serverkontos, vervielfachen dessen Budget nicht. Gemeinsame
+  Runden richten sich nach dem knappsten Konto. Bei zwei unabhängigen vollen
+  Konten reichen jeweils 300 Sekunden mit 79 Sekunden Planung für drei
+  Runden und sechs Videos; es ist keine garantierte Laufzahl.
+  Ein persönlicher Zugang fällt bei Ablauf nicht still auf das Serverkonto
+  zurück. Bereits gestartete Aufträge behalten für die Ergebnisabfrage ihren
+  verschlüsselten ursprünglichen Zugang bis Abschluss oder Ablauf.
+- Isolierte Tests prüfen Zustandswiederholung, fremde Browser und Konten,
+  Quotenfehler ohne gespeicherte Verbindung, Secret-Bereinigung,
+  Kontendeduplizierung, parallele Raumreservierungen und Tokenzuordnung.
+  Zwei getrennte Browserprofile spielen mit simulierten HF-Konten drei
+  Runden mit sechs Videos, Reload, gegenseitigen Bewertungen und identischer
+  Endwertung. Echte workerd-Laufzeit prüft Worker-Routen, verschlüsselte
+  DO-Persistenz nach Eviction, persönliches Kontingent und Trennen.
+- Nebenbefund: Eintreffende Lobby-Snapshots konnten gültige Eingaben in der
+  Rundenauswahl vor dem Bestätigen überschreiben. Eine gerade bearbeitete
+  gültige Host-Eingabe bleibt jetzt erhalten; neue Budgetgrenzen gelten
+  weiterhin sofort. Der neue KI-Kontodialog wird auf Mobilgerät und Desktop
+  zentriert und gegen Überlauf geprüft. Nur der Host fragt periodisch das
+  Raumkontingent ab; Beitritte und Änderungen aktualisieren weiterhin sofort.
+- Abschlussprüfung: Build und 118 Unit-Tests bestanden, vollständiger
+  `npm run test:ci` mit Chromium, WebKit und lokaler Cloudflare-Laufzeit
+  bestanden. Anschließend die letzten UI-Änderungen nochmals in beiden
+  Browsern gezielt geprüft: Anmeldung, zentrierter Dialog, lesbarer mobiler
+  Benutzername, individuelles Budget und Rundenlimit. Im Zwei-Konten-Test
+  laufen alle sechs mindestens fünfsekündigen Mock-MP4s in beiden Browsern;
+  Gewinner und vollständige Endwertung stimmen überein. Keine echten
+  GPU-, Datenbank- oder Archivschreibzugriffe durch diese Tests.
+- Echter zentraler Kontingentcheck weiterhin `base=300`,
+  `current=75.285468`, Reset am 17. Oktober um 17:27:28,692 UTC.
+  Kein neuer GPU-Auftrag: Das Restbudget deckt keine weitere konservativ
+  geplante Standardgenerierung mit Reserve. Persönliche Live-Generierung
+  und deren reale Kontingentabbuchung sind daher noch nicht nachgewiesen.
+  Keine Produktionsdaten geändert, kein Push und kein Deployment.
+
+Quellen: [HF OAuth](https://huggingface.co/docs/hub/oauth),
+[HF Kontingentabfrage](https://huggingface.co/docs/huggingface_hub/en/guides/manage-spaces#track-your-zerogpu-quota).
+
+## ZeroGPU-large-Test vom 17. Oktober 2026
+
+- Nach Anmeldung des Nutzers kostenlose private ZeroGPU-Kopie angelegt:
+  `Manuel2607/SlopUrself-Wan22-GPU-Test`. Upstream-Quellstand
+  `fca7f5a33da3057bae497de5cd70f49ce75e6c02`; Teststand
+  `ed1bb1cacd00f89c789b1d8d13657d71d49ad4a6`. GPU-Größe fest `large`,
+  Laufzeitfreigabe für den Test 87,5 Sekunden statt 35. Zufällige Modellwahl
+  ersetzt durch `TestOrganizationPleaseIgnore/WAMU-Merge-MotionBoost_WAN2.2_I2V_LIGHTNING`
+  mit Revision `261ceaab8aeeb2493bf0b7304a51c190c1e91073`.
+  Keine zusätzlichen Tokenrechte erteilt. Keine Änderung am produktiven Spiel.
+- Genau ein echter Auftrag, keine Wiederholung: öffentliches bestehendes
+  Testbild (Katze mit Sonnenbrille), 624 x 832, Seed 42, vier Schritte,
+  fünf Sekunden, Guidance 1/1, UniPCMultistep, Flow-Shift 3, keine
+  Zwischenbildberechnung. Prompt: Kopf langsam nach links drehen, Kamera
+  festhalten und Sonnenbrille erhalten; derselbe Promptzusatz wie im Spiel.
+- Erfolg: H.264, yuv420p, 16 fps, 5,0625 Sekunden, 887.063 Bytes.
+  Download HTTP 200 als `video/mp4`; vollständiges Decodieren mit ffmpeg
+  ohne Fehler. Anfangs-/Endbild bestätigen die sichtbare Kopfdrehung und
+  erhaltene Sonnenbrille; die Qualität ist nur für dieses Beispiel bewertet.
+  Native Safari-Wiedergabe wurde für diesen isolierten Lauf nicht geprüft.
+- Laufzeit laut GPU-Funktion 70,28 Sekunden (davon 69,37 Inferenz);
+  Auftrag insgesamt 77,80 Sekunden. Tatsächliche HF-Abbuchung:
+  77,091136 Sekunden, von 152,376604 auf 75,285468 Restsekunden.
+  Spitzenwerte laut PyTorch: 42.587.323.904 Bytes alloziert und
+  46.586.134.528 Bytes reserviert. Kein Speicherausfall bei diesem Lauf;
+  daraus folgt keine Zusicherung für andere Einstellungen.
+- Frühere xlarge-Läufe mit gleichem Bildformat, fünf Sekunden und vier
+  Schritten kosteten 72,950944 bzw. 74,672452 Sekunden. Modellstand und Seed
+  waren dabei nicht kontrolliert identisch: historische Referenzwerte,
+  kein strenger A/B-Vergleich. Der large-Test zeigt keine Kontingentersparnis;
+  deshalb keine Umstellung oder Halbierung der Budgetschätzungen im Spiel.
+  Ein frischer xlarge-Gegenlauf passt nicht mehr mit Reserve ins Restbudget
+  und wurde nicht gestartet. Testkopie anschließend pausiert, nicht gelöscht;
+  Ergebnisvideo lokal unter `/tmp/slop-wan22-large-result.mp4` gesichert.
+- Persönliche HF-Anbindung ist hier nur bewertet, nicht implementiert:
+  OAuth mit PKCE und minimalen Berechtigungen, geschützte Tokens sowie
+  Reservierungen und Jobs pro verifizierter HF-Identität. Ein bloßer
+  Spielname darf keinen Zugriff auf den HF-Zugang des Namensinhabers geben.
+  Vor Umsetzung prüfen, ob der OAuth-Token sowohl die ZeroGPU-Kontingent-
+  abfrage als auch die Gradio-Queue autorisiert; der dokumentierte Scope
+  `inference-api` allein beweist das nicht. Gemeinsame Runden richten sich
+  nach dem kleinsten individuell verfügbaren Videobudget, nicht nach der
+  Summe der persönlichen Sekunden. Für Freunde wären keine eigenen Spaces
+  oder manuell kopierten API-Schlüssel nötig.
+
+Quellen: [HF ZeroGPU](https://huggingface.co/docs/hub/spaces-zerogpu),
+[HF OAuth](https://huggingface.co/docs/hub/oauth),
+[aktueller Wan-Space](https://huggingface.co/spaces/Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom/blob/main/app.py).
+
 ## Korrektur des GitHub-Testbilds vom 17. Oktober 2026
 
 Der GitHub-Actions-Lauf 38981968541 scheiterte im ersten Linux-WebKit-

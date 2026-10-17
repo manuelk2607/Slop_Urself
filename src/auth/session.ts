@@ -1,12 +1,13 @@
 import { jwtVerify, SignJWT } from 'jose';
 import { profileName, type ProfileStore } from './profiles';
+import { hfCookie, HF_COOKIE, HF_STATE_COOKIE } from './huggingface';
 
 export interface AuthConfig {
     AUTH_MODE?: string; AI_PROVIDER?: string; AUTH_COOKIE_SECRET?: string;
     ADMIN_ACCOUNT_ID?: string; ADMIN_ACCESS_KEY?: string;
     validateAccount?: (account: Account) => Promise<boolean>;
 }
-export interface Account { id: string; name: string; expiresAt: number }
+export interface Account { id: string; name: string; expiresAt: number; hfConnectionId?: string }
 class ProfileUnavailableError extends Error {}
 export const authFailureStatus = (error: unknown) => error instanceof ProfileUnavailableError ? 503 : 401;
 export const authDisabled = (config: AuthConfig) => config.AUTH_MODE === 'disabled' && config.AI_PROVIDER === 'mock';
@@ -37,7 +38,7 @@ export async function verifyAccountToken(token: unknown, config: AuthConfig): Pr
 export async function requestAccount(request: Request, config: AuthConfig) {
     if (authDisabled(config)) return undefined;
     const token = request.headers.get('cookie')?.split(';').map(value => value.trim()).find(value => value.startsWith('slop_auth='))?.slice(10);
-    return verifyAccountToken(token, config);
+    return { ...await verifyAccountToken(token, config), hfConnectionId: hfCookie(request) };
 }
 
 export async function sessionResponse(request: Request, config: AuthConfig, profiles: ProfileStore) {
@@ -45,7 +46,10 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
     const headers = new Headers({ 'content-type': 'application/json', 'cache-control': 'no-store' });
     const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
     if (request.method === 'GET') {
-        try { return respond({ account: await requestAccount(request, config) }); }
+        try {
+            const account = await requestAccount(request, config);
+            return respond({ account: account && { id: account.id, name: account.name, expiresAt: account.expiresAt } });
+        }
         catch (error) { return respond({ error: authFailureStatus(error) === 503 ? (error as Error).message : 'Bitte gib deinen Benutzernamen ein.' }, authFailureStatus(error)); }
     }
     if (request.method !== 'POST' && request.method !== 'DELETE') return respond({}, 405);
@@ -54,6 +58,7 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
     if (request.method === 'DELETE') {
         headers.set('set-cookie', `slop_auth=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
         headers.append('set-cookie', `slop_admin=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0${secure}`);
+        for (const name of [HF_COOKIE, HF_STATE_COOKIE]) headers.append('set-cookie', `${name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
         return respond({});
     }
     try { signingKey(config); } catch { return respond({ error: 'Die Browsersitzung ist noch nicht eingerichtet.' }, 503); }

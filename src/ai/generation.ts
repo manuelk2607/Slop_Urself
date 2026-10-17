@@ -201,7 +201,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
         const response = await fetch('https://huggingface.co/api/whoami-v2', {
             headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(15_000)
         });
-        if (response.status === 401 || response.status === 403) throw new Error('Der Hugging-Face-Token ist ungültig. Bitte HF_TOKEN auf dem Server aktualisieren.');
+        if (response.status === 401 || response.status === 403) throw new Error('Der Hugging-Face-Zugang ist ungültig oder abgelaufen. Bitte die persönliche HF-Verbindung oder den Serverzugang erneuern.');
         if (!response.ok) throw new Error('Hugging-Face-Anmeldung ist momentan nicht erreichbar.');
     }
     const errors: string[] = [];

@@ -5,7 +5,11 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
 import { accountsResponse } from './accounts';
-import { QuotaBudget, QuotaConfig, playerCount } from '../ai/quota';
+import { QuotaConfig, playerCount } from '../ai/quota';
+import { PlayerQuotaBudget } from '../ai/player-quota';
+import { HfConnections, type HfConfig } from '../auth/huggingface';
+import { nodeHfStorage } from '../auth/node-hf-storage';
+import { huggingFaceResponse } from './huggingface';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
 import { gameOptions } from '../game/options';
@@ -16,13 +20,13 @@ import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchived
 import { archiveStatus } from './archive';
 import { historyResponse, historyListing, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
 import { Server, Socket } from 'socket.io';
-import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
+import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
 import { takeRateLimit, rateKey, httpRateRule, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
 import { logAiEvent } from '../ai/telemetry';
 import {
     Room, Player, activeCreator, playerForConnection, roomSnapshot, finishVoting, finalStandings,
     removePlayer, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, roundLimit, maxRounds,
-    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, extendRound, recordVote, judgeGuesses
+    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses
 } from '../game/rules';
 import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
 import { roundInput } from '../game/persistence';
@@ -45,11 +49,12 @@ const pendingStarts = new Set<string>();
 const httpBuckets: RateBuckets = {};
 const messageBuckets: RateBuckets = {};
 const budgetData = new Map<string, unknown>();
-const config: AuthConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
+const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
+const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
 const imageData = new Map<string, unknown>();
 const imageStorage: ImageStorage = { get: async <T>(key: string) => imageData.get(key) as T | undefined,
     put: async (key, value) => { imageData.set(key, value); }, delete: async key => { imageData.delete(key); } };
-const budget = new QuotaBudget({ get: async <T>(key: string) => structuredClone(budgetData.get(key)) as T | undefined, put: async (key, value) => { budgetData.set(key, structuredClone(value)); } }, config);
+const budget = new PlayerQuotaBudget({ get: async <T>(key: string) => structuredClone(budgetData.get(key)) as T | undefined, put: async (key, value) => { budgetData.set(key, structuredClone(value)); } }, config, hf);
 let budgetWork: Promise<unknown> = Promise.resolve();
 let archiveWork: Promise<unknown> = Promise.resolve();
 let videoCleanupTimer: NodeJS.Timeout | undefined;
@@ -71,6 +76,8 @@ function scheduleVideoCleanup(time: number) {
 }
 if (isDatabaseEnabled()) scheduleVideoCleanup(Date.now() + 1000);
 function withBudget<T>(action: () => Promise<T>): Promise<T> { const result = budgetWork.then(action); budgetWork = result.catch(() => {}); return result; }
+const hfCleanupClock = setInterval(() => { void withBudget(() => hf.cleanup()).catch(() => {}); }, 60_000);
+hfCleanupClock.unref();
 function archive(url: string) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();
@@ -98,6 +105,13 @@ async function webResponse(response: Response, res: express.Response) {
     const cookies = response.headers.getSetCookie(); if (cookies.length) res.setHeader('set-cookie', cookies);
     res.send(Buffer.from(await response.arrayBuffer()));
 }
+app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, res) => webResponse(await huggingFaceResponse(webRequest(req), config, (endpoint, data) => withBudget(async () => {
+    if (endpoint === '/hf/start') return hf.start(data.account as any, data.origin as string);
+    if (endpoint === '/hf/finish') return hf.finish(data.state, data.code, data.nonce, data.origin as string);
+    if (endpoint === '/hf/status') return hf.status(data.connection as string | undefined, data.accountId as string);
+    if (endpoint === '/hf/disconnect') { await hf.disconnect(data.connection as string | undefined, data.accountId as string); return { ok: true }; }
+    throw new Error('Unbekannte HF-Anfrage.');
+})), res));
 app.use('/api/auth', (_req, res) => res.sendStatus(404));
 app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await sessionResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
@@ -126,10 +140,11 @@ app.use('/assets', express.static(path.join(PUBLIC_ROOT, 'assets')));
 app.get('/api/config', async (req, res) => {
     let players: number;
     try { players = playerCount(req.query.players ?? 1); } catch { res.status(400).json({ error: 'Ungültige Spielerzahl.' }); return; }
-    const signedIn = authDisabled(config) || Boolean(await requestAccount(webRequest(req), config).catch(() => undefined));
+    const account = await requestAccount(webRequest(req), config).catch(() => undefined);
+    const signedIn = authDisabled(config) || Boolean(account);
     res.setHeader('Cache-Control', 'no-store');
     res.json({
-        ...(signedIn ? await withBudget(() => budget.displayCapacity(players)) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
+        ...(signedIn ? await withBudget(() => budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined)) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
         aiProvider: AI_PROVIDER === 'mock' ? 'mock' : AI_PROVIDER_CHAIN,
         mockAi: AI_PROVIDER === 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
     });
@@ -195,10 +210,18 @@ function runGeneration(room: Room, generationId: string, image?: string) {
             if (rooms.get(room.code) === room && room.generationId === generationId) room.generationJob = job;
         }
     };
-    const generationConfig = qualityConfig(config, gameOptions(room.options).quality);
-    const generation = image ? generateAiVideo(image, room.currentPrompt, generationConfig, progress,
-        seconds => withBudget(() => budget.allowAttempt(room.code, seconds, generationId)), lifecycle)
-        : resumeAiVideo(room.generationJob!, config, progress, lifecycle);
+    const generation = withBudget(() => budget.tokenForJob(room.code, generationId)).catch(error => {
+        if (room.generationJob) {
+            if (Date.now() - room.generationJob.submittedAt >= AI_JOB_MAX_AGE_MS) throw new AiExpiredError();
+            throw new AiPendingError(room.generationJob);
+        }
+        throw error;
+    }).then(token => {
+        const generationConfig = qualityConfig({ ...config, HF_TOKEN: token }, gameOptions(room.options).quality);
+        return image ? generateAiVideo(image, room.currentPrompt, generationConfig, progress,
+            seconds => withBudget(() => budget.allowAttempt(room.code, seconds, generationId)), lifecycle)
+            : resumeAiVideo(room.generationJob!, generationConfig, progress, lifecycle);
+    });
     void generation.then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId) return videoUrl;
         progress('Video wird gespeichert...');
@@ -235,7 +258,7 @@ async function refreshLobbyQuota(room: Room) {
     const players = room.players.length;
     const quality = gameOptions(room.options).quality;
     const mode = gameOptions(room.options).mode;
-    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive() || [], players) : await withBudget(() => budget.capacity(players, quality));
+    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive() || [], players) : await withBudget(() => budget.capacity(players, quality, room.players));
     if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length || quality !== gameOptions(room.options).quality || mode !== gameOptions(room.options).mode) return;
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
@@ -278,10 +301,11 @@ function completeVoting(room: Room) {
 }
 
 function endPhase(room: Room) {
+    const creatorId = activeCreator(room)?.id;
     const result = closePhase(room);
     if (result === 'voted') completeVoting(room);
     else if (result) {
-        if (result === 'skipped' && !isArchiveGame(room)) void withBudget(() => budget.drop(room.code, 1));
+        if (result === 'skipped' && !isArchiveGame(room)) void withBudget(() => budget.drop(room.code, 1, creatorId));
         if (room.state === 'GAME_OVER') {
             void withBudget(() => budget.release(room.code));
             if (!isArchiveGame(room)) persist(room, () => markRoomFinished(room.code, finalStandings(room)));
@@ -302,7 +326,7 @@ function leave(room: Room, player: Player) {
     const wasOver = room.state === 'GAME_OVER';
     const skipped = removePlayer(room, player.id);
     playArchiveVideo(room);
-    if (skipped) void withBudget(() => budget.drop(room.code, skipped));
+    if (skipped) void withBudget(() => budget.drop(room.code, skipped, player.id));
     if (!room.players.length) { rooms.delete(room.code); void deleteSharedImage(imageStorage, room.sharedImage); void withBudget(() => budget.release(room.code)); return; }
     io.to(room.code).emit('roomNotice', `${player.name} hat das Spiel verlassen.`);
     if (!wasOver && room.state === 'GAME_OVER') {
@@ -328,6 +352,7 @@ function member(socket: Socket, payload: Record<string, unknown>) {
 function enter(socket: Socket, room: Room, player: Player, event: string) {
     socket.data.roomId = room.code;
     player.connectionId = socket.id;
+    player.hfConnectionId = socket.data.account?.hfConnectionId;
     void socket.join(room.code);
     socket.emit(event, { roomId: room.code, sessionId: player.sessionId, playerId: player.id, gameState: room.state });
     broadcast(room);
@@ -352,7 +377,7 @@ io.on('connection', (socket: Socket) => {
     }
     socket.on('refreshAuth', (payload: { token: unknown }) => {
         if (takeRateLimit(messageBuckets, socket.data.account?.id || socket.id, MESSAGE_RATE)) { socket.emit('errorMsg', RATE_MESSAGE); return; }
-        void verifyAccountToken(payload?.token, config).then(account => { if (account.id === socket.data.account?.id) socket.data.account = account; }).catch(() => socket.emit('authExpired'));
+        void verifyAccountToken(payload?.token, config).then(account => { if (account.id === socket.data.account?.id) socket.data.account = { ...account, hfConnectionId: socket.data.account?.hfConnectionId }; }).catch(() => socket.emit('authExpired'));
     });
 
     on('createRoom', async payload => {
@@ -361,7 +386,7 @@ io.on('connection', (socket: Socket) => {
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
         socket.data.creatingRoom = true;
         try {
-            const capacity = await withBudget(() => budget.capacity());
+            const capacity = await withBudget(() => budget.capacity(1, 'auto', socket.data.account?.hfConnectionId ? [{ id: socket.id, accountId: socket.data.account.id, hfConnectionId: socket.data.account.hfConnectionId }] : undefined));
             let code: string;
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
             if (!socket.connected) return;
@@ -466,7 +491,7 @@ io.on('connection', (socket: Socket) => {
             await refreshLobbyQuota(room);
             if (!room.maxRounds || roster !== room.players.map(p => p.id).join(',')) throw new Error('Das Kontingent oder die Spielerzahl hat sich geändert. Bitte prüfe die Rundenauswahl.');
             if (isArchiveGame(room)) prepareArchive(room, await getDatabase()?.playableArchive() || []);
-            else await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length, gameOptions(room.options).quality));
+            else await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length, gameOptions(room.options).quality, room.players));
             if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== 'LOBBY' || roster !== room.players.map(p => p.id).join(',') || room.players.some(p => !p.connected)) { await withBudget(() => budget.release(room.code)); return; }
             startRounds(room);
             playArchiveVideo(room);
@@ -490,7 +515,7 @@ io.on('connection', (socket: Socket) => {
         room.generationId = generationId;
         // Lock the turn before the quota request yields to another image submission.
         room.state = 'GENERATING';
-        try { await withBudget(() => budget.begin(room.code, remainingVideos(room), generationId)); } catch (error) { if (room.generationId === generationId) room.state = 'IDLE'; throw error; }
+        try { await withBudget(() => budget.begin(room.code, remainingVideos(room), generationId, player.id, remainingVideosFor(room, player.id), player)); } catch (error) { if (room.generationId === generationId) room.state = 'IDLE'; throw error; }
         if (rooms.get(room.code) !== room || room.generationId !== generationId || activeCreator(room)?.id !== player.id) { await withBudget(() => budget.consume(room.code, generationId)); return; }
         room.state = 'GENERATING'; room.generationId = generationId;
         room.currentPrompt = prompt; room.currentVideoUrl = ''; room.currentVotes = {};
@@ -544,7 +569,7 @@ io.on('connection', (socket: Socket) => {
             if (gameOptions(room.options).sharedImage) await readSharedImage(imageStorage, room.sharedImage);
             await refreshLobbyQuota(room);
             if (room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== room.players.map(p => p.id).join(',')) throw new Error('Die Spielerzahl hat sich geändert. Bitte versuche es erneut.');
-            await withBudget(() => budget.extend(room.code, room.players.length, gameOptions(room.options).quality));
+            await withBudget(() => budget.extend(room.code, room.players.length, gameOptions(room.options).quality, room.players));
             if (rooms.get(room.code) !== room || room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== room.players.map(p => p.id).join(',') || room.players.some(p => !p.connected)) {
                 await withBudget(() => budget.drop(room.code, roster.split(',').length));
                 throw new Error('Die Spielerzahl oder Verbindung hat sich geändert. Bitte versuche es erneut.');

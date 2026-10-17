@@ -415,3 +415,9 @@ Profileinstieg, Mock-KI und ohne Datenbank. `TEST_PROFILE_DB=true` aktiviert
 einen gezielten Datenbank-Test gegen einen solchen Server mit Neon: Dabei
 werden keine Räume angelegt, nur das exakt neu erstellte Testprofil wird
 danach entfernt. DATABASE_URL_UNPOOLED wird für diese Bereinigung benötigt.
+
+## Persönliche Hugging-Face-Konten
+
+Die optionale Verbindung unter **KI-Konto** nutzt pro Ersteller dessen
+verifiziertes HF-Kontingent. Prüfstatus vor der Veröffentlichung, Einrichtung,
+kurze Anleitung für Freunde und Grenzen stehen in [docs/HUGGINGFACE.md](docs/HUGGINGFACE.md).
