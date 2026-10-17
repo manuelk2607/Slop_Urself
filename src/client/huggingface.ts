@@ -44,8 +44,13 @@ export function huggingFaceConnection() {
             if (!response.ok || !result.url) throw new Error(result.error || 'HF-Anmeldung konnte nicht gestartet werden.');
             const target = new URL(result.url);
             if (target.origin !== 'https://huggingface.co' || target.pathname !== '/oauth/authorize') throw new Error('Ungültige HF-Anmeldeadresse.');
-            if (authorizationTab && !authorizationTab.closed) authorizationTab.location.replace(target.href);
-            else location.assign(target.href);
+            if (authorizationTab && !authorizationTab.closed) {
+                authorizationTab.location.replace(target.href);
+                // HF can transiently return 404 for the first fresh authorization navigation.
+                window.setTimeout(() => {
+                    try { if (!authorizationTab.closed) authorizationTab.location.href = target.href; } catch { /* Cross-origin navigation can disappear when the tab was closed. */ }
+                }, 1_000);
+            } else location.assign(target.href);
         } catch (reason) {
             authorizationTab?.close();
             error.textContent = (reason as Error).message; pending = false; connect.disabled = locked;
