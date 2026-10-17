@@ -89,7 +89,7 @@ export class HfConnections {
         const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
         const url = new URL('https://huggingface.co/oauth/authorize');
         url.search = new URLSearchParams({ client_id: client, redirect_uri: `${origin}/api/hf/callback`, response_type: 'code',
-            scope: 'openid profile read-billing', state, code_challenge: challenge, code_challenge_method: 'S256' }).toString();
+            scope: 'openid profile read-billing', state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'consent' }).toString();
         return { url: url.href, nonce };
     }
     async finish(state: unknown, code: unknown, nonce: unknown, requestOrigin: string) {

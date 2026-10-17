@@ -48,6 +48,7 @@ test('HF OAuth uses PKCE, minimal scopes and one-time browser-bound state; secre
         const start = await f.connections.start(account, 'https://game.test'), url = new URL(start.url);
         assert.equal(url.origin, 'https://huggingface.co');
         assert.equal(url.searchParams.get('scope'), 'openid profile read-billing');
+        assert.equal(url.searchParams.get('prompt'), 'consent');
         assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
         assert.match(url.searchParams.get('code_challenge')!, /^[A-Za-z0-9_-]{43}$/);
         await assert.rejects(f.connections.finish(url.searchParams.get('state'), 'code', 'wrong-browser', 'https://game.test'));
