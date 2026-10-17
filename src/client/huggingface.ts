@@ -31,6 +31,12 @@ export function huggingFaceConnection() {
     close.addEventListener('click', () => dialog.close());
     connect.addEventListener('click', async () => {
         if (locked || pending) return;
+        const authorizationTab = window.open('', '_blank', 'popup');
+        if (authorizationTab) {
+            authorizationTab.opener = null;
+            authorizationTab.document.title = 'Hugging Face wird geöffnet';
+            authorizationTab.document.body.textContent = 'Hugging Face wird geöffnet …';
+        }
         pending = true; connect.disabled = disconnect.disabled = true; error.textContent = '';
         try {
             const response = await fetch('/api/hf/connect', { method: 'POST', signal: AbortSignal.timeout(15_000) });
@@ -38,8 +44,12 @@ export function huggingFaceConnection() {
             if (!response.ok || !result.url) throw new Error(result.error || 'HF-Anmeldung konnte nicht gestartet werden.');
             const target = new URL(result.url);
             if (target.origin !== 'https://huggingface.co' || target.pathname !== '/oauth/authorize') throw new Error('Ungültige HF-Anmeldeadresse.');
-            location.assign(target.href);
-        } catch (reason) { error.textContent = (reason as Error).message; pending = false; connect.disabled = locked; }
+            if (authorizationTab && !authorizationTab.closed) authorizationTab.location.replace(target.href);
+            else location.assign(target.href);
+        } catch (reason) {
+            authorizationTab?.close();
+            error.textContent = (reason as Error).message; pending = false; connect.disabled = locked;
+        }
     });
     async function remove() {
         const response = await fetch('/api/hf', { method: 'DELETE', signal: AbortSignal.timeout(15_000) });

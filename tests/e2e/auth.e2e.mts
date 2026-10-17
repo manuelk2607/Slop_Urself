@@ -83,6 +83,16 @@ try {
         return Math.abs(box.x + box.width / 2 - innerWidth / 2) < 2 && Math.abs(box.y + box.height / 2 - innerHeight / 2) < 2;
     }), true, 'The HF dialog must remain centered on desktop.');
     await page.screenshot({ path: artifactPath('slopurself-hf-desktop.png'), fullPage: true });
+    await context.route('https://huggingface.co/oauth/authorize**', route => route.fulfill({ contentType: 'text/html', body: '<title>HF OAuth test</title>' }));
+    await page.route('**/api/hf/connect', route => route.fulfill({ json: { url: 'https://huggingface.co/oauth/authorize?client_id=test&scope=openid%20profile&prompt=consent' } }));
+    const popupPromise = page.waitForEvent('popup');
+    await page.locator('#hfConnectButton').click();
+    const oauthPopup = await popupPromise;
+    await oauthPopup.waitForURL(/huggingface\.co\/oauth\/authorize/);
+    assert.equal(new URL(oauthPopup.url()).searchParams.get('prompt'), 'consent');
+    await oauthPopup.close();
+    await page.unroute('**/api/hf/connect');
+    await context.unroute('https://huggingface.co/oauth/authorize**');
     await page.locator('#hfCloseButton').click();
     await page.unroute('**/api/hf');
     await page.setViewportSize({ width: 375, height: 812 });
