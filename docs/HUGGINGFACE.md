@@ -8,7 +8,11 @@ automatisches Neuladen behob das nicht zuverlässig und wurde entfernt.
 Der Gerätecodefluss wurde mit der registrierten App, den Berechtigungen
 `openid profile read-billing` und der echten ZeroGPU-Abfrage erfolgreich
 geprüft (300 von 300 GPU-Sekunden). Die Anwendung prüft Profil und Kontingent,
-bevor sie die Verbindung speichert. Ein persönlicher Live-Videoauftrag und
+bevor sie die Verbindung speichert. Seit 18. Oktober 2026 ist auch der
+vollständige produktive Ablauf auf Cloudflare einschließlich Freigabe,
+automatischer Übernahme und Wiederabruf nach Reload bestätigt. GitHub CI
+sowie lokale Chromium-/WebKit-Tests sind erfolgreich.
+Ein persönlicher Live-Videoauftrag und
 dessen tatsächliche Kontingentabbuchung sind weiterhin separat zu prüfen.
 
 ## Für Mitspieler

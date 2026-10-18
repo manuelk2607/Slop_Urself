@@ -27,6 +27,16 @@
   simulierten Videos und übereinstimmender Endwertung.
 - Kein echter GPU-Auftrag für diese Anmeldung gestartet. Die persönliche
   Zuordnung eines tatsächlich generierten Videos bleibt separat zu prüfen.
+- Produktiven Live-Test am 18. Oktober 2026 vollständig abgeschlossen:
+  bestehendes Testprofil `LiveTestA1015`, echte HF-Freigabe für Manuel2607,
+  automatische Übernahme im veröffentlichten Spiel und erneute Anzeige nach
+  Reload: 300 / 300 GPU-Sekunden. Die Bestätigung im nativen Safari wurde
+  begonnen; nach Unterbrechung war die Fernsteuerung dort nicht stabil
+  verfügbar. Der vollständige produktive Nachweis erfolgte deshalb im
+  In-App-Browser; Safari/WebKit ist zusätzlich automatisiert getestet.
+  Cloudflare-Version `376247ac-db11-4a0e-bbc2-21afa101a984`, Code-Commit
+  `488799e`; zugehöriger GitHub-Actions-Lauf `39071057511` erfolgreich.
+  Keine Spiel-, Video- oder Statistikdaten für diesen Anmeldetest verändert.
 
 ## Persönliches HF-Kontingent vom 17. Oktober 2026
 
