@@ -16,7 +16,8 @@ export class HfOAuthError extends Error {
     constructor(readonly code: 'state_invalid' | 'exchange_failed' | 'token_invalid' | 'identity_failed' | 'identity_invalid' | 'validation_failed' | 'quota_forbidden' | 'quota_unavailable', message: string) { super(message); }
 }
 interface Pending { account: Account; verifier: string; nonce: string; origin: string; expiresAt: number }
-interface PendingDevice { account: Account; origin: string; client: string; deviceCode: string; userCode: string; verificationUrl: string; interval: number; nextPollAt: number; expiresAt: number; completed?: { connection: string; expiresAt: number } }
+interface ReceivedGrant { access_token: string; expires_in: number; token_type: string; receivedAt: number; connection: string }
+interface PendingDevice { account: Account; origin: string; client: string; deviceCode: string; userCode: string; verificationUrl: string; interval: number; nextPollAt: number; expiresAt: number; grant?: ReceivedGrant; completed?: { connection: string; expiresAt: number } }
 interface Sealed { iv: string; data: string; expiresAt: number }
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const decode = (value: string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0));
@@ -45,7 +46,15 @@ export function hfClientMetadata(origin: string) {
 
 // Only this server-side vault handles reusable access tokens; browser cookies hold random capabilities.
 export class HfConnections {
+    private operations = new Map<string, Promise<unknown>>();
     constructor(private storage: HfStorage, private config: HfConfig) {}
+    private serial<T>(key: string, action: () => Promise<T>): Promise<T> {
+        const result = (this.operations.get(key) || Promise.resolve()).then(action);
+        const settled = result.catch(() => {});
+        this.operations.set(key, settled);
+        void settled.then(() => { if (this.operations.get(key) === settled) this.operations.delete(key); });
+        return result;
+    }
     private async key() {
         const secret = this.config.HF_OAUTH_ENCRYPTION_KEY || this.config.AUTH_COOKIE_SECRET;
         if (!secret || secret.length < 32) throw new Error('HF-Verbindung ist noch nicht eingerichtet.');
@@ -53,18 +62,21 @@ export class HfConnections {
         return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('slopurself-hf-v1'), info: new TextEncoder().encode('oauth-vault') }, material,
             { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     }
-    private async save(id: string, value: Pending | PendingDevice | HfCredential) {
-        await this.cleanup();
-        const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
-        if (!expiries[id] && Object.keys(expiries).length >= 512) throw new Error('Zu viele HF-Verbindungen. Bitte später erneut versuchen.');
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const bytes = new TextEncoder().encode(JSON.stringify(value));
-        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(id) }, await this.key(), bytes);
-        await this.storage.put(id, { iv: encode(iv), data: encode(new Uint8Array(data)), expiresAt: value.expiresAt });
-        expiries[id] = value.expiresAt;
-        await this.storage.put('hf-expiries', expiries);
+    private save(id: string, value: Pending | PendingDevice | HfCredential) {
+        return this.serial('vault', async () => {
+            await this.prune();
+            const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
+            if (!expiries[id] && Object.keys(expiries).length >= 512) throw new Error('Zu viele HF-Verbindungen. Bitte später erneut versuchen.');
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const bytes = new TextEncoder().encode(JSON.stringify(value));
+            const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(id) }, await this.key(), bytes);
+            await this.storage.put(id, { iv: encode(iv), data: encode(new Uint8Array(data)), expiresAt: value.expiresAt });
+            expiries[id] = value.expiresAt;
+            await this.storage.put('hf-expiries', expiries);
+        });
     }
-    async cleanup() {
+    cleanup() { return this.serial('vault', () => this.prune()); }
+    private async prune() {
         const expiries = await this.storage.get<Record<string, number>>('hf-expiries');
         if (!expiries) return;
         let changed = false;
@@ -72,10 +84,18 @@ export class HfConnections {
         if (changed) await this.storage.put('hf-expiries', expiries);
         return Object.keys(expiries).length ? Math.min(...Object.values(expiries)) : undefined;
     }
+    private remove(id: string) {
+        return this.serial('vault', async () => {
+            await this.storage.delete(id);
+            const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
+            delete expiries[id];
+            await this.storage.put('hf-expiries', expiries);
+        });
+    }
     private async load<T extends { expiresAt: number }>(id: string): Promise<T | undefined> {
         const sealed = await this.storage.get<Sealed>(id);
         if (!sealed) return;
-        if (sealed.expiresAt <= Date.now()) { await this.storage.delete(id); return; }
+        if (sealed.expiresAt <= Date.now()) { await this.remove(id); return; }
         try {
             const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(sealed.iv), additionalData: new TextEncoder().encode(id) }, await this.key(), decode(sealed.data));
             const value = JSON.parse(new TextDecoder().decode(bytes)) as T;
@@ -95,19 +115,26 @@ export class HfConnections {
     }
     async finish(state: unknown, code: unknown, nonce: unknown, requestOrigin: string) {
         if (!secretId(state) || !secretId(nonce) || typeof code !== 'string' || !code || code.length > 2048) throw new Error('Ungültige HF-Anmeldeantwort.');
-        const id = `hf-pending:${state}`, pending = await this.load<Pending>(id);
-        if (!pending || pending.nonce !== nonce || pending.origin !== hfOrigin(requestOrigin, this.config)) throw new HfOAuthError('state_invalid', 'HF-Anmeldung ist abgelaufen oder gehört zu einem anderen Browser.');
-        await this.storage.delete(id);
-        if (pending.account.expiresAt <= Date.now() || (this.config.validateAccount && !await this.config.validateAccount(pending.account))) throw new Error('Bitte melde dich zuerst erneut im Spiel an.');
-        const response = await fetch('https://huggingface.co/oauth/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ grant_type: 'authorization_code', client_id: hfClient(pending.origin, this.config), code,
-                code_verifier: pending.verifier, redirect_uri: `${pending.origin}/api/hf/callback` }), signal: AbortSignal.timeout(15_000) });
-        if (!response.ok) throw new HfOAuthError('exchange_failed', 'Hugging Face konnte die Anmeldung nicht abschließen. Bitte erneut verbinden.');
-        return this.acceptToken(await response.json(), pending.account);
+        return this.serial(`callback:${state}`, async () => {
+            const id = `hf-pending:${state}`, pending = await this.load<Pending>(id);
+            if (!pending || pending.nonce !== nonce || pending.origin !== hfOrigin(requestOrigin, this.config)) throw new HfOAuthError('state_invalid', 'HF-Anmeldung ist abgelaufen oder gehört zu einem anderen Browser.');
+            await this.remove(id);
+            if (pending.account.expiresAt <= Date.now() || (this.config.validateAccount && !await this.config.validateAccount(pending.account))) throw new Error('Bitte melde dich zuerst erneut im Spiel an.');
+            const response = await fetch('https://huggingface.co/oauth/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ grant_type: 'authorization_code', client_id: hfClient(pending.origin, this.config), code,
+                    code_verifier: pending.verifier, redirect_uri: `${pending.origin}/api/hf/callback` }), signal: AbortSignal.timeout(15_000) });
+            if (!response.ok) throw new HfOAuthError('exchange_failed', 'Hugging Face konnte die Anmeldung nicht abschließen. Bitte erneut verbinden.');
+            return this.acceptToken(await response.json(), pending.account);
+        });
     }
-    private async acceptToken(result: { access_token?: unknown; expires_in?: unknown; token_type?: unknown }, account: Account) {
+    private validToken(result: { access_token?: unknown; expires_in?: unknown; token_type?: unknown }): asserts result is { access_token: string; expires_in: number; token_type: string } {
         if (typeof result.access_token !== 'string' || result.access_token.length > 8192 || !result.access_token
             || !Number.isFinite(result.expires_in) || Number(result.expires_in) <= 0 || String(result.token_type).toLowerCase() !== 'bearer') throw new HfOAuthError('token_invalid', 'Ungültige HF-Zugangsdaten erhalten.');
+    }
+    private async acceptToken(result: { access_token?: unknown; expires_in?: unknown; token_type?: unknown }, account: Account, receivedAt = Date.now(), connection = random()) {
+        this.validToken(result);
+        const expiresAt = receivedAt + Math.min(result.expires_in, 8 * 60 * 60) * 1000;
+        if (expiresAt <= Date.now()) throw new HfOAuthError('token_invalid', 'Der erhaltene HF-Zugang ist abgelaufen. Bitte erneut verbinden.');
         const identity = await fetch('https://huggingface.co/oauth/userinfo', { headers: { Authorization: `Bearer ${result.access_token}` }, signal: AbortSignal.timeout(10_000) });
         if (!identity.ok) throw new HfOAuthError('identity_failed', 'Dein HF-Konto konnte nicht verifiziert werden.');
         const user = await identity.json() as { sub?: unknown; preferred_username?: unknown };
@@ -120,8 +147,6 @@ export class HfConnections {
         // A successful sign-in alone does not prove this token can read ZeroGPU quota.
         try { await fetchGpuQuota({ HF_TOKEN: result.access_token }); }
         catch (error) { throw new HfOAuthError(error instanceof GpuQuotaError && error.status === 403 ? 'quota_forbidden' : 'quota_unavailable', 'HF-Anmeldung erfolgreich, aber das ZeroGPU-Kontingent konnte nicht gelesen werden. Die Verbindung wurde nicht gespeichert.'); }
-        const connection = random();
-        const expiresAt = Date.now() + Math.min(Number(result.expires_in), 8 * 60 * 60) * 1000;
         await this.save(`hf-connection:${connection}`, { token: result.access_token, subject: who.id, username: user.preferred_username, expiresAt, accountId: account.id });
         return { connection, expiresAt };
     }
@@ -159,9 +184,16 @@ export class HfConnections {
         return pending ? this.deviceView(pending) : { pending: false };
     }
     async cancelDevice(nonce: string | undefined, accountId: string, origin: string) {
-        if (await this.device(nonce, accountId, origin)) await this.storage.delete(`hf-device:${nonce}`);
+        if (!secretId(nonce)) return;
+        await this.serial(`device:${nonce}`, async () => {
+            if (await this.device(nonce, accountId, origin)) await this.remove(`hf-device:${nonce}`);
+        });
     }
     async pollDevice(nonce: string | undefined, account: Account, origin: string) {
+        if (!secretId(nonce)) return { error: 'Der HF-Code ist abgelaufen. Bitte erneut verbinden.' };
+        return this.serial(`device:${nonce}`, () => this.poll(nonce, account, origin));
+    }
+    private async poll(nonce: string, account: Account, origin: string) {
         const pending = await this.device(nonce, account.id, origin);
         if (!pending) return { error: 'Der HF-Code ist abgelaufen. Bitte erneut verbinden.' };
         if (pending.account.expiresAt <= Date.now() || (this.config.validateAccount && !await this.config.validateAccount(pending.account))) throw new Error('Bitte melde dich zuerst erneut im Spiel an.');
@@ -169,23 +201,38 @@ export class HfConnections {
         if (pending.nextPollAt > Date.now()) return { pending: true, retryAfter: this.deviceView(pending).retryAfter };
         pending.nextPollAt = Date.now() + pending.interval * 1000;
         await this.save(`hf-device:${nonce}`, pending);
-        const response = await fetch('https://huggingface.co/oauth/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ client_id: pending.client, grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: pending.deviceCode }), signal: AbortSignal.timeout(15_000) });
-        const result = await response.json() as { error?: unknown; access_token?: unknown; expires_in?: unknown; token_type?: unknown };
-        if (!response.ok) {
-            if (result.error === 'authorization_pending') return { pending: true, retryAfter: pending.interval };
-            if (result.error === 'slow_down') {
-                pending.interval += 5; pending.nextPollAt = Date.now() + pending.interval * 1000;
-                await this.save(`hf-device:${nonce}`, pending);
-                return { pending: true, retryAfter: pending.interval };
+        if (!pending.grant) {
+            const response = await fetch('https://huggingface.co/oauth/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ client_id: pending.client, grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: pending.deviceCode }), signal: AbortSignal.timeout(15_000) });
+            const result = await response.json() as { error?: unknown; access_token?: unknown; expires_in?: unknown; token_type?: unknown };
+            if (!response.ok) {
+                if (result.error === 'authorization_pending') return { pending: true, retryAfter: pending.interval };
+                if (result.error === 'slow_down') {
+                    pending.interval += 5; pending.nextPollAt = Date.now() + pending.interval * 1000;
+                    await this.save(`hf-device:${nonce}`, pending);
+                    return { pending: true, retryAfter: pending.interval };
+                }
+                if (result.error === 'access_denied' || result.error === 'expired_token' || result.error === 'invalid_grant') {
+                    await this.remove(`hf-device:${nonce}`);
+                    return { error: result.error === 'access_denied' ? 'HF-Verbindung wurde abgelehnt.' : 'Der HF-Code ist abgelaufen. Bitte erneut verbinden.' };
+                }
+                throw new Error('HF-Verbindung konnte gerade nicht geprüft werden. Bitte erneut versuchen.');
             }
-            if (result.error === 'access_denied' || result.error === 'expired_token') {
-                await this.storage.delete(`hf-device:${nonce}`);
-                return { error: result.error === 'access_denied' ? 'HF-Verbindung wurde abgelehnt.' : 'Der HF-Code ist abgelaufen. Bitte erneut verbinden.' };
-            }
-            throw new Error('HF-Verbindung konnte gerade nicht geprüft werden. Bitte erneut versuchen.');
+            this.validToken(result);
+            // Persist the one-time exchange before network-dependent identity/quota checks.
+            pending.grant = { access_token: result.access_token, expires_in: result.expires_in, token_type: result.token_type, receivedAt: Date.now(), connection: random() };
+            await this.save(`hf-device:${nonce}`, pending);
         }
-        pending.completed = await this.acceptToken(result, pending.account);
+        try {
+            pending.completed = await this.acceptToken(pending.grant, pending.account, pending.grant.receivedAt, pending.grant.connection);
+        } catch (error) {
+            if (error instanceof HfOAuthError && ['token_invalid', 'identity_invalid', 'quota_forbidden'].includes(error.code)) {
+                await this.remove(`hf-device:${nonce}`);
+                return { error: error.message };
+            }
+            throw error;
+        }
+        pending.grant = undefined;
         await this.save(`hf-device:${nonce}`, pending);
         return { connected: true, ...pending.completed };
     }
@@ -206,7 +253,7 @@ export class HfConnections {
     async disconnect(connection: string | undefined, accountId: string) {
         if (!connection) return;
         try { await this.credential(connection, accountId); } catch { return; }
-        await this.storage.delete(`hf-connection:${connection}`);
+        await this.remove(`hf-connection:${connection}`);
     }
     async pinJob(connection: string, accountId: string, jobId: string) {
         await this.save(`hf-job:${jobId}`, await this.credential(connection, accountId));
@@ -216,5 +263,5 @@ export class HfConnections {
         if (!credential) throw new Error('Der HF-Zugang des KI-Auftrags ist abgelaufen.');
         return credential;
     }
-    async forgetJob(jobId: string) { await this.storage.delete(`hf-job:${jobId}`); }
+    async forgetJob(jobId: string) { await this.remove(`hf-job:${jobId}`); }
 }

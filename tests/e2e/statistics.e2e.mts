@@ -10,6 +10,9 @@ const errors: string[] = [], deletes: string[] = [], confirmations: string[] = [
 let timeOffset = 0;
 const now = () => Date.now() + timeOffset;
 let accept = false;
+let holdSecondDelete = false, releaseDelete: (() => void) | undefined;
+let deleteHeld!: () => void;
+const secondDeleteHeld = new Promise<void>(resolve => { deleteHeld = resolve; });
 page.on('pageerror', error => errors.push(error.message));
 page.on('dialog', dialog => {
     if (dialog.type() !== 'confirm') errors.push(dialog.message());
@@ -35,6 +38,7 @@ try {
                 video.deletedUntil = 0; await route.fulfill({ json: { ok: true } }); return;
             }
             deletes.push(url.pathname);
+            if (holdSecondDelete && video.id === '102') await new Promise<void>(resolve => { releaseDelete = resolve; deleteHeld(); });
             if (video.roomCode === 'LIVE' && !video.roomDeleted) { await route.fulfill({ status: 409, json: { error: 'Der Raum wird noch gespielt. Beende die Partie zuerst.' } }); return; }
             video.deletedUntil = now() + 30_000;
             await route.fulfill({ json: { ok: true, undoUntil: video.deletedUntil } }); return;
@@ -102,8 +106,15 @@ try {
     await page.screenshot({ path: artifactPath('slopurself-statistics-edit-mobile.png'), fullPage: true });
     await page.setViewportSize({ width: 1280, height: 900 });
     accept = true;
+    holdSecondDelete = true;
     const dialogsBefore = confirmations.length;
     await page.locator('#deleteSelectedVideos').click();
+    await secondDeleteHeld;
+    await page.waitForFunction(() => document.getElementById('videoUndoLabel')!.textContent!.includes('1 Video gelöscht'));
+    assert.equal(await page.locator('#undoVideoDeletion').isEnabled(), true, 'Undo must be offered before a slow batch has finished.');
+    assert.equal(await page.locator('#deleteSelectedVideos').isDisabled(), true);
+    await page.waitForFunction(() => document.getElementById('videoUndoNotice')!.hidden === false);
+    assert.ok(releaseDelete); holdSecondDelete = false; releaseDelete();
     await page.waitForFunction(() => document.querySelectorAll('#videoStatsList .video-stat-item').length === 1 && document.getElementById('statsActionNotice')!.textContent!.includes('2 von 3'));
     assert.equal(confirmations.length, dialogsBefore + 1, 'A batch must have one confirmation, not one per file.');
     assert.equal(deletes.length, 3);
@@ -205,4 +216,4 @@ try {
 } catch (error) {
     await page.screenshot({ path: artifactPath('slopurself-statistics-management-failed.png'), fullPage: true });
     throw error;
-} finally { await browser.close(); }
+} finally { releaseDelete?.(); await browser.close(); }

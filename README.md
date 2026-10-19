@@ -312,8 +312,13 @@ allein ist kein privater Zugangsschutz; bekannte Namen können weiterhin
 60 Namensaktionen und 120 Konfigurations-/Statistikanfragen je Minute und IP,
 120 Spielnachrichten je Minute und Spieler. HTTP-Antworten bei Überschreitung
 enthalten Status 429 und `Retry-After`. IPs liegen in Cloudflare-Rate-Buckets
-nur als mit dem Sitzungsschlüssel gesalzene Hashes vor. Abgelaufene Buckets
-werden bei der nächsten Anfrage verworfen und die Anzahl ist begrenzt. Das ist ein leichter Schutz für eine
+nur als mit dem Sitzungsschlüssel gesalzene Hashes vor. Variable Raum-, Video-
+und unbekannte Statistikpfade teilen sich feste Routengruppen. Cloudflare
+speichert die Zähler pro Client und Routengruppe in getrennten Durable Objects;
+ein Client kann damit keine globale Registry füllen und andere Nutzer sperren.
+Lokal bleibt der Speicher begrenzt, ohne bei voller Registry alle neuen Clients
+abzuweisen. Abgelaufene Buckets werden beim nächsten Zugriff verworfen.
+Das ist ein leichter Schutz für eine
 Freundesgruppe, kein vollständiger Missbrauchsschutz.
 
 Anonyme Seitenaufrufe lesen kein HF-Kontingent. Die Anzeige wird für maximal

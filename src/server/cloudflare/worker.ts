@@ -4,7 +4,7 @@ import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
 import { DEFAULT_PROVIDER_CHAIN } from '../../ai/generation';
 import { serveVideo, archiveEnabled } from '../../storage/archive';
-import { httpRateRule, rateKey, RATE_MESSAGE } from '../../security/rate-limit';
+import { httpRateRule, httpRateScope, rateKey, RATE_MESSAGE } from '../../security/rate-limit';
 import { sanitizeRoomId } from '../../game/rules';
 import { service, json } from './runtime';
 import { historyResponse, historyListing, HistoryError } from '../statistics';
@@ -23,7 +23,7 @@ export default {
         const rule = httpRateRule(url.pathname, request.method);
         if (rule) {
             try {
-                const key = await rateKey(request.headers.get('CF-Connecting-IP') || 'local', url.pathname.startsWith('/ws/') ? '/ws/' : url.pathname, env.AUTH_COOKIE_SECRET);
+                const key = await rateKey(request.headers.get('CF-Connecting-IP') || 'local', httpRateScope(url.pathname, request.method), env.AUTH_COOKIE_SECRET);
                 const { retryAfter } = await service(env, '/security/rate', { key, rule });
                 if (retryAfter) return json({ error: RATE_MESSAGE }, { status: 429, headers: { 'Retry-After': String(retryAfter), 'Cache-Control': 'no-store' } });
             } catch { return json({ error: 'Das Spiel ist gerade nicht erreichbar.' }, { status: 503 }); }

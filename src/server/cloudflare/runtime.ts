@@ -5,7 +5,10 @@ import { HistoryError } from '../statistics';
 export async function service(env: Env, path: string, payload?: unknown) {
     if (!env.SERVICES && env.AI_PROVIDER === 'mock') return { aiRoundLimit: getAiRoundLimit(env), playerCount: (payload as { players?: number })?.players || 1, quotaMode: 'mock' };
     if (!env.SERVICES) throw new Error('Cloudflare SERVICES-Binding fehlt.');
-    const response = await env.SERVICES.get(env.SERVICES.idFromName('global')).fetch(new Request(`https://internal${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload || {}) }));
+    const key = (payload as { key?: unknown })?.key;
+    // A noisy client must not fill or serialize the limiter registry for every other client.
+    const name = path === '/security/rate' && typeof key === 'string' && /^[a-f0-9]{64}$/.test(key) ? `rate:${key}` : 'global';
+    const response = await env.SERVICES.get(env.SERVICES.idFromName(name)).fetch(new Request(`https://internal${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload || {}) }));
     const result = await response.json() as Record<string, any>;
     if (!response.ok) throw new HistoryError(result.error || 'KI- oder Videospeicher nicht erreichbar.', response.status);
     return result;

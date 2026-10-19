@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { takeRateLimit, rateKey, httpRateRule, type RateBuckets } from '../../src/security/rate-limit';
+import { takeRateLimit, rateKey, httpRateRule, httpRateScope, type RateBuckets } from '../../src/security/rate-limit';
 import worker, { ServiceDurableObject } from '../../src/server/cloudflare/worker';
 
 test('request limits reset, isolate clients and stay bounded under changing identities', async () => {
@@ -12,12 +12,39 @@ test('request limits reset, isolate clients and stay bounded under changing iden
     assert.equal(takeRateLimit(buckets, 'a', rule, 1100), 0);
     for (let i = 0; i < 3000; i++) takeRateLimit(buckets, `client-${i}`, rule, 1101);
     assert.equal(Object.keys(buckets).length, 2048);
+    assert.equal(takeRateLimit(buckets, 'unrelated-new-client', rule, 1102), 0);
     assert.equal(httpRateRule('/assets/video.mp4', 'GET'), undefined);
     assert.equal(httpRateRule('/api/stats/videos', 'GET')?.limit, 120);
     assert.equal(httpRateRule('/api/stats/rooms', 'GET')?.limit, 120);
     const key = await rateKey('127.0.0.1', '/api/session', 'private-salt');
     assert.equal(key.length, 64); assert.equal(key.includes('127.0.0.1'), false);
     assert.notEqual(key, await rateKey('127.0.0.1', '/api/config', 'private-salt'));
+    assert.equal(httpRateScope('/api/stats/videos/123/restore', 'POST'), httpRateScope('/api/stats/invalid', 'GET'));
+    assert.equal(httpRateScope('/api/rooms/ABCD/image', 'GET'), httpRateScope('/api/rooms/EFGH/image', 'GET'));
+    assert.notEqual(httpRateScope('/api/hf/device', 'GET'), httpRateScope('/api/hf/device', 'POST'));
+});
+
+test('changing invalid URLs cannot bypass a client limit or block unrelated Worker clients', async () => {
+    const services = new Map<string, ServiceDurableObject>();
+    const env = { AI_PROVIDER: 'wan22', AUTH_COOKIE_SECRET: 'isolated-test-key-at-least-32-characters',
+        ASSETS: { fetch: async () => new Response(null, { status: 404 }) },
+        SERVICES: { idFromName: (name: string) => name, get: (name: string) => {
+            if (!services.has(name)) {
+                const data = new Map<string, unknown>();
+                services.set(name, new ServiceDurableObject({ storage: { get: async key => structuredClone(data.get(key)),
+                    put: async (key, value) => { data.set(key, structuredClone(value)); } } } as any, { AI_PROVIDER: 'mock' } as any));
+            }
+            return { fetch: (request: Request) => services.get(name)!.fetch(request) };
+        } } };
+    const request = (path: string, ip: string) => worker.fetch(new Request(`https://game.test${path}`, { headers: { 'CF-Connecting-IP': ip } }), env as any);
+    for (let i = 0; i < 2100; i++) {
+        const result = await request(`/api/stats/invalid-${i}`, '192.0.2.10');
+        assert.equal(result.status, i < 120 ? 404 : 429);
+    }
+    assert.equal((await request('/api/stats/another-invalid-url', '192.0.2.20')).status, 404);
+    assert.equal((await request('/api/config', '192.0.2.20')).status, 200);
+    assert.equal(services.size, 3);
+    assert.ok([...services.keys()].every(name => /^rate:[a-f0-9]{64}$/.test(name)));
 });
 
 test('global Worker request limits survive recreation and reject simultaneous bursts', async () => {

@@ -1,5 +1,37 @@
 # Technische Prüfung
 
+## Sicherheits- und Stabilitätskorrekturen vom 19. Oktober 2026
+
+- Den globalen Rate-Limiter gegen Registry-Erschöpfung abgesichert:
+  variable URL-IDs werden auf feste Routengruppen reduziert, Cloudflare-Zähler
+  nach anonymisiertem Client-/Routenschlüssel isoliert. Lokale Speichergrenzen
+  lösen keine globale Sperre mehr aus. Regression mit 2.100 unterschiedlichen
+  ungültigen URLs: ab Anfrage 121 begrenzt, unabhängige Clients bleiben nutzbar.
+- Persönliche HF-Verbindungen funktionieren bei widerrufenem zentralem Token.
+  Eine gespeicherte zentrale Identität erhält die Zuordnung bereits bestehender
+  Reservierungen; gemischte Partien benötigen weiterhin ein nutzbares Budget
+  für jeden Spieler. Keine geschätzten oder zusätzlich erfundenen GPU-Sekunden.
+- Einmalig ausgegebene Gerätetokens werden vor weiteren Netzwerkprüfungen
+  verschlüsselt gesichert. Nach temporärem Kontingentfehler und Objektneustart
+  wird die Validierung wiederholt, nicht der einmalige Tokenaustausch.
+  Gleichzeitige Polls und Callback-Wiederholungen bleiben einmalig; parallele
+  Vault-Schreibvorgänge und Bereinigung erhalten den vollständigen Ablaufindex.
+- HF-Anmeldung und reine Budgetansichten liegen außerhalb der globalen
+  Reservierungswarteschlange. Langsame Statusabfragen blockieren weder andere
+  HF-Konten noch Budgetfreigaben. Reservierungen und Verbrauch bleiben atomar
+  serialisiert, einschließlich gleichzeitiger Starts in mehreren Räumen.
+  Gleichzeitige Bereinigungsanfragen behalten stets den frühesten Termin;
+  spätere HF-Fristen verschieben keine anstehende Videolöschung.
+- Bei Sammellöschung erscheint Rückgängig unmittelbar nach jeder bestätigten
+  Löschung und bleibt auch während einer langsamen Folgeanfrage verfügbar.
+- 125 Unit-Tests, beide TypeScript-Prüfungen und `npm audit` bestanden.
+  Vollständige CI-Suite mit Node, echter lokaler Cloudflare-Laufzeit,
+  Chromium und WebKit bestanden, einschließlich zehn gleichzeitiger Spieler,
+  persönlicher HF-Konten, Reload, synchroner Bewertung und Statistikverwaltung.
+  Nach der zusätzlichen Alarm-Absicherung beide workerd-Integrationstests
+  erneut erfolgreich geprüft. Keine echten HF-Aufträge und keine Änderungen an
+  produktiven Benutzern, Spielen, Videodateien oder dem Datenbankschema.
+
 ## HF-Anmeldefehler und Gerätecodefluss vom 17. Oktober 2026
 
 - Den 404 auch im echten Safari reproduziert: Die Zustimmungsseite war

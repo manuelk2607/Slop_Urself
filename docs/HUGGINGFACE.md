@@ -128,7 +128,12 @@ angemeldete Spielprofil-ID und die Spieladresse. Der geheime `device_code`
 bleibt AES-GCM-verschlüsselt auf dem Server; nur der kurze Bestätigungscode
 gelangt ins UI. Die Abfragen halten das HF-Pollingintervall einschließlich
 `slow_down` ein. Offene Bestätigungen lassen sich nach Reload fortsetzen und
-laufen automatisch ab. Der frühere PKCE-Callback bleibt für bereits begonnene
+laufen automatisch ab. Nach einer erfolgreichen einmaligen Tokenausgabe wird
+das Ergebnis bereits verschlüsselt im offenen Vorgang gesichert. Vorübergehende
+Profil- oder Kontingentfehler wiederholen nur die Prüfung, nicht den Tokenabruf;
+die ursprüngliche Tokenablaufzeit bleibt erhalten. Endgültig ungültige Codes
+werden verworfen und können neu gestartet werden.
+Der frühere PKCE-Callback bleibt für bereits begonnene
 Anmeldungen verfügbar. Zugriffstokens werden ebenfalls mit AES-GCM
 verschlüsselt und nicht an den Browser, in Raumdaten, Statistiken oder
 Anwendungslogs ausgegeben. Die App speichert keine HF-Passwörter und fragt
@@ -142,13 +147,19 @@ widerrufen werden. An HF übertragene Bilder unterliegen weiterhin den
 Speicherregeln des verwendeten Space.
 
 Eine OAuth-Anmeldung allein reicht nicht als Kompatibilitätsnachweis. Vor
-dem Speichern prüft der Server auch `/oauth/userinfo`, `/api/whoami-v2`
+der Freigabe als nutzbare KI-Verbindung prüft der Server auch `/oauth/userinfo`, `/api/whoami-v2`
 und die echte ZeroGPU-Kontingentabfrage. Fehlende Kontingentrechte werden
 abgewiesen, nicht durch geschätzte 300 Sekunden ersetzt. Die tatsächliche
 Zuordnung einer GPU-Generierung muss zusätzlich mit einem budgetgedeckten
 Live-Auftrag überprüft werden. Ein Zugriffsscope für Inference Providers
 ist kein Beleg für ZeroGPU-Zugriff; keine breiteren Rechte auf Verdacht
 erteilen.
+
+Persönliche Verbindungen bleiben auch bei einem ungültigen gemeinsamen
+Server-Token nutzbar. Die zuletzt verifizierte zentrale HF-Identität bleibt
+für die Zuordnung bestehender Reservierungen gespeichert. HF-Anmeldung und
+Kontingentanzeigen blockieren keine Budgetfreigaben anderer Räume; Änderungen
+an Reservierungen bleiben serialisiert und prüfen das Kontingent erneut.
 
 Quellen: [HF OAuth](https://huggingface.co/docs/hub/oauth),
 [HF ZeroGPU](https://huggingface.co/docs/hub/spaces-zerogpu),

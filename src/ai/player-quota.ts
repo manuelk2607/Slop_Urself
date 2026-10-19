@@ -18,11 +18,21 @@ export class PlayerQuotaBudget {
         players = players.map(({ id, accountId, hfConnectionId }) => ({ id, accountId, hfConnectionId }));
         if (!players.length || new Set(players.map(p => p.id)).size !== players.length) throw new Error('Ungültige Spielerliste.');
         if (!this.centralSubject && this.config.HF_TOKEN) {
-            const response = await fetch('https://huggingface.co/api/whoami-v2', { headers: { Authorization: `Bearer ${this.config.HF_TOKEN}` }, signal: AbortSignal.timeout(10_000) });
-            if (!response.ok) throw new Error('Das gemeinsame HF-Konto ist gerade nicht erreichbar.');
-            const user = await response.json() as { id?: unknown };
-            if (typeof user.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(user.id)) throw new Error('Ungültiges gemeinsames HF-Profil.');
-            this.centralSubject = user.id;
+            const fingerprint = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.config.HF_TOKEN))), byte => byte.toString(16).padStart(2, '0')).join('');
+            const cached = await this.storage.get<{ fingerprint: string; subject: string }>('central-identity');
+            if (cached?.fingerprint === fingerprint) this.centralSubject = cached.subject;
+            else try {
+                const response = await fetch('https://huggingface.co/api/whoami-v2', { headers: { Authorization: `Bearer ${this.config.HF_TOKEN}` }, signal: AbortSignal.timeout(10_000) });
+                if (!response.ok) throw new Error('Das gemeinsame HF-Konto ist gerade nicht erreichbar.');
+                const user = await response.json() as { id?: unknown };
+                if (typeof user.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(user.id)) throw new Error('Ungültiges gemeinsames HF-Profil.');
+                this.centralSubject = user.id;
+                await this.storage.put('central-identity', { fingerprint, subject: user.id });
+            } catch (error) {
+                if (players.some(player => !player.hfConnectionId)) throw error;
+                // Retain existing central holds for its last known owner, but use personal tokens.
+                this.centralSubject ||= cached?.subject;
+            }
         }
         const owners: Owner[] = [];
         for (const player of players) {

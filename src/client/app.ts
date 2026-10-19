@@ -598,16 +598,14 @@ async function removeStatistic(url: string) {
 
 async function deleteSelectedStatistics(urls: string[], kind: HistoryKind) {
     const failed: string[] = [], reasons = new Set<string>();
-    const undo: { url: string; undoUntil: number }[] = [];
     statsActionNotice.hidden = true;
     for (const url of urls) {
         try {
             const result = await removeStatistic(url);
-            if (kind === 'videos' && result?.undoUntil) undo.push({ url, undoUntil: result.undoUntil });
+            if (kind === 'videos' && result?.undoUntil) undoVideos.remember([{ url, undoUntil: result.undoUntil }]);
         }
         catch (error) { failed.push(url); reasons.add(error instanceof Error ? error.message : 'Löschen fehlgeschlagen.'); }
     }
-    undoVideos.remember(undo);
     await loadStatistics(false, true);
     if (failed.length) {
         const items = kind === 'rooms' ? 'Räume' : 'Videos';

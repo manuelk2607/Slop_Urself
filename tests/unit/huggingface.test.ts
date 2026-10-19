@@ -15,16 +15,18 @@ function fixture() {
         HF_TOKEN: 'central', AI_PROVIDER: 'wan22', AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded' as const };
     const tokens: Record<string, { id: string; name: string }> = { central: { id: 'self', name: 'owner' } };
     const seconds: Record<string, number> = { self: 300 };
-    let nextToken = '', exchanges = 0, quotaStatus = 200, devicePolls = 0, deviceError = 'authorization_pending';
+    let nextToken = '', exchanges = 0, quotaStatus = 200, devicePolls = 0, deviceError = 'authorization_pending', deviceUsed = false;
     const original = globalThis.fetch;
     globalThis.fetch = async (input, options) => {
         const url = String(input), token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '') || '';
-        if (url.endsWith('/oauth/device')) return Response.json({ device_code: 'secret-device-code', user_code: 'ABCD-1234', verification_uri: 'https://hf.co/oauth/device', expires_in: 300, interval: 5 });
+        if (url.endsWith('/oauth/device')) { deviceUsed = false; return Response.json({ device_code: 'secret-device-code', user_code: 'ABCD-1234', verification_uri: 'https://hf.co/oauth/device', expires_in: 300, interval: 5 }); }
         if (url.endsWith('/oauth/token')) {
             const body = new URLSearchParams(String(options?.body));
             if (body.has('device_code')) {
                 devicePolls++; assert.equal(body.get('device_code'), 'secret-device-code');
                 if (deviceError) return Response.json({ error: deviceError }, { status: 400 });
+                if (deviceUsed) return Response.json({ error: 'invalid_grant' }, { status: 400 });
+                deviceUsed = true;
             }
             exchanges++; return Response.json({ access_token: nextToken, token_type: 'Bearer', expires_in: 28800 });
         }
@@ -112,7 +114,7 @@ test('HF device approval survives reload, throttles provider polling, binds the 
         assert.equal(f.devicePolls(), 3);
         await resumed.cancelDevice(start.nonce, 'a', origin);
         assert.equal((await resumed.deviceStatus(start.nonce, 'a', origin)).pending, false);
-        for (const code of ['access_denied', 'expired_token']) {
+        for (const code of ['access_denied', 'expired_token', 'invalid_grant']) {
             const next = await resumed.startDevice(account, origin); now += 5000; f.deviceError(code);
             assert.ok((await resumed.pollDevice(next.nonce, account, origin)).error);
             assert.equal((await resumed.deviceStatus(next.nonce, 'a', origin)).pending, false);
@@ -120,6 +122,108 @@ test('HF device approval survives reload, throttles provider polling, binds the 
         const expired = await resumed.startDevice(account, origin); now += 301_000;
         assert.ok((await resumed.pollDevice(expired.nonce, account, origin)).error);
     } finally { Date.now = originalNow; f.restore(); }
+});
+
+test('device grants survive a temporary quota outage and recreation without exchanging twice or extending token lifetime', async () => {
+    const f = fixture(), originalNow = Date.now;
+    let now = originalNow(); Date.now = () => now;
+    try {
+        await f.connect('a', 'hf-a');
+        const account = { id: 'a', name: 'a', expiresAt: now + 60_000 }, origin = 'https://game.test';
+        const start = await f.connections.startDevice(account, origin);
+        f.deviceError(''); f.setQuotaStatus(503); now += 5000;
+        const receivedAt = now, exchanges = f.exchanges();
+        await assert.rejects(f.connections.pollDevice(start.nonce, account, origin), error => error instanceof HfOAuthError && error.code === 'quota_unavailable');
+        assert.equal(f.exchanges(), exchanges + 1);
+        assert.equal(JSON.stringify([...f.data.values()]).includes('private-access-'), false);
+        f.setQuotaStatus(200); now += 10_000;
+        const resumed = new HfConnections(f.storage, f.config);
+        const [first, second] = await Promise.all([resumed.pollDevice(start.nonce, account, origin), resumed.pollDevice(start.nonce, account, origin)]);
+        assert.equal(first.connected, true); assert.deepEqual(second, first);
+        assert.equal(first.expiresAt, receivedAt + 8 * 60 * 60_000);
+        assert.equal(f.exchanges(), exchanges + 1); assert.equal(f.devicePolls(), 1);
+        assert.equal((await resumed.credential(first.connection, 'a')).username, 'hf-a');
+    } finally { Date.now = originalNow; f.restore(); }
+});
+
+test('concurrent vault writes preserve the expiry index and callback/device operations remain single-use', async () => {
+    const f = fixture();
+    try {
+        const account = { id: 'a', name: 'a', expiresAt: Date.now() + 60_000 }, origin = 'https://game.test';
+        await Promise.all(Array.from({ length: 20 }, () => f.connections.start(account, origin)));
+        assert.equal(Object.keys(f.data.get('hf-expiries')).length, 20);
+        const start = await f.connections.start(account, origin), state = new URL(start.url).searchParams.get('state');
+        await f.connect('a', 'hf-a');
+        const before = f.exchanges();
+        const result = await Promise.allSettled([f.connections.finish(state, 'code', start.nonce, origin), f.connections.finish(state, 'code', start.nonce, origin)]);
+        assert.equal(result.filter(r => r.status === 'fulfilled').length, 1);
+        assert.equal(f.exchanges(), before + 1);
+        assert.deepEqual(Object.keys(f.data.get('hf-expiries')).sort(), [...f.data.keys()].filter(key => key !== 'hf-expiries').sort());
+    } finally { f.restore(); }
+});
+
+test('personal budgets remain usable with a revoked central token and retain known central holds', async () => {
+    const f = fixture();
+    try {
+        const a = await f.connect('a', 'hf-a'), b = await f.connect('b', 'hf-b'), self = await f.connect('self-profile', 'self', 'owner');
+        const original = globalThis.fetch;
+        globalThis.fetch = async (url, init) => new Headers(init?.headers).get('authorization') === 'Bearer central'
+            ? new Response(null, { status: 401 }) : original(url, init);
+        let budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        assert.equal((await budget.capacity(2, 'economy', [a, b])).aiRoundLimit, 3);
+        await budget.reserve('AAAA', 2, 2, 'economy', [a, b]);
+        assert.equal((await budget.capacity(2, 'economy', [a, b])).aiRoundLimit, 1);
+        assert.equal((await budget.capacity(2, 'economy', [a, { id: 'central-player' }])).aiRoundLimit, 0);
+        await budget.release('AAAA');
+        globalThis.fetch = original;
+        budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        await budget.capacity(1, 'economy', [self]);
+        await budget.reserve('HOLD', 2, 1, 'economy');
+        delete f.tokens.central;
+        budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        assert.equal((await budget.capacity(1, 'economy', [self])).aiRoundLimit, 1);
+    } finally { f.restore(); }
+});
+
+test('slow HF status and capacity reads do not block another account or atomic quota releases', async () => {
+    const f = fixture();
+    let unblock: (() => void) | undefined;
+    try {
+        const a = await f.connect('a', 'hf-a'), b = await f.connect('b', 'hf-b');
+        const original = globalThis.fetch;
+        const service = new ServiceDurableObject({ storage: f.storage } as any, f.config as any);
+        const post = (path: string, body: object) => service.fetch(new Request(`https://internal${path}`, { method: 'POST', body: JSON.stringify(body) }));
+        for (const path of ['/hf/status', '/quota/capacity']) {
+            let started!: () => void;
+            const startedRequest = new Promise<void>(resolve => { started = resolve; });
+            const gate = new Promise<void>(resolve => { unblock = resolve; });
+            globalThis.fetch = async (url, init) => {
+                if (String(url).endsWith('/zero-gpu/quota') && new Headers(init?.headers).get('authorization') === 'Bearer private-access-a-hf-a') { started(); await gate; }
+                return original(url, init);
+            };
+            const slow = post(path, { connection: a.hfConnectionId, accountId: a.accountId, players: 1, participants: [a] });
+            await startedRequest;
+            try {
+                const independent = Promise.all([post('/quota/release', { code: 'TEST' }), post('/hf/status', { connection: b.hfConnectionId, accountId: b.accountId })]);
+                const result = await Promise.race([independent, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Unrelated operations were blocked.')), 1000))]);
+                assert.deepEqual(result.map(response => response.status), [200, 200]);
+                assert.equal((await result[1].json() as any).connected, true);
+            } finally { unblock(); await slow; }
+        }
+    } finally { unblock?.(); f.restore(); }
+});
+
+test('concurrent cleanup scheduling keeps the earliest video or HF deadline', async () => {
+    let alarm: number | null = null;
+    const service = new ServiceDurableObject({ storage: {
+        getAlarm: async () => { const current = alarm; await new Promise(resolve => setImmediate(resolve)); return current; },
+        setAlarm: async (time: number) => { await new Promise(resolve => setImmediate(resolve)); alarm = time; }
+    } } as any, { AI_PROVIDER: 'mock' } as any);
+    const schedule = (time: number) => (service as any).scheduleCleanup(time) as Promise<void>;
+    await Promise.all([schedule(100), schedule(500), schedule(200)]);
+    assert.equal(alarm, 100);
+    await Promise.all([schedule(50), schedule(300)]);
+    assert.equal(alarm, 50);
 });
 
 test('HF connection is not saved when OAuth cannot read ZeroGPU quota, and expired secrets are purged', async () => {

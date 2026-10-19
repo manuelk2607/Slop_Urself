@@ -16,6 +16,7 @@ export class ServiceDurableObject {
     private archiveOperations: Promise<unknown> = Promise.resolve();
     private profileOperations: Promise<unknown> = Promise.resolve();
     private securityOperations: Promise<unknown> = Promise.resolve();
+    private alarmOperations: Promise<unknown> = Promise.resolve();
     private profiles: ManagedProfileStore;
     private budget: PlayerQuotaBudget;
     private hf: HfConnections;
@@ -77,20 +78,27 @@ export class ServiceDurableObject {
             else if (path === '/profiles/remove') return json({ profile: await this.profiles.remove(data.id) || null });
             return json({ ok: true });
         };
-        const result = (path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') || path.startsWith('/hf/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => {
+        // Mutations recheck capacity in their queue; HF I/O and quota views must not hold that queue.
+        const independent = path.startsWith('/hf/') || ['/quota/display', '/quota/capacity', '/quota/token'].includes(path);
+        const result = (independent ? Promise.resolve() : path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => {
             if (error instanceof HfOAuthError) console.info('[HF] OAuth callback failed', error.code);
             return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.' }, { status: error instanceof HistoryError ? error.status : 503 });
         });
+        if (independent) return result;
         if (path.startsWith('/security/')) this.securityOperations = result;
-        else if (path.startsWith('/quota/') || path.startsWith('/hf/')) this.quotaOperations = result;
+        else if (path.startsWith('/quota/')) this.quotaOperations = result;
         else if (path.startsWith('/profiles/')) this.profileOperations = result;
         else this.archiveOperations = result;
         return result;
     }
 
-    private async scheduleCleanup(time: number) {
-        const alarm = await this.state.storage.getAlarm();
-        if (alarm === null || alarm > time) await this.state.storage.setAlarm(time);
+    private scheduleCleanup(time: number) {
+        const result = this.alarmOperations.then(async () => {
+            const alarm = await this.state.storage.getAlarm();
+            if (alarm === null || alarm > time) await this.state.storage.setAlarm(time);
+        });
+        this.alarmOperations = result.catch(() => {});
+        return result;
     }
 
     async alarm() {
@@ -98,12 +106,10 @@ export class ServiceDurableObject {
             const database = getDatabase(this.env.DATABASE_URL);
             await purgeDeletedVideos(database, url => deleteArchivedVideo(url, this.env));
             const next = await database?.nextVideoDeletion();
-            if (next !== undefined) await this.state.storage.setAlarm(Math.max(Date.now() + 100, next));
-            const cleanup = this.quotaOperations.then(() => this.hf.cleanup());
-            this.quotaOperations = cleanup.catch(() => {});
-            const hfCleanup = await cleanup;
+            if (next !== undefined) await this.scheduleCleanup(Math.max(Date.now() + 100, next));
+            const hfCleanup = await this.hf.cleanup();
             if (hfCleanup !== undefined) await this.scheduleCleanup(hfCleanup);
-        }).catch(async () => { await this.state.storage.setAlarm(Date.now() + 30_000); });
+        }).catch(async () => { await this.scheduleCleanup(Date.now() + 30_000); });
         this.archiveOperations = result;
         await result;
     }

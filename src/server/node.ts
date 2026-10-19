@@ -21,7 +21,7 @@ import { archiveStatus } from './archive';
 import { historyResponse, historyListing, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
 import { Server, Socket } from 'socket.io';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
-import { takeRateLimit, rateKey, httpRateRule, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
+import { takeRateLimit, rateKey, httpRateRule, httpRateScope, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
 import { logAiEvent } from '../ai/telemetry';
 import {
     Room, Player, activeCreator, playerForConnection, roomSnapshot, finishVoting, finalStandings,
@@ -76,7 +76,7 @@ function scheduleVideoCleanup(time: number) {
 }
 if (isDatabaseEnabled()) scheduleVideoCleanup(Date.now() + 1000);
 function withBudget<T>(action: () => Promise<T>): Promise<T> { const result = budgetWork.then(action); budgetWork = result.catch(() => {}); return result; }
-const hfCleanupClock = setInterval(() => { void withBudget(() => hf.cleanup()).catch(() => {}); }, 60_000);
+const hfCleanupClock = setInterval(() => { void hf.cleanup().catch(() => {}); }, 60_000);
 hfCleanupClock.unref();
 function archive(url: string) {
     const result = archiveWork.then(async () => {
@@ -88,7 +88,7 @@ function archive(url: string) {
 app.use(async (req, res, next) => {
     const rule = httpRateRule(req.path, req.method);
     if (rule) {
-        const key = await rateKey(req.socket.remoteAddress || 'local', req.path, config.AUTH_COOKIE_SECRET);
+        const key = await rateKey(req.socket.remoteAddress || 'local', httpRateScope(req.path, req.method), config.AUTH_COOKIE_SECRET);
         const retryAfter = takeRateLimit(httpBuckets, key, rule);
         if (retryAfter) { res.setHeader('Retry-After', String(retryAfter)); res.setHeader('Cache-Control', 'no-store'); res.status(429).json({ error: RATE_MESSAGE }); return; }
     }
@@ -105,7 +105,7 @@ async function webResponse(response: Response, res: express.Response) {
     const cookies = response.headers.getSetCookie(); if (cookies.length) res.setHeader('set-cookie', cookies);
     res.send(Buffer.from(await response.arrayBuffer()));
 }
-app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, res) => webResponse(await huggingFaceResponse(webRequest(req), config, (endpoint, data) => withBudget(async () => {
+app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, res) => webResponse(await huggingFaceResponse(webRequest(req), config, async (endpoint, data) => {
     if (endpoint === '/hf/start') return hf.start(data.account as any, data.origin as string);
     if (endpoint === '/hf/device/start') return hf.startDevice(data.account as any, data.origin as string, data.nonce as string | undefined);
     if (endpoint === '/hf/device/status') return hf.deviceStatus(data.nonce as string | undefined, data.accountId as string, data.origin as string);
@@ -115,7 +115,7 @@ app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, r
     if (endpoint === '/hf/status') return hf.status(data.connection as string | undefined, data.accountId as string);
     if (endpoint === '/hf/disconnect') { await hf.disconnect(data.connection as string | undefined, data.accountId as string); return { ok: true }; }
     throw new Error('Unbekannte HF-Anfrage.');
-})), res));
+}), res));
 app.use('/api/auth', (_req, res) => res.sendStatus(404));
 app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await sessionResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
@@ -148,7 +148,7 @@ app.get('/api/config', async (req, res) => {
     const signedIn = authDisabled(config) || Boolean(account);
     res.setHeader('Cache-Control', 'no-store');
     res.json({
-        ...(signedIn ? await withBudget(() => budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined)) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
+        ...(signedIn ? await budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
         aiProvider: AI_PROVIDER === 'mock' ? 'mock' : AI_PROVIDER_CHAIN,
         mockAi: AI_PROVIDER === 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
     });
@@ -214,7 +214,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
             if (rooms.get(room.code) === room && room.generationId === generationId) room.generationJob = job;
         }
     };
-    const generation = withBudget(() => budget.tokenForJob(room.code, generationId)).catch(error => {
+    const generation = budget.tokenForJob(room.code, generationId).catch(error => {
         if (room.generationJob) {
             if (Date.now() - room.generationJob.submittedAt >= AI_JOB_MAX_AGE_MS) throw new AiExpiredError();
             throw new AiPendingError(room.generationJob);
@@ -262,7 +262,7 @@ async function refreshLobbyQuota(room: Room) {
     const players = room.players.length;
     const quality = gameOptions(room.options).quality;
     const mode = gameOptions(room.options).mode;
-    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive() || [], players) : await withBudget(() => budget.capacity(players, quality, room.players));
+    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive() || [], players) : await budget.capacity(players, quality, room.players);
     if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length || quality !== gameOptions(room.options).quality || mode !== gameOptions(room.options).mode) return;
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
@@ -390,7 +390,7 @@ io.on('connection', (socket: Socket) => {
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
         socket.data.creatingRoom = true;
         try {
-            const capacity = await withBudget(() => budget.capacity(1, 'auto', socket.data.account?.hfConnectionId ? [{ id: socket.id, accountId: socket.data.account.id, hfConnectionId: socket.data.account.hfConnectionId }] : undefined));
+            const capacity = await budget.capacity(1, 'auto', socket.data.account?.hfConnectionId ? [{ id: socket.id, accountId: socket.data.account.id, hfConnectionId: socket.data.account.hfConnectionId }] : undefined);
             let code: string;
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
             if (!socket.connected) return;
