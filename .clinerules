@@ -1,0 +1,21 @@
+# Projekt-Vorgaben: Slop_Urself
+- Stack: Cloudflare Pages / Workers, Neon PostgreSQL, TypeScript.
+- Cloudflare-Bindings:
+  - env.DATABASE_URL (Neon PostgreSQL Verbindung)
+  - env.AUDIO (Cloudflare R2 Bucket)
+  - env.AI (Workers AI)
+- Datenbank:
+  - Nutze für alle DB-Checks, Tabelleninspektionen und Migrationen ausschließlich das MCP-Tool `slop_urself`.
+  - Verwende im Code den Treiber `@neondatabase/serverless`.
+- Deployment & CLI:
+  - Lokale Entwicklung und Tests: `npx wrangler dev` bzw. `npx wrangler pages dev`.
+  - Deployment ausschließlich über `npx wrangler deploy` bzw. `npx wrangler pages deploy`.
+- Coding-Richtlinien:
+  - TypeScript strikt typisieren (kein implizites `any`).
+  - Vor Änderungen an Datenbankstrukturen immer erst das bestehende Schema über das MCP-Tool prüfen.
+  - Vor jedem Deployment einen Build- bzw. Typtest ausführen (`npm run build` oder `tsc --noEmit`).
+- Git & Versionskontrolle:
+    - Arbeite NIEMALS direkt auf dem Branch `main` oder `master`.
+   - Prüfe vor jeder Code- oder Schemaänderung den aktuellen Branch mit `git branch --show-current`.
+    - Wenn du dich auf `main` oder `master` befindest, erstelle vor dem Bearbeiten von Dateien eigenständig einen aussagekräftigen Feature-Branch (z. B. `git checkout -b feature/<kurze-beschreibung>` oder `git checkout -b fix/<kurze-beschreibung>`).
+    - Erstelle nach erfolgreicher Implementierung und erfolgreichem Build einen sauberen Git-Commit mit verständlicher Commit-Message.
