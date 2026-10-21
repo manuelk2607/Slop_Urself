@@ -7,8 +7,14 @@ export const PROFILE_SCHEMA = `create table if not exists user_profiles (
     created_at timestamptz not null default now()
 )`;
 
+export const PROFILE_MIGRATIONS = [
+    'alter table user_profiles add column if not exists password_hash text',
+    "alter table user_profiles add column if not exists auth_version text not null default '0'"
+] as const;
+
 export const DATABASE_SCHEMA = [
     PROFILE_SCHEMA,
+    ...PROFILE_MIGRATIONS,
     `create table if not exists rooms (
         code text primary key,
         host_socket_id text not null,

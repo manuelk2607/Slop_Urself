@@ -14,6 +14,17 @@ setGameOptions accepts payload.options with booleans sharedImage, secretTasks,
 guessPrompt, quality auto/quality/economy, mode classic/archive-vote/archive-guess
 and phaseSeconds 0/60/120/180/300. Only the host may change these in
 LOBBY. Quality changes refresh the round limit before a start can reserve budget.
+`options.requireReady` is an additional boolean, default false. `setReady`
+accepts a boolean `ready` in LOBBY and changes only the sending player's flag.
+When enabled, startGame requires every player connected and ready, checked again
+after budget work. Roster, round, options and shared-image changes reset readiness;
+disconnect clears at least the affected player's flag. Spectators never participate.
+
+joinRoom optionally accepts `role: "spectator"`; omitted means player. The server
+allows at most ten players and twenty spectators, checking account/name/session
+conflicts across both arrays. Spectators may join ongoing games. They can resume
+and leave but cannot generate, vote, guess, mark ready or send host commands.
+They may read a shared image as authorized room members.
 setSharedImage accepts a prepared PNG/JPEG/WebP data URI in imageBase64 and is
 host-only in LOBBY/GAME_OVER, or in IDLE solely to replace a missing/expired
 common image. With sharedImage enabled, sendImage ignores a
@@ -82,6 +93,20 @@ RESULTS/GAME_OVER. The task dictionary and private credentials are never sent.
 
 Additional messages: connect, roomCodeConflict, resumeFailed, leftRoom,
 roomNotice, errorMsg and generationProgress.
+
+Snapshots also include `role`, `spectators`, `spectatorCount`, player `ready`
+flags and `startProblem`. Spectators receive public playback/state but no private
+tasks, unrevealed guesses, credentials or HF capabilities. Revealed results remain
+public. The last player leaving ejects spectators with leftRoom.
+
+At GAME_OVER, host-only `rematchGame` creates one new room, provided all players
+are connected and pending history writes have finished. Options are copied;
+points/readiness, image, prompts, tasks and jobs are not. `roomTransfer` privately
+contains `{ roomId, playerId, sessionId }` for the recipient only. The browser
+saves these before connecting/resuming in the new native-WebSocket room.
+Socket.IO moves directly without reopening the connection. Duplicate requests
+reuse the persisted handoff; unknown initialization results never allocate another
+room. Each recipient reconnects independently within roughly one minute.
 
 ## Recovery
 

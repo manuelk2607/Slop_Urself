@@ -18,18 +18,19 @@ import { closePhase, syncPhase } from '../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
 import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo } from '../storage/archive';
 import { archiveStatus } from './archive';
-import { historyResponse, historyListing, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
+import { historyResponse, historyListing, restoreHistoryResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
 import { Server, Socket } from 'socket.io';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
 import { takeRateLimit, rateKey, httpRateRule, httpRateScope, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
 import { logAiEvent } from '../ai/telemetry';
 import {
-    Room, Player, activeCreator, playerForConnection, roomSnapshot, finishVoting, finalStandings,
+    Room, Player, activeCreator, roomSnapshot, finishVoting, finalStandings,
     removePlayer, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, roundLimit, maxRounds,
     DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses
 } from '../game/rules';
 import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
 import { roundInput } from '../game/persistence';
+import { participants, participantForConnection, isSpectator, resetReady, startProblem, checkJoin, prepareRematch } from '../game/participants';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -128,7 +129,7 @@ app.get('/api/rooms/:code/image', async (req, res) => {
     const request = webRequest(req);
     try {
         const account = await requestAccount(request, config), room = rooms.get(sanitizeRoomId(req.params.code));
-        if (!room || (!authDisabled(config) && !room.players.some(player => player.accountId === account?.id))) { res.sendStatus(403); return; }
+        if (!room || (!authDisabled(config) && !participants(room).some(player => player.accountId === account?.id))) { res.sendStatus(403); return; }
         await webResponse(await sharedImageResponse(request, imageStorage, room.sharedImage), res);
     } catch (error) { res.sendStatus(authFailureStatus(error)); }
 });
@@ -170,6 +171,15 @@ app.get('/api/stats', async (req, res) => {
 
 app.all(['/api/stats/videos', '/api/stats/rooms'], async (req, res) => webResponse(await historyListing(webRequest(req), config, getDatabase()), res));
 
+app.all('/api/stats/videos/restore', express.text({ type: '*/*', limit: '8kb' }), async (req, res) => webResponse(await restoreHistoryResponse(webRequest(req), config, ids => {
+    const result = archiveWork.then(async () => {
+        const database = getDatabase();
+        if (!database) throw new HistoryError('Die Statistik-Datenbank ist nicht eingerichtet.');
+        return database.restoreVideos(ids);
+    });
+    archiveWork = result.catch(() => {}); return result;
+}), res));
+
 app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) => webResponse(await historyResponse(webRequest(req), config, async command => {
     const database = getDatabase();
     const video = await historyVideo(database, command);
@@ -178,7 +188,10 @@ app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) 
     if (needsRoom && ((room && room.state !== 'GAME_OVER') || pendingStarts.has(command.code))) throw new HistoryError('Der Raum wird noch gespielt. Beende die Partie zuerst.', 409);
     if (needsRoom) pendingStarts.add(command.code);
     try {
-        if (needsRoom) await persistence.get(command.code);
+        if (needsRoom) {
+            await persistence.get(command.code);
+            try { await flushWrites(command); } catch { throw new HistoryError('Die Partie wird noch gespeichert. Bitte versuche es gleich erneut.'); }
+        }
         const deletion = archiveWork.then(() => deleteStoredHistory(database, command, async time => { scheduleVideoCleanup(time); }));
         archiveWork = deletion.catch(() => {});
         const result = await deletion;
@@ -200,7 +213,22 @@ app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) 
 
 function broadcast(room: Room) {
     syncPhase(room);
-    for (const player of room.players) if (player.connected) io.to(player.connectionId || player.id).emit('roomDataUpdate', roomSnapshot(room, player.id));
+    for (const player of participants(room)) if (player.connected) {
+        const socket = io.sockets.sockets.get(player.connectionId || player.id);
+        if (!socket) continue;
+        if (authDisabled(config)) { socket.emit('roomDataUpdate', roomSnapshot(room, player.id)); continue; }
+        if (socket.data.checkingSnapshot) continue;
+        socket.data.checkingSnapshot = true;
+        const account = socket.data.account;
+        void accountIsCurrent(account, config).then(valid => {
+            socket.data.checkingSnapshot = false;
+            if (!socket.connected) return;
+            if (socket.data.account !== account) { const current = rooms.get(socket.data.roomId); if (current) broadcast(current); return; }
+            if (!valid || account.expiresAt <= Date.now()) { socket.emit('authExpired'); socket.disconnect(true); return; }
+            const current = rooms.get(socket.data.roomId), member = current && participantForConnection(current, socket.id);
+            if (current && member) socket.emit('roomDataUpdate', roomSnapshot(current, member.id));
+        }).catch(() => { socket.data.checkingSnapshot = false; socket.emit('roomNotice', 'Die Sitzungsprüfung ist gerade nicht erreichbar.'); });
+    }
 }
 
 function runGeneration(room: Room, generationId: string, image?: string) {
@@ -267,14 +295,23 @@ async function refreshLobbyQuota(room: Room) {
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
         room.quota = capacity;
-        room.maxRounds = capacity.aiRoundLimit ? maxRounds(room.maxRounds || 1, capacity.aiRoundLimit) : 0;
+        const rounds = capacity.aiRoundLimit ? maxRounds(room.maxRounds || 1, capacity.aiRoundLimit) : 0;
+        if (rounds !== room.maxRounds) resetReady(room);
+        room.maxRounds = rounds;
     }
     broadcast(room);
 }
 
 // Queue writes per room to preserve create -> join -> round -> final standings order.
+const pendingWrites = new Map<string, (() => Promise<void>)[]>();
+async function flushWrites(room: { code: string }) {
+    const writes = pendingWrites.get(room.code);
+    while (writes?.length) { await writes[0](); writes.shift(); }
+    pendingWrites.delete(room.code);
+}
 function persist(room: Room, action: () => Promise<void>) {
-    const next = (persistence.get(room.code) || Promise.resolve()).then(action).catch(error => {
+    const writes = pendingWrites.get(room.code) || []; writes.push(action); pendingWrites.set(room.code, writes);
+    const next = (persistence.get(room.code) || Promise.resolve()).then(() => flushWrites(room)).catch(error => {
         console.error('[DB] Persistence failed', error instanceof Error ? error.message : 'Database error');
         io.to(room.code).emit('roomNotice', 'Die Statistik-Speicherung ist momentan nicht erreichbar.');
     });
@@ -327,11 +364,18 @@ function leave(room: Room, player: Player) {
     const timer = disconnectTimers.get(player.sessionId);
     if (timer) clearTimeout(timer);
     disconnectTimers.delete(player.sessionId);
+    if (isSpectator(room, player)) { room.spectators = room.spectators?.filter(p => p.id !== player.id); broadcast(room); return; }
     const wasOver = room.state === 'GAME_OVER';
     const skipped = removePlayer(room, player.id);
     playArchiveVideo(room);
     if (skipped) void withBudget(() => budget.drop(room.code, skipped, player.id));
-    if (!room.players.length) { rooms.delete(room.code); void deleteSharedImage(imageStorage, room.sharedImage); void withBudget(() => budget.release(room.code)); return; }
+    if (!room.players.length) {
+        for (const viewer of room.spectators || []) {
+            const socket = io.sockets.sockets.get(viewer.connectionId || viewer.id);
+            if (socket) { socket.data.roomId = undefined; socket.emit('leftRoom'); void socket.leave(room.code); }
+        }
+        rooms.delete(room.code); void deleteSharedImage(imageStorage, room.sharedImage); void withBudget(() => budget.release(room.code)); return;
+    }
     io.to(room.code).emit('roomNotice', `${player.name} hat das Spiel verlassen.`);
     if (!wasOver && room.state === 'GAME_OVER') {
         void withBudget(() => budget.release(room.code));
@@ -345,18 +389,19 @@ function leave(room: Room, player: Player) {
     void refreshLobbyQuota(room);
 }
 
-function member(socket: Socket, payload: Record<string, unknown>) {
+function member(socket: Socket, payload: Record<string, unknown>, allowSpectator = false) {
     const code = sanitizeRoomId(payload.roomId);
     const room = rooms.get(code);
-    const player = room && playerForConnection(room, socket.id);
+    const player = room && participantForConnection(room, socket.id);
     if (!room || !player || socket.data.roomId !== code) throw new Error('Bitte verbinde dich zuerst mit dem Raum.');
+    if (!allowSpectator && isSpectator(room, player)) throw new Error('Als Zuschauer kannst du diese Aktion nicht ausführen.');
     return { room, player };
 }
 
 function enter(socket: Socket, room: Room, player: Player, event: string) {
     socket.data.roomId = room.code;
     player.connectionId = socket.id;
-    player.hfConnectionId = socket.data.account?.hfConnectionId;
+    player.hfConnectionId = isSpectator(room, player) ? undefined : socket.data.account?.hfConnectionId;
     void socket.join(room.code);
     socket.emit(event, { roomId: room.code, sessionId: player.sessionId, playerId: player.id, gameState: room.state });
     broadcast(room);
@@ -371,7 +416,7 @@ io.on('connection', (socket: Socket) => {
                 if (!authDisabled(config) && (!socket.data.account || socket.data.account.expiresAt < Date.now())) { socket.emit('authExpired'); return; }
                 if (!authDisabled(config) && !await accountIsCurrent(socket.data.account, config)) {
                     const room = rooms.get(socket.data.roomId);
-                    const player = room && playerForConnection(room, socket.id);
+                    const player = room && participantForConnection(room, socket.id);
                     if (room && player) leave(room, player);
                     socket.emit('authExpired'); socket.disconnect(true); return;
                 }
@@ -408,24 +453,24 @@ io.on('connection', (socket: Socket) => {
         if (socket.data.roomId) throw new Error('Du bist bereits in einem Raum.');
         const room = rooms.get(sanitizeRoomId(payload.roomId));
         if (!room) throw new Error('Raum wurde nicht gefunden.');
-        if (room.state !== 'LOBBY') throw new Error('Dieses Spiel wurde bereits gestartet.');
+        const spectator = payload.role === 'spectator';
+        if (room.rematch?.initialized) throw new Error('Diese Partie ist abgeschlossen. Bitte verwende den neuen Raumcode.');
         const name = socket.data.account?.name || sanitizeUsername(payload.username);
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
-        if (room.players.some(p => p.name.toLowerCase() === name.toLowerCase())) throw new Error('Dieser Spielername ist im Raum bereits vergeben.');
-        if (socket.data.account && room.players.some(p => p.accountId === socket.data.account.id)) throw new Error('Dieses Konto ist bereits im Raum.');
+        checkJoin(room, name, socket.data.account?.id, spectator);
         const player: Player = { id: socket.id, accountId: socket.data.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || randomUUID(), name, score: 0, connected: true };
-        if (room.players.some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
-        room.players.push(player);
-        room.quota = undefined;
+        if (participants(room).some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
+        if (spectator) (room.spectators ??= []).push(player);
+        else { room.players.push(player); resetReady(room); room.quota = undefined; }
         enter(socket, room, player, 'joinedSuccess');
-        await refreshLobbyQuota(room);
-        persistMembers(room);
+        if (!spectator) { await refreshLobbyQuota(room); persistMembers(room); }
     });
 
     on('resumeRoom', async payload => {
         const room = rooms.get(sanitizeRoomId(payload.roomId));
-        const player = room?.players.find(p => p.sessionId === sanitizeSessionId(payload.sessionId));
+        const player = room && participants(room).find(p => p.sessionId === sanitizeSessionId(payload.sessionId));
         if (!room || !player || (!authDisabled(config) && player.accountId !== socket.data.account?.id)) { socket.emit('resumeFailed'); return; }
+        if (room.rematch?.initialized && room.rematch.transfers[player.id]) { socket.emit('roomTransfer', room.rematch.transfers[player.id]); return; }
         if (socket.data.roomId && socket.data.roomId !== room.code) throw new Error('Du bist bereits in einem Raum.');
         const timer = disconnectTimers.get(player.sessionId);
         if (timer) clearTimeout(timer);
@@ -440,7 +485,7 @@ io.on('connection', (socket: Socket) => {
     });
 
     on('leaveRoom', payload => {
-        const { room, player } = member(socket, payload);
+        const { room, player } = member(socket, payload, true);
         void socket.leave(room.code);
         socket.data.roomId = undefined;
         leave(room, player);
@@ -448,10 +493,15 @@ io.on('connection', (socket: Socket) => {
     });
 
     on('refreshQuota', async payload => { const { room } = member(socket, payload); await refreshLobbyQuota(room); });
+    on('setReady', payload => {
+        const { room, player } = member(socket, payload);
+        if (room.state !== 'LOBBY' || typeof payload.ready !== 'boolean') return;
+        player.ready = payload.ready; broadcast(room);
+    });
     on('setGameOptions', async payload => {
         const { room, player } = member(socket, payload);
         if (room.state !== 'LOBBY' || room.hostId !== player.id || pendingStarts.has(room.code)) return;
-        room.options = gameOptions(payload.options); room.quota = undefined; broadcast(room);
+        room.options = gameOptions(payload.options); resetReady(room); room.quota = undefined; broadcast(room);
         await refreshLobbyQuota(room); persistMembers(room);
     });
     on('setSharedImage', async payload => {
@@ -463,10 +513,10 @@ io.on('connection', (socket: Socket) => {
         try {
             const image = await writeSharedImage(imageStorage, payload.imageBase64), old = room.sharedImage;
             if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== state) { await deleteSharedImage(imageStorage, image); return; }
-            room.sharedImage = image; await deleteSharedImage(imageStorage, old); broadcast(room);
+            room.sharedImage = image; resetReady(room); await deleteSharedImage(imageStorage, old); broadcast(room);
             setTimeout(() => {
                 if (room.sharedImage?.id === image.id && image.expiresAt <= Date.now()) {
-                    room.sharedImage = undefined; void deleteSharedImage(imageStorage, image);
+                    room.sharedImage = undefined; resetReady(room); void deleteSharedImage(imageStorage, image);
                     if (rooms.get(room.code) === room) broadcast(room);
                 }
             }, Math.max(0, image.expiresAt - Date.now())).unref();
@@ -478,7 +528,7 @@ io.on('connection', (socket: Socket) => {
         await refreshLobbyQuota(room);
         if (room.state !== 'LOBBY' || room.hostId !== player.id || pendingStarts.has(room.code)) return;
         if (!room.quota?.aiRoundLimit) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
-        room.maxRounds = maxRounds(payload.rounds, room.quota.aiRoundLimit);
+        room.maxRounds = maxRounds(payload.rounds, room.quota.aiRoundLimit); resetReady(room);
         broadcast(room);
         persistMembers(room);
     });
@@ -486,7 +536,7 @@ io.on('connection', (socket: Socket) => {
     on('startGame', async payload => {
         const { room, player } = member(socket, payload);
         if (room.hostId !== player.id || room.state !== 'LOBBY') return;
-        if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
+        if (startProblem(room)) throw new Error(startProblem(room));
         if (pendingStarts.has(room.code)) return;
         pendingStarts.add(room.code);
         const roster = room.players.map(p => p.id).join(',');
@@ -496,7 +546,7 @@ io.on('connection', (socket: Socket) => {
             if (!room.maxRounds || roster !== room.players.map(p => p.id).join(',')) throw new Error('Das Kontingent oder die Spielerzahl hat sich geändert. Bitte prüfe die Rundenauswahl.');
             if (isArchiveGame(room)) prepareArchive(room, await getDatabase()?.playableArchive() || []);
             else await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length, gameOptions(room.options).quality, room.players));
-            if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== 'LOBBY' || roster !== room.players.map(p => p.id).join(',') || room.players.some(p => !p.connected)) { await withBudget(() => budget.release(room.code)); return; }
+            if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== 'LOBBY' || roster !== room.players.map(p => p.id).join(',') || startProblem(room)) { await withBudget(() => budget.release(room.code)); throw new Error(startProblem(room) || 'Die Spielerzahl hat sich geändert.'); }
             startRounds(room);
             playArchiveVideo(room);
             broadcast(room);
@@ -585,11 +635,43 @@ io.on('connection', (socket: Socket) => {
         } finally { pendingStarts.delete(room.code); }
     });
 
+    on('rematchGame', async payload => {
+        const { room, player } = member(socket, payload);
+        if (room.hostId !== player.id || room.state !== 'GAME_OVER' || pendingStarts.has(room.code)) return;
+        if (room.rematch?.initialized) return;
+        if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
+        pendingStarts.add(room.code);
+        const roster = participants(room).filter(p => p.connected).map(p => p.id).join(',');
+        try {
+            await persistence.get(room.code);
+            try { await flushWrites(room); } catch { throw new Error('Die Partie wird noch gespeichert. Bitte versuche es gleich erneut.'); }
+            let code: string;
+            do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
+            const plan = prepareRematch(room, code), next = plan.room;
+            next.quota = isArchiveGame(next) ? archiveCapacity(await getDatabase()?.playableArchive() || [], next.players.length)
+                : await budget.capacity(next.players.length, gameOptions(next.options).quality, next.players);
+            next.maxRounds = next.quota.aiRoundLimit ? maxRounds(next.maxRounds || 1, next.quota.aiRoundLimit) : 0;
+            if (room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== participants(room).filter(p => p.connected).map(p => p.id).join(',') || room.players.some(p => !p.connected)) throw new Error('Die Gruppe hat sich geändert. Bitte versuche es erneut.');
+            // No await between the final collision check and registering the new room.
+            if (rooms.has(code)) throw new Error('Der Raumcode wurde gerade vergeben. Bitte erneut versuchen.');
+            rooms.set(code, next); room.rematch = plan; plan.initialized = true;
+            for (const old of participants(room)) {
+                const transfer = plan.transfers[old.id], connection = io.sockets.sockets.get(old.connectionId || old.id);
+                if (!transfer || !connection) continue;
+                const fresh = participants(next).find(p => p.id === transfer.playerId)!;
+                await connection.leave(room.code); await connection.join(next.code);
+                fresh.connected = true; fresh.connectionId = connection.id; fresh.disconnectedAt = undefined;
+                connection.data.roomId = next.code; connection.emit('roomTransfer', transfer);
+            }
+            broadcast(next);
+        } finally { pendingStarts.delete(room.code); }
+    });
+
     socket.on('disconnect', () => {
         const room = rooms.get(socket.data.roomId);
-        const player = room && playerForConnection(room, socket.id);
+        const player = room && participantForConnection(room, socket.id);
         if (!room || !player) return;
-        player.connected = false; player.disconnectedAt = Date.now();
+        player.connected = false; player.ready = false; player.disconnectedAt = Date.now();
         broadcast(room);
         disconnectTimers.set(player.sessionId, setTimeout(() => {
             if (!player.connected && rooms.get(room.code) === room) leave(room, player);

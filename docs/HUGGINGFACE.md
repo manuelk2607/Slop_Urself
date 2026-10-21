@@ -15,6 +15,49 @@ sowie lokale Chromium-/WebKit-Tests sind erfolgreich.
 Ein persönlicher Live-Videoauftrag und
 dessen tatsächliche Kontingentabbuchung sind weiterhin separat zu prüfen.
 
+## Einmaliger persönlicher Live-Nachweis
+
+Das vorbereitete Werkzeug ist **nicht** Teil der CI und wurde für diesen
+Implementierungsauftrag nicht mit einem echten GPU-Auftrag ausgeführt.
+Nach gesonderter Entscheidung kann es bewusst gestartet werden:
+
+Voraussetzung sind `npm ci`, ein mit `npx playwright install chromium`
+installierter Browser und eine lokale grafische Sitzung. Den Befehl aus dem
+Repository-Verzeichnis ausführen; das Werkzeug liest keine lokalen HF-Tokens.
+
+```sh
+node --import tsx tools/hf-live-check.mts --execute-one-free-video --hf-user=DEIN-HF-NAME
+```
+
+Es verwendet ausschließlich `https://slopurself.maki26.workers.dev`, prüft echte
+KI und fünf Sekunden Dauer, erstellt ein isoliertes passwortgeschütztes Testprofil
+und öffnet ein sichtbares Chromium-Fenster. Dort im Spiel das eigene HF-Konto
+per Gerätecode freigeben. Zugangsdaten ausschließlich auf Hugging Face eingeben.
+Das erwartete Konto und dessen tatsächlich gemeldetes Kontingent werden geprüft.
+Ein quadratisches synthetisches Bild und ein Economy-Prompt ergeben genau einen
+Auftrag. Ein unklarer Status löst keine weitere Einreichung aus.
+
+Vor Browser-/Netzwerkzugriff prüft das Werkzeug `.local/hf-live-evidence.json`
+und sperrt parallele Ausführungen über eine exklusive Lock-Datei. Noch **vor**
+dem Einreichen setzt es dauerhaft `submittedAt`. Danach ist jeder weitere
+automatische Versuch gesperrt, auch nach Fehler oder Prozessabbruch. Diese
+Sperre nicht löschen, um einen unklaren Auftrag blind erneut zu starten.
+Ein verwaister Lock erfordert ebenfalls manuelle Prüfung.
+
+Als vollständiger Erfolg zählen archivierte MP4-Wiedergabe, Byte-Range HTTP 206,
+gespeicherte Statistik sowie dasselbe HF-Konto vor/nach dem Auftrag mit real
+gesunkenem Kontingent. Fehlender Verbrauchsnachweis ist kein Erfolg. Die ignorierte
+Evidenz enthält nur IDs, Prüfstatus und Quotenwerte, keine Tokens, Cookies oder
+Passwörter. Nur die eigene Test-HF-Verbindung wird getrennt; Testprofil, Partie
+und Video bleiben für die Nachprüfung bestehen. Nicht mit Produktions-Secrets
+oder fremden Browserprofilen starten.
+
+Der GitHub-Actions-Lauf zu `d166133` ist ein separater externer Nachweis und wird
+nicht aus erfolgreichen lokalen Tests abgeleitet. Netzwerkfehler werden anhand
+der aktuellen Antwort eingeordnet: Ein verweigerter CONNECT-Tunnel scheitert
+vor der API; erst bei erreichbarem GitHub sind API-Authentifizierung und Rechte
+zu prüfen. Die frühere ausgefallene Cloud-Umgebung ist kein Befund für diesen Mac.
+
 ## Für Mitspieler
 
 1. Ein kostenloses [Hugging-Face-Konto](https://huggingface.co/join) erstellen

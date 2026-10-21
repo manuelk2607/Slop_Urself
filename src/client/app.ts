@@ -121,6 +121,7 @@ let currentRoomId = '';
 let currentHostId = '';
 let currentSessionId = '';
 let currentPlayerId = '';
+let spectator = false;
 let currentPhaseKey = '';
 let lobbyActionPending = false;
 let pendingRoomCreation: SocketPayload | null = null;
@@ -214,7 +215,7 @@ function renderScoreList(target: HTMLUListElement, players: { id: string; name: 
     });
 }
 
-function renderLobbyPlayers(players: { id: string; name: string; score: number }[]) {
+function renderLobbyPlayers(players: { id: string; name: string; score: number; ready?: boolean; connected?: boolean }[]) {
     lobbyPlayerList.innerHTML = '';
 
     players.forEach((player, index) => {
@@ -234,6 +235,7 @@ function renderLobbyPlayers(players: { id: string; name: string; score: number }
 
         playerInfo.append(rankBadge, name);
         li.appendChild(playerInfo);
+        const status = document.createElement('small'); status.textContent = player.connected === false ? 'Getrennt' : player.ready ? 'Bereit' : 'Nicht bereit'; li.append(status);
         lobbyPlayerList.appendChild(li);
     });
 }
@@ -287,6 +289,7 @@ function setLobbyPending(pending: boolean) {
     lobbyActionPending = pending;
     createRoomButton.disabled = pending;
     joinRoomButton.disabled = pending;
+    (document.getElementById('watchRoomButton') as HTMLButtonElement).disabled = pending;
 }
 async function requestCreateRoom() {
     if (!pendingRoomCreation) return;
@@ -305,7 +308,7 @@ createRoomButton.addEventListener('click', async () => {
     await requestCreateRoom();
 });
 socket.on('roomCodeConflict', () => { void requestCreateRoom(); });
-joinRoomButton.addEventListener('click', async () => {
+async function joinRoom(role: 'player' | 'spectator') {
     if (lobbyActionPending) return;
     const username = usernameInput.value.trim();
     const code = roomCodeInput.value.trim().toUpperCase();
@@ -317,8 +320,10 @@ joinRoomButton.addEventListener('click', async () => {
     clearSession();
     setLobbyPending(true);
     if (!(await connectToRoom(code))) { setLobbyPending(false); return; }
-    socket.emit('joinRoom', { roomId: code, username, sessionId: createSessionId() });
-});
+    socket.emit('joinRoom', { roomId: code, username, role, sessionId: createSessionId() });
+}
+joinRoomButton.addEventListener('click', () => { void joinRoom('player'); });
+document.getElementById('watchRoomButton')!.addEventListener('click', () => { void joinRoom('spectator'); });
 
 function enterRoom(roomId: string, sessionId: string, playerId?: string) {
     clearInvitation();
@@ -335,6 +340,12 @@ socket.on('joinedSuccess', data => enterRoom(data.roomId, data.sessionId, data.p
 socket.on('resumeSuccess', data => {
     enterRoom(data.roomId, data.sessionId, data.playerId);
     showRoomNotice('Verbindung wiederhergestellt.');
+});
+socket.on('roomTransfer', (data: { roomId: string; sessionId: string; playerId: string }) => {
+    if (!/^[A-Z0-9]{4}$/.test(data.roomId)) return;
+    enterRoom(data.roomId, data.sessionId, data.playerId);
+    currentPhaseKey = ''; latestGameOver = undefined; extensionPending = false;
+    if (socket.isNativeWebSocket) void connectToRoom(data.roomId);
 });
 socket.on('resumeFailed', () => {
     clearSession(); setLobbyPending(false);
@@ -375,11 +386,11 @@ function showVotingState(data: { videoUrl?: string; authorId?: string; authorNam
     showScreen(screenVoting);
     const newVideo = votingVideoPlayer.getAttribute('src') !== data.videoUrl;
     if (entering || newVideo) votingPlayback.load(data.videoUrl, true);
-    finishPreviewButton.hidden = data.total !== 0;
+    finishPreviewButton.hidden = spectator || data.total !== 0;
 
     const isMe = Boolean(data.authorId) && isCurrentSocket(data.authorId || '');
 
-    if (isMe || data.hasVoted) {
+    if (spectator || isMe || data.hasVoted) {
         authorNotice.innerText = isMe ? 'Das ist dein Video!' : `Video von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'none';
         votingWaitingBox.style.display = 'block';
@@ -394,7 +405,9 @@ function showVotingState(data: { videoUrl?: string; authorId?: string; authorNam
 
 socket.on('roomDataUpdate', (data: {
     playerCount: number;
-    players: { id: string; name: string; score: number; connected?: boolean }[];
+    players: { id: string; name: string; score: number; connected?: boolean; ready?: boolean }[];
+    spectators?: { id: string; name: string; connected: boolean }[];
+    spectatorCount?: number; startProblem?: string;
     hostId: string;
     gameState: string;
     currentRound: number;
@@ -413,6 +426,11 @@ socket.on('roomDataUpdate', (data: {
     lastResult?: { authorName: string; roundPoints: number };
 } & VariantSnapshot & PartySnapshot & { archiveAuthor?: string }) => {
     if (!currentRoomId || (data.roomId && data.roomId !== currentRoomId)) return;
+    spectator = data.role === 'spectator';
+    document.getElementById('spectatorRole')!.hidden = !spectator;
+    document.getElementById('spectatorCount')!.textContent = String(data.spectatorCount || 0);
+    const viewers = document.getElementById('spectatorNames')!;
+    viewers.hidden = !data.spectators?.length; viewers.textContent = `Zuschauer: ${(data.spectators || []).map(p => p.name).join(', ')}`;
     hfConnection.lock(!['LOBBY', 'GAME_OVER'].includes(data.gameState));
     const phaseKey = `${currentRoomId}:${data.currentRound}:${data.activeCreatorId}`;
     const phaseChanged = phaseKey !== currentPhaseKey;
@@ -434,7 +452,11 @@ socket.on('roomDataUpdate', (data: {
             ? 'Alle bereit? Starte die Partie, sobald genug Spieler im Raum sind.'
             : 'Warte darauf, dass der Host die Partie startet.';
         startGameButton.style.display = isHost ? 'block' : 'none';
-        startGameButton.disabled = !data.quota?.aiRoundLimit || Boolean(data.options?.sharedImage && !data.sharedImageUrl);
+        startGameButton.disabled = Boolean(data.startProblem) || !data.quota?.aiRoundLimit || Boolean(data.options?.sharedImage && !data.sharedImageUrl);
+        const ready = document.getElementById('readyInput') as HTMLInputElement;
+        document.getElementById('readyControl')!.hidden = spectator;
+        ready.checked = data.players.find(p => p.id === currentPlayerId)?.ready === true;
+        document.getElementById('readyStatus')!.textContent = data.options?.requireReady ? `${data.players.filter(p => p.ready && p.connected).length}/${data.players.length} bereit. ${data.startProblem || 'Alle Spieler sind bereit.'}` : 'Bereitschaft ist freiwillig.';
         roomRoundCountInput.disabled = !isHost || !data.quota?.aiRoundLimit;
         roomRoundCountInput.min = data.quota?.aiRoundLimit ? '1' : '0';
         roomRoundCountInput.max = String(data.quota?.aiRoundLimit || 0);
@@ -484,6 +506,8 @@ socket.on('errorMsg', (msg: string) => {
 startGameButton.addEventListener('click', () => {
     socket.emit('startGame', { roomId: currentRoomId || displayRoomCode.innerText });
 });
+document.getElementById('readyInput')!.addEventListener('change', event => socket.emit('setReady', { roomId: currentRoomId, ready: (event.target as HTMLInputElement).checked }));
+document.getElementById('rematchGameButton')!.addEventListener('click', () => socket.emit('rematchGame', { roomId: currentRoomId }));
 
 function updateHistoryButtons() {
     const loading = screenStats.hasAttribute('aria-busy');
@@ -823,6 +847,8 @@ function showGameOverState(data: GameOverData) {
     const isHost = isCurrentSocket(currentHostId);
     const quota = data.extensionQuota;
     const disconnected = data.players.some(player => player.connected === false);
+    const rematch = document.getElementById('rematchGameButton') as HTMLButtonElement;
+    rematch.hidden = !isHost; rematch.disabled = disconnected;
     extendGameButton.style.display = isHost ? 'block' : 'none';
     extendGameButton.disabled = extensionPending || !quota?.aiRoundLimit || disconnected;
     extendGameButton.innerText = extensionPending ? 'Bitte warten...' : 'Zusatzrunde spielen';

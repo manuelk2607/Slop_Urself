@@ -10,6 +10,7 @@ import { archiveStatus } from '../archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
+import { restoreIds } from '../../shared/history';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -30,7 +31,7 @@ export class ServiceDurableObject {
         const action = async () => {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
                 participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number;
-                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string };
+                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown };
             const quality = generationQuality(data.quality);
             if (path === '/hf/start') { const result = await this.hf.start(data.account, data.origin); await this.scheduleCleanup(Date.now() + 600_000); return json(result); }
             if (path === '/hf/device/start') { const result = await this.hf.startDevice(data.account, data.origin, data.nonce); await this.scheduleCleanup(result.expiresAt); return json(result); }
@@ -49,6 +50,11 @@ export class ServiceDurableObject {
                 return json({ ok: true });
             }
             if (path === '/video-trash/delete') return json(await deleteStoredHistory(getDatabase(this.env.DATABASE_URL), data.command, time => this.scheduleCleanup(time)));
+            if (path === '/video-trash/restore') {
+                const database = getDatabase(this.env.DATABASE_URL);
+                if (!database) throw new HistoryError('Die Statistik-Datenbank ist nicht eingerichtet.');
+                return json({ results: await database.restoreVideos(restoreIds(data.ids)) });
+            }
             if (path === '/security/rate') {
                 const buckets = await this.state.storage.get<RateBuckets>('rateBuckets') || {};
                 const retryAfter = takeRateLimit(buckets, data.key, data.rule);
@@ -72,7 +78,8 @@ export class ServiceDurableObject {
             }
             else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
             else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));
-            else if (path === '/profiles/create') return json({ profile: await this.profiles.create(data.name) || null });
+            else if (path === '/profiles/create') return json({ profile: await this.profiles.create(data.name, data.passwordHash) || null });
+            else if (path === '/profiles/password') return json({ profile: await this.profiles.setPassword(data.id, data.passwordHash!) || null });
             else if (path === '/profiles/find') return json({ profile: await this.profiles.find(data.name) || null });
             else if (path === '/profiles/list') return json({ profiles: await this.profiles.list() });
             else if (path === '/profiles/remove') return json({ profile: await this.profiles.remove(data.id) || null });

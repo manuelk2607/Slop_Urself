@@ -23,9 +23,12 @@ function sql(query: string, params: unknown[] = []) {
         return rows([]);
     }
     if (query.includes('with trashed as')) { deadline ??= Date.now() + Number(params[1]) * 1000; return rows([{ undoUntil: deadline }]); }
-    if (query.includes('with restored as')) {
-        if (deadline && deadline <= Date.now()) return rows([]);
-        deadline = null; return rows([{ id: video.id }]);
+    if (query.includes('with requested as')) {
+        const ids = typeof params[0] === 'string' ? String(params[0]).replace(/[{}"\s]/g, '').split(',') : params[0] as string[];
+        const expired = Boolean(deadline && deadline <= Date.now());
+        const result = ids.map(id => ({ id, status: id !== video.id ? 'not_found' : expired ? 'expired' : finalized ? 'unavailable' : 'restored' }));
+        if (result.some(row => row.status === 'restored')) deadline = null;
+        return rows(result);
     }
     if (query.includes('with purged as')) { finalized = true; video.videoUrl = ''; return rows([]); }
     if (query.includes('min(delete_after)')) return rows([{ deadline: finalized ? null : deadline }]);
@@ -69,6 +72,8 @@ try {
     assert.ok((await deletion.json()).undoUntil > Date.now() + 28_000);
     assert.equal(fileDeletes, 0);
     assert.equal((await request('/api/stats/videos/101/restore', 'POST')).status, 200);
+    const restored = await fetch(`${base}/api/stats/videos/restore`, { method: 'POST', headers: { origin: base, 'content-type': 'application/json' }, body: JSON.stringify({ ids: ['101', '101', '102'] }) });
+    assert.equal(restored.status, 200); assert.deepEqual(await restored.json(), { results: [{ id: '101', status: 'restored' }, { id: '102', status: 'not_found' }] });
     assert.equal((await (await request('/api/stats/videos')).json()).items.length, 1);
     deletion = await request('/api/stats/videos/101', 'DELETE'); assert.equal(deletion.status, 200);
     await runtime.unsafeEvictDurableObject('slopurself-test', 'ServiceDurableObject', { name: 'global' });

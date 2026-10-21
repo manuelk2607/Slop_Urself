@@ -105,7 +105,7 @@ export class HfConnections {
     async start(account: Account, requestOrigin: string) {
         const origin = hfOrigin(requestOrigin, this.config), client = hfClient(origin, this.config);
         const state = random(), verifier = random(), nonce = random();
-        const pending: Pending = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt }, verifier, nonce, origin, expiresAt: Date.now() + 10 * 60_000 };
+        const pending: Pending = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt, authVersion: account.authVersion }, verifier, nonce, origin, expiresAt: Date.now() + 10 * 60_000 };
         await this.save(`hf-pending:${state}`, pending);
         const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
         const url = new URL('https://huggingface.co/oauth/authorize');
@@ -163,7 +163,7 @@ export class HfConnections {
             || typeof result.user_code !== 'string' || !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(result.user_code)
             || !Number.isFinite(result.expires_in) || Number(result.expires_in) <= 0) throw new Error('Ungültige HF-Verbindungsantwort.');
         const nonce = random(), interval = Math.max(5, Number.isFinite(result.interval) ? Number(result.interval) : 5);
-        const pending: PendingDevice = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt }, origin, client,
+        const pending: PendingDevice = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt, authVersion: account.authVersion }, origin, client,
             deviceCode: result.device_code, userCode: result.user_code, verificationUrl: verification.href, interval, nextPollAt: Date.now() + interval * 1000,
             expiresAt: Date.now() + Math.min(600, Number(result.expires_in)) * 1000 };
         await this.save(`hf-device:${nonce}`, pending);

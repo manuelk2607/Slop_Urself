@@ -7,7 +7,7 @@ import { serveVideo, archiveEnabled } from '../../storage/archive';
 import { httpRateRule, httpRateScope, rateKey, RATE_MESSAGE } from '../../security/rate-limit';
 import { sanitizeRoomId } from '../../game/rules';
 import { service, json } from './runtime';
-import { historyResponse, historyListing, HistoryError } from '../statistics';
+import { historyResponse, historyListing, restoreHistoryResponse, HistoryError } from '../statistics';
 import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
@@ -68,6 +68,8 @@ export default {
         }
 
         if (url.pathname === '/api/stats/videos' || url.pathname === '/api/stats/rooms') return historyListing(request, auth, getDatabase(env.DATABASE_URL));
+
+        if (url.pathname === '/api/stats/videos/restore') return restoreHistoryResponse(request, auth, async ids => (await service(env, '/video-trash/restore', { ids })).results);
 
         if (url.pathname.startsWith('/api/stats/rooms/') || url.pathname.startsWith('/api/stats/videos/')) return historyResponse(request, auth, async command => {
             const room = env.ROOMS.get(env.ROOMS.idFromName(command.code));

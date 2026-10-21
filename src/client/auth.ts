@@ -6,12 +6,15 @@ interface AuthUI {
     refreshToken(token: string): void;
 }
 let refresh: (() => Promise<void>) | undefined;
-class SessionError extends Error { constructor(message: string, readonly status: number) { super(message); } }
+class SessionError extends Error { constructor(message: string, readonly status: number, readonly code?: string) { super(message); } }
 export async function refreshAccount() { await refresh?.(); }
 
 export async function initializeAccount(ui: AuthUI) {
     const form = document.getElementById('authForm') as HTMLFormElement;
     const username = document.getElementById('authUsername') as HTMLInputElement;
+    const password = document.getElementById('authPassword') as HTMLInputElement;
+    const passwordSection = document.getElementById('authPasswordSection') as HTMLDetailsElement;
+    passwordSection.addEventListener('toggle', () => { if (!passwordSection.open) password.value = ''; });
     const submit = document.getElementById('authSubmit') as HTMLButtonElement;
     const existing = document.getElementById('existingNameButton') as HTMLButtonElement;
     const submitLabel = submit.innerText;
@@ -21,13 +24,14 @@ export async function initializeAccount(ui: AuthUI) {
     let ready = false;
     let pending: Promise<void> | undefined;
     async function session(mode: 'create' | 'login' | 'refresh') {
-        const response = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode }), signal: AbortSignal.timeout(15_000) });
-        const result = await response.json() as { account?: Account; token?: string; error?: string };
-        if (!response.ok || !result.account || !result.token) throw new SessionError(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`, response.status);
+        const response = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode, ...(mode !== 'refresh' && password.value ? { password: password.value } : {}) }), signal: AbortSignal.timeout(15_000) });
+        const result = await response.json() as { account?: Account; token?: string; error?: string; code?: string };
+        if (!response.ok || !result.account || !result.token) throw new SessionError(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`, response.status, result.code);
         ui.refreshToken(result.token);
         return result.account;
     }
     async function signedIn(account: Account) {
+        password.value = ''; passwordSection.open = false;
         ready = true; bar.hidden = false;
         document.getElementById('accountName')!.innerText = account.name;
         username.value = account.name;
@@ -40,7 +44,10 @@ export async function initializeAccount(ui: AuthUI) {
         if (mode === 'create') submit.innerText = 'Benutzer wird erstellt...';
         else existing.innerText = 'Anmeldung l\u00e4uft...';
         try { await signedIn(await session(mode)); }
-        catch (reason) { error.innerText = reason instanceof Error ? reason.message : `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`; }
+        catch (reason) {
+            if (reason instanceof SessionError && reason.code === 'password_required') { passwordSection.open = true; password.focus(); }
+            error.innerText = reason instanceof Error ? reason.message : `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`;
+        }
         finally {
             submit.disabled = existing.disabled = false;
             submit.innerText = submitLabel; existing.innerText = existingLabel;

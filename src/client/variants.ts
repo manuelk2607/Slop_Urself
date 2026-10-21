@@ -4,7 +4,7 @@ import { prepareImage } from './images';
 
 interface Guess { playerId: string; name: string; text: string; correct?: boolean; points: number }
 export interface VariantSnapshot {
-    roomId?: string; hostId: string; activeCreatorId?: string; gameState: string; videoNumber?: number;
+    roomId?: string; hostId: string; activeCreatorId?: string; gameState: string; videoNumber?: number; role?: string;
     options?: GameOptions; sharedImageUrl?: string; ownTask?: string; ownGuess?: string; task?: string;
     reviewPrompt?: string; reviewGuesses?: Guess[]; votedPlayerIds?: string[];
     reveal?: { prompt: string; task?: string; guesses: Guess[] };
@@ -17,6 +17,7 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
     const shared = element<HTMLInputElement>('sharedImageOption'), tasks = element<HTMLInputElement>('secretTasksOption'), guessing = element<HTMLInputElement>('guessPromptOption');
     const quality = element<HTMLSelectElement>('generationQuality'), imageInput = element<HTMLInputElement>('sharedImageInput');
     const mode = element<HTMLSelectElement>('gameMode'), timer = element<HTMLSelectElement>('phaseSeconds');
+    const requireReady = element<HTMLInputElement>('requireReadyOption');
     const imageButton = element<HTMLButtonElement>('chooseSharedImage'), imageStatus = element('sharedImageStatus');
     imageButton.prepend(createElement(ImagePlus, { width: 18, height: 18, 'aria-hidden': 'true' }));
     classic.append(createElement(RotateCcw, { width: 18, height: 18, 'aria-hidden': 'true' }));
@@ -25,8 +26,8 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         settings.open = false;
         emit('setGameOptions', { options: pendingOptions });
     });
-    for (const control of [shared, tasks, guessing, quality, mode, timer]) control.addEventListener('change', () => {
-        pendingOptions = gameOptions({ sharedImage: shared.checked, secretTasks: tasks.checked, guessPrompt: guessing.checked, quality: quality.value, mode: mode.value, phaseSeconds: Number(timer.value) });
+    for (const control of [shared, tasks, guessing, quality, mode, timer, requireReady]) control.addEventListener('change', () => {
+        pendingOptions = gameOptions({ sharedImage: shared.checked, secretTasks: tasks.checked, guessPrompt: guessing.checked, requireReady: requireReady.checked, quality: quality.value, mode: mode.value, phaseSeconds: Number(timer.value) });
         emit('setGameOptions', { options: pendingOptions });
     });
     imageButton.addEventListener('click', () => imageInput.click());
@@ -81,6 +82,7 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
             element<HTMLInputElement>('taskRating').value = '3'; element<HTMLInputElement>('funRating').value = '3'; rating(); reviewKey = '';
         }
         controls.disabled = !host || data.gameState !== 'LOBBY';
+        requireReady.disabled = controls.disabled; requireReady.checked = options.requireReady;
         quality.disabled = controls.disabled || options.mode !== 'classic'; mode.disabled = controls.disabled; timer.disabled = controls.disabled;
         settings.hidden = options.mode !== 'classic';
         const activeOptions = Number(options.sharedImage) + Number(options.secretTasks) + Number(options.guessPrompt);
@@ -107,7 +109,7 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         if (sharedUrl && common.getAttribute('src') !== sharedUrl) common.src = sharedUrl;
         element('secretTask').hidden = !data.ownTask; element('secretTask').textContent = data.ownTask ? `Dein geheimer Auftrag: ${data.ownTask}` : '';
         element('votingTask').hidden = !data.task; element('votingTask').textContent = data.task ? `Auftrag: ${data.task}` : '';
-        element('guessEntry').hidden = !options.guessPrompt || creator || data.gameState !== 'VOTING' || Boolean(data.votedPlayerIds?.includes(playerId()));
+        element('guessEntry').hidden = data.role === 'spectator' || !options.guessPrompt || creator || data.gameState !== 'VOTING' || Boolean(data.votedPlayerIds?.includes(playerId()));
         if (data.ownGuess) element<HTMLInputElement>('guessInput').value = data.ownGuess;
         element('taskVoteControls').hidden = !options.secretTasks;
         document.querySelector<HTMLElement>('.vote-buttons')!.hidden = options.secretTasks;
@@ -130,6 +132,7 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
             }
         }
         reveal('roundReveal', data.reveal); reveal('finalReveal', data.reveal);
+        if (data.role === 'spectator') { element('votingActionBox').style.display = 'none'; element('guessReview').hidden = true; }
     }
     return { render, vote, shared: () => gameOptions(snapshot?.options).sharedImage };
 }

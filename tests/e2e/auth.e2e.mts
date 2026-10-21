@@ -19,8 +19,8 @@ try {
     assert.equal(await page.locator('#authSubmit').innerText(), 'Neuen Benutzer registrieren');
     assert.equal(await page.locator('#existingNameButton').innerText(), 'Vorhandenen Benutzer anmelden');
     assert.match(await page.locator('#authHint').innerText(), /Neu dabei.*Schon gespielt/);
-    assert.equal(await page.locator('#authForm input').count(), 1);
-    assert.equal(await page.locator('#screenAuth input[type=password]').count(), 0);
+    assert.equal(await page.locator('#authForm input[type=text]').count(), 1);
+    assert.equal(await page.locator('#authPassword').isVisible(), false);
     assert.equal((await context.request.get(`${base}/api/session`)).status(), 401);
     await page.locator('#authUsername').fill(username);
     await page.setViewportSize({ width: 320, height: 740 });

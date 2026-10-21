@@ -1,14 +1,14 @@
 import { generationQuality, type GenerationQuality } from '../ai/providers';
 
 export type GameMode = 'classic' | 'archive-vote' | 'archive-guess';
-export interface GameOptions { sharedImage: boolean; secretTasks: boolean; guessPrompt: boolean; quality: GenerationQuality; mode: GameMode; phaseSeconds: number }
+export interface GameOptions { sharedImage: boolean; secretTasks: boolean; guessPrompt: boolean; requireReady: boolean; quality: GenerationQuality; mode: GameMode; phaseSeconds: number }
 export function gameOptions(value?: unknown): GameOptions {
     const data = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-    for (const key of ['sharedImage', 'secretTasks', 'guessPrompt']) if (data[key] !== undefined && typeof data[key] !== 'boolean') throw new Error('Ungültige Spielvariante.');
+    for (const key of ['sharedImage', 'secretTasks', 'guessPrompt', 'requireReady']) if (data[key] !== undefined && typeof data[key] !== 'boolean') throw new Error('Ungültige Spielvariante.');
     const mode = data.mode ?? 'classic', phaseSeconds = data.phaseSeconds ?? 0;
     if (!['classic', 'archive-vote', 'archive-guess'].includes(mode as string)) throw new Error('Ungültiger Spielmodus.');
     if (![0, 60, 120, 180, 300].includes(phaseSeconds as number)) throw new Error('Ungültiges Zeitlimit.');
-    return { sharedImage: mode === 'classic' && data.sharedImage === true, secretTasks: mode === 'classic' && data.secretTasks === true,
+    return { requireReady: data.requireReady === true, sharedImage: mode === 'classic' && data.sharedImage === true, secretTasks: mode === 'classic' && data.secretTasks === true,
         guessPrompt: mode === 'archive-guess' || (mode === 'classic' && data.guessPrompt === true), quality: generationQuality(data.quality), mode: mode as GameMode, phaseSeconds: phaseSeconds as number };
 }
 

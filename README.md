@@ -72,7 +72,7 @@ Schlüssellänge. Ein Austausch eines bereits verwendeten Schlüssels meldet
 Browser ab, löscht aber keine Profile oder Statistiken.
 Die Assets kommen ausschließlich aus cloudflare/public; .env-Dateien werden
 nicht mit hochgeladen. Der Link für Freunde lautet:
-https://slopurself.manuelk2607.workers.dev. `npm run invite` zeigt denselben
+https://slopurself.maki26.workers.dev. `npm run invite` zeigt denselben
 Spiellink. Der Host teilt zusätzlich den vierstelligen Raumcode.
 
 Alle Spielansichten liegen unter `/`. Cloudflare verwendet keinen SPA-Fallback:
@@ -88,22 +88,71 @@ getrennte Aktionen: "Neuen Benutzer registrieren" für neue Namen und
 Neue Namen werden in user_profiles gespeichert; ein eindeutiger Datenbankindex
 verhindert doppelte Namen auch bei gleichzeitiger Erstellung. Groß-/Kleinschreibung,
 Leerzeichen am Rand und gleichwertige Unicode-Schreibweisen zählen als derselbe Name.
-Die Anmeldung setzt ein bestehendes Profil ohne Passwort fort. Ein unbekannter
+Offene Profile lassen sich weiterhin ohne Passwort anmelden. Bei der Registrierung
+kann freiwillig ein Passwort (12 bis 200 Zeichen) im eingeklappten Passwortbereich
+gesetzt werden. Geschützte Profile verlangen dieses Passwort bei der Anmeldung.
+Ein unbekannter
 Name wird dabei nicht automatisch registriert; die Fehlermeldung verweist auf
 die Registrierung. Bei einem vergebenen Namen wird auf die Anmeldung verwiesen.
 Die Lobby fragt nicht erneut nach einem Namen.
 
 Eine signierte HTTP-only-Browsersitzung bleibt für 30 Tage erhalten und wird
 erneuert. AUTH_COOKIE_SECRET wird dafür als Cloudflare-Secret benötigt.
-Neon Auth, Mail-Adressen, Passwörter und ein zusätzlicher Spiel-Zugangscode
+Neon Auth, Mail-Adressen und ein zusätzlicher Spiel-Zugangscode
 werden nicht mehr verwendet. Ohne Datenbank sind lokale Testprofile nur im
 Arbeitsspeicher vorhanden; mit Neon bleiben Profil und Statistik-ID gespeichert.
 
-Das ist bewusst keine geschützte Anmeldung: Jeder, der einen bestehenden
-Benutzernamen kennt, kann dieses Profil verwenden. Die Seite ist damit nicht
+Ohne freiwilligen Passwortschutz ist ein Name bewusst kein Identitätsnachweis:
+Jeder, der den Namen kennt, kann ein offenes Profil verwenden. Die Seite ist nicht
 auf Freunde beschränkt. Vorhandene Neon-Auth-Daten und Spielhistorie werden
 nicht gelöscht. AUTH_MODE=disabled ist nur mit AI_PROVIDER=mock wirksam und
 dient ausschließlich lokalen Tests.
+
+Passwörter werden serverseitig mit PBKDF2-SHA256, 100.000 Iterationen und einem
+zufälligen 16-Byte-Salt gehasht. Bestehende Profile können ausschließlich über die
+separat freigeschaltete Benutzerverwaltung geschützt oder zurückgesetzt werden.
+Der Schlüsselschalter am jeweiligen Benutzer öffnet einen Dialog mit exakter
+Namensbestätigung. Eine Anmeldung unter dem Besitzernamen genügt nicht.
+Passwortänderungen widerrufen alte HTTP-Sitzungen und alte WebSocket-Befehle;
+betroffene Browser müssen sich neu anmelden. Auch eine alte Admin-Freigabe des
+Besitzers wird ungültig. SQL ergänzt ausschließlich `password_hash` und
+`auth_version`; vorhandene Profil-IDs und Spieldaten bleiben erhalten.
+
+### Bereitschaft, Zuschauer und Revanche
+
+Bis zu zehn Spieler und zusätzlich zwanzig Zuschauer können einen Raum nutzen.
+Neben Beitreten gibt es die Aktion **Mit diesem Code zuschauen**, auch während
+einer laufenden Partie. Zuschauer erhalten öffentliche Spielstände und Videos,
+erstellen und bewerten aber nicht und benötigen kein GPU-Budget. Private Aufgaben,
+Rateeingaben und Zugangsdaten werden nicht übertragen. Reload stellt ihre Rolle
+wieder her; verlässt der letzte Spieler den Raum, kehren Zuschauer zum Einstieg zurück.
+
+**Ich bin bereit** zeigt die persönliche Bereitschaft. Die Host-Option
+**Nur starten, wenn alle bereit sind** ist standardmäßig aus. Wenn aktiviert,
+prüft der Server vor dem Start und nach Budgetabfragen alle Spieler erneut.
+Änderungen an Besetzung, Rundenzahl, Optionen oder gemeinsamem Bild setzen die
+Bereitschaft zurück; ein Verbindungsabbruch entfernt die eigene Bereitschaft.
+
+**Revanche mit dieser Gruppe** am Endbildschirm ist nur für den Host verfügbar,
+wenn alle Spieler verbunden sind. Ein neuer Raum übernimmt die verbundenen
+Spieler und Zuschauer sowie die Optionen, aber keine Punkte, Videos oder Aufgaben.
+Sitzungsschlüssel und Raumcode sind neu. Ein gemeinsames Ausgangsbild muss erneut
+ausgewählt werden, das Budget wird neu geprüft. Die alte Partie bleibt in der
+Statistik. Revanche und Zusatzrunde sind verschiedene Aktionen: Eine Zusatzrunde
+setzt die bestehende Partie und Punktzahl fort.
+
+### Videos gesammelt wiederherstellen
+
+Rückgängig bleibt unmittelbar nach jeder Videolöschung für 30 Sekunden verfügbar,
+auch nach Reload im selben Tab. Die Auswahl wird über
+`POST /api/stats/videos/restore` mit `{ "ids": ["123", "124"] }` übertragen:
+maximal 200 positive PostgreSQL-bigint-Strings je Anfrage, dedupliziert,
+maximal 8 KiB Anfragekörper, Same-Origin und angemeldete Sitzung erforderlich.
+Größere Auswahlen starten mehrere Pakete gleichzeitig. Ein SQL-Statement prüft
+die individuellen Fristen gemeinsam am Anweisungsbeginn und verknüpft vorhandene
+Runden wieder. Die Antwort enthält pro ID `restored`, `expired`, `not_found` oder
+`unavailable`. Wiederholungen sind idempotent; temporäre Fehler bleiben bis zur
+jeweiligen Frist erneut versuchbar. Gelöschte Räume werden nicht neu angelegt.
 
 ## Kostenlose KI
 
@@ -306,9 +355,9 @@ je Video behauptet.
 
 ## Anfragebegrenzung
 
-Der Einstieg bleibt ohne Passwort, per Benutzername und Raumcode. Der Link
-allein ist kein privater Zugangsschutz; bekannte Namen können weiterhin
-übernommen werden. Schnelle Mehrfachanfragen werden serverseitig begrenzt:
+Der Einstieg bleibt per Benutzername und Raumcode möglich; Profilpasswörter sind
+freiwillig. Der Link allein ist kein privater Zugangsschutz; bekannte offene
+Namen können weiterhin übernommen werden. Schnelle Mehrfachanfragen werden serverseitig begrenzt:
 60 Namensaktionen und 120 Konfigurations-/Statistikanfragen je Minute und IP,
 120 Spielnachrichten je Minute und Spieler. HTTP-Antworten bei Überschreitung
 enthalten Status 429 und `Retry-After`. IPs liegen in Cloudflare-Rate-Buckets
@@ -378,7 +427,9 @@ npm audit
 ```
 
 `.github/workflows/ci.yml` führt bei Push und Pull Request Build, Unit-Tests
-und Browser-Tests in Chromium und WebKit aus. `test:ci` startet und beendet
+und Browser-Tests in getrennten Chromium-/WebKit-Matrixjobs auf Node 24 aus:
+`fail-fast: false`, jeweils 25 Minuten, eigene Browserinstallation und eindeutige
+Fehlerartefakte. `test:ci` startet und beendet
 isolierte Node-Mock-Server und die Cloudflare-Laufzeit (workerd/Miniflare) selbst.
 Beide Backends durchlaufen Mehrspieler-, Video- und Statistiktests. Ein zusätzlicher
 Runtime-Test prüft Byte-Ranges, Downloads und den echten 30-Sekunden-Löschalarm
@@ -401,6 +452,19 @@ Der Browsertest prüft die automatische Cloudflare-Wiederverbindung zusätzlich.
 `npm run test:db` nutzt die Neon-URL aus .env.local, arbeitet ausschließlich
 mit temporären Tabellen auf einer direkten (ungepoolten) Verbindung und
 verändert keine vorhandenen Spieldaten.
+
+Die neuen Passwort- und Sammelwiederherstellungsprüfungen können ausschließlich
+gegen eine lokale PostgreSQL-17-Instanz ausgeführt werden:
+
+```bash
+TEST_DATABASE_URL=postgresql://BENUTZER:PASSWORT@127.0.0.1:55437/postgres node --import tsx tests/integration/features-db.mts
+```
+
+Der Test verwendet temporäre Tabellen und verweigert entfernte Hosts. Unter
+anderem verzögert ein Trigger die SQL-Ausführung über die individuellen
+Löschfristen hinaus und prüft dennoch den gemeinsamen Anweisungsbeginn.
+`participants.e2e.mts` prüft Bereitschaft, Zuschauer und Revanche mit Mock-KI;
+`undo-batch.e2e.mts` prüft gleichzeitig gestartete 200-ID-Pakete und erneute Versuche.
 
 `node --import tsx tests/e2e/startup.e2e.mts http://127.0.0.1:3000` prüft
 Ladefehler, die Startseite ohne Rundenauswahl und die begrenzte Rundenauswahl

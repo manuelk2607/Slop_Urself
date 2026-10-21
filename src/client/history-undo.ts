@@ -1,3 +1,4 @@
+import { RESTORE_BATCH_SIZE, type RestoreResult } from '../shared/history';
 interface UndoVideo { url: string; undoUntil: number }
 const STORAGE_KEY = 'slopurself-video-undo';
 
@@ -32,14 +33,20 @@ export function historyUndo(refresh: () => Promise<void>) {
         busy = true; update(); error.hidden = true;
         const reasons = new Set<string>();
         try {
-            for (const item of [...pending.values()]) {
+            const items = [...pending.values()];
+            const batches = Array.from({ length: Math.ceil(items.length / RESTORE_BATCH_SIZE) }, (_, i) => items.slice(i * RESTORE_BATCH_SIZE, (i + 1) * RESTORE_BATCH_SIZE));
+            await Promise.all(batches.map(async batch => {
                 try {
-                    const response = await fetch(`${item.url}/restore`, { method: 'POST', signal: AbortSignal.timeout(15_000) });
-                    const data = await response.json() as { error?: string };
-                    if (response.ok || response.status === 404 || response.status === 410) pending.delete(item.url);
+                    const response = await fetch('/api/stats/videos/restore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: batch.map(item => item.url.split('/').pop()) }), signal: AbortSignal.timeout(15_000) });
+                    const data = await response.json() as { error?: string; results?: RestoreResult[] };
                     if (!response.ok) throw new Error(data.error || 'Das Video konnte nicht wiederhergestellt werden.');
+                    for (const result of data.results || []) {
+                        const url = `/api/stats/videos/${result.id}`;
+                        if (batch.some(item => item.url === url) && ['restored', 'expired', 'not_found', 'unavailable'].includes(result.status)) pending.delete(url);
+                        if (result.status === 'expired') reasons.add('Bei einigen Videos ist die Frist bereits abgelaufen.');
+                    }
                 } catch (reason) { reasons.add(reason instanceof Error ? reason.message : 'Wiederherstellen fehlgeschlagen.'); }
-            }
+            }));
             await refresh();
             if (reasons.size) { error.textContent = [...reasons].join(' '); error.hidden = false; }
         } finally { busy = false; update(); }

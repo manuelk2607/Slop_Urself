@@ -29,6 +29,15 @@ try {
     await page.clock.install();
     await page.route('**/api/stats**', async route => {
         const url = new URL(route.request().url());
+        if (url.pathname === '/api/stats/videos/restore') {
+            const results = route.request().postDataJSON().ids.map((id: string) => {
+                const video = videos.find(item => item.id === id);
+                if (!video) return { id, status: 'not_found' };
+                if (video.deletedUntil && video.deletedUntil <= now()) return { id, status: 'expired' };
+                video.deletedUntil = 0; return { id, status: 'restored' };
+            });
+            await route.fulfill({ json: { results } }); return;
+        }
         const videoMatch = /^\/api\/stats\/videos\/(\d+)(\/restore)?$/.exec(url.pathname);
         if (videoMatch) {
             const video = videos.find(video => video.id === videoMatch[1]);

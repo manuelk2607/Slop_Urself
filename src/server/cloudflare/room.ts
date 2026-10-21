@@ -13,10 +13,11 @@ import { logAiEvent } from '../../ai/telemetry';
 import { archiveEnabled } from '../../storage/archive';
 import { takeRateLimit, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
 import { type QuotaCapacity } from '../../ai/quota';
-import { type Room as RoomState, type Player, activeCreator, playerForConnection, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses } from '../../game/rules';
+import { type Room as RoomState, type Player, activeCreator, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses } from '../../game/rules';
 import { service } from './runtime';
 import { deleteStoredHistory, historyVideo, HistoryError, historyJson, type HistoryDeletion } from '../statistics';
 import type { DurableObjectState, CloudflareWebSocket, ConnectionMeta, Env, PendingRoomWrite } from './types';
+import { participants, participantForConnection, isSpectator, resetReady, startProblem, checkJoin, prepareRematch } from '../../game/participants';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
 
@@ -30,6 +31,7 @@ export class RoomDurableObject {
     private quotaReleases: { code: string; jobId: string }[] = [];
     private aiJobs: Record<string, { code: string; job: NonNullable<RoomState['generationJob']>; retryAt?: number }> = {};
     private messageBuckets: RateBuckets = {};
+    private snapshotChecks = new Set<CloudflareWebSocket>();
 
     constructor(private state: DurableObjectState, private env: Env) {
         state.blockConcurrencyWhile(async () => {
@@ -40,11 +42,11 @@ export class RoomDurableObject {
             for (const socket of state.getWebSockets()) this.sockets.set(socket, socket.deserializeAttachment());
             if (this.room) {
                 this.roomCode = this.room.code;
-                for (const player of this.room.players) {
+                for (const player of participants(this.room)) {
                     const connection = [...this.sockets.values()].find(meta => meta.playerId === player.id);
                     player.connected = Boolean(connection);
                     if (connection) player.connectionId = connection.socketId;
-                    else player.disconnectedAt ??= Date.now();
+                    else { player.disconnectedAt ??= Date.now(); player.ready = false; }
                 }
                 if (this.room.state === 'GENERATING') {
                     this.room.generationJob ||= this.aiJobs[this.room.generationId || '']?.job;
@@ -67,10 +69,24 @@ export class RoomDurableObject {
     }
 
     async fetch(request: Request): Promise<Response> {
+        if (request.url === 'https://internal/rematch' && request.method === 'POST') return this.enqueue(async () => {
+            const { requestId, room } = await request.json() as { requestId: string; room: RoomState };
+            if (this.room?.rematchSource === requestId) return historyJson({ ok: true });
+            if (this.room || await getDatabase(this.env.DATABASE_URL)?.roomExists(room.code)) return historyJson({ error: 'Raumcode belegt.' }, 409);
+            if (!sanitizeRoomId(room.code) || !requestId || room.state !== 'LOBBY') return historyJson({}, 400);
+            room.quota = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive() || [], room.players.length)
+                : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
+            room.maxRounds = room.quota.aiRoundLimit ? maxRounds(room.maxRounds || 1, room.quota.aiRoundLimit) : 0;
+            this.room = room; this.roomCode = room.code;
+            // The initialization identity and room must survive together, including ambiguous responses.
+            room.rematchSource = requestId;
+            await this.saveRoom(); await this.scheduleAlarm();
+            return historyJson({ ok: true });
+        });
         if (/^\/api\/rooms\/[A-Z0-9]{4}\/image$/.test(new URL(request.url).pathname)) {
             try {
                 const account = await requestAccount(request, cloudflareAuth(this.env));
-                if (!this.room || (!authDisabled(this.env) && !this.room.players.some(player => player.accountId === account?.id))) return new Response(null, { status: 403 });
+                if (!this.room || (!authDisabled(this.env) && !participants(this.room).some(player => player.accountId === account?.id))) return new Response(null, { status: 403 });
                 return sharedImageResponse(request, this.state.storage, this.room.sharedImage);
             } catch { return new Response(null, { status: 401 }); }
         }
@@ -131,7 +147,7 @@ export class RoomDurableObject {
                 if (!authDisabled(this.env) && (!meta.account || meta.account.expiresAt < Date.now())) { this.send(socket, 'authExpired'); return; }
                 if (!authDisabled(this.env) && !await accountIsCurrent(meta.account!, cloudflareAuth(this.env))) {
                     this.send(socket, 'authExpired');
-                    const player = this.room && playerForConnection(this.room, meta.socketId);
+                    const player = this.room && participantForConnection(this.room, meta.socketId);
                     if (player) await this.leaveRoom(socket, player); else socket.close(4003, 'Account deleted');
                     return;
                 }
@@ -139,9 +155,11 @@ export class RoomDurableObject {
                 else if (message.type === 'joinRoom') await this.joinRoom(socket, meta, payload);
                 else if (message.type === 'resumeRoom') await this.resumeRoom(socket, meta, payload);
                 else {
-                    const player = this.room && playerForConnection(this.room, meta.socketId);
+                    const player = this.room && participantForConnection(this.room, meta.socketId);
                     if (!player || meta.playerId !== player.id) throw new Error('Bitte verbinde dich zuerst mit dem Raum.');
                     if (message.type === 'leaveRoom') await this.leaveRoom(socket, player);
+                    else if (isSpectator(this.room!, player)) throw new Error('Als Zuschauer kannst du diese Aktion nicht ausführen.');
+                    else if (message.type === 'setReady' && this.room!.state === 'LOBBY' && typeof payload.ready === 'boolean') { player.ready = payload.ready; await this.saveRoom(); this.broadcastRoomUpdate(); }
                     else if (message.type === 'refreshQuota') await this.refreshLobbyQuota();
                     else if (message.type === 'setRoundCount') await this.setRoundCount(player, payload);
                     else if (message.type === 'setGameOptions') await this.setGameOptions(player, payload);
@@ -155,6 +173,7 @@ export class RoomDurableObject {
                     else if (message.type === 'startNextRound') await this.startNextRound(player);
                     else if (message.type === 'closePhase' && this.room!.hostId === player.id && payload.phaseKey === this.room!.phaseKey) await this.endPhase();
                     else if (message.type === 'extendGame') await this.extendGame(player, payload);
+                    else if (message.type === 'rematchGame') await this.rematchGame(player);
                 }
             } catch (error) {
                 this.send(socket, 'errorMsg', error instanceof Error ? error.message : 'Nachricht konnte nicht verarbeitet werden.');
@@ -169,7 +188,7 @@ export class RoomDurableObject {
         meta.playerId = player.id;
         meta.sessionId = player.sessionId;
         player.connectionId = meta.socketId;
-        player.hfConnectionId = meta.account?.hfConnectionId;
+        player.hfConnectionId = this.room && isSpectator(this.room, player) ? undefined : meta.account?.hfConnectionId;
         socket.serializeAttachment(meta);
     }
 
@@ -202,26 +221,28 @@ export class RoomDurableObject {
         const room = this.room;
         if (meta.playerId) throw new Error('Du bist bereits in diesem Raum.');
         if (!room) throw new Error('Raum wurde nicht gefunden.');
-        if (room.state !== 'LOBBY') throw new Error('Dieses Spiel wurde bereits gestartet.');
+        const spectator = payload.role === 'spectator';
+        if (room.rematch?.initialized) throw new Error('Bitte verwende den neuen Raumcode.');
         const name = meta.account?.name || sanitizeUsername(payload.username);
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
-        if (room.players.some(p => p.name.toLowerCase() === name.toLowerCase())) throw new Error('Dieser Spielername ist im Raum bereits vergeben.');
-        if (meta.account && room.players.some(p => p.accountId === meta.account!.id)) throw new Error('Dieses Konto ist bereits im Raum.');
+        checkJoin(room, name, meta.account?.id, spectator);
         const player: Player = { id: meta.socketId, accountId: meta.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || crypto.randomUUID(), name, score: 0, connected: true };
-        if (room.players.some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
-        room.players.push(player);
+        if (participants(room).some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
+        if (spectator) (room.spectators ??= []).push(player);
+        else { room.players.push(player); resetReady(room); }
         this.bind(socket, meta, player);
         await this.saveRoom();
         this.send(socket, 'joinedSuccess', { roomId: room.code, sessionId: player.sessionId, playerId: player.id });
-        await this.refreshLobbyQuota();
+        if (!spectator) await this.refreshLobbyQuota();
         this.broadcastRoomUpdate();
-        await this.persistMembers();
+        if (!spectator) await this.persistMembers();
     }
 
     private async resumeRoom(socket: CloudflareWebSocket, meta: ConnectionMeta, payload: Record<string, unknown>) {
         const room = this.room;
-        const player = room?.players.find(p => p.sessionId === sanitizeSessionId(payload.sessionId));
+        const player = room && participants(room).find(p => p.sessionId === sanitizeSessionId(payload.sessionId));
         if (!room || !player || (!authDisabled(this.env) && player.accountId !== meta.account?.id)) { this.send(socket, 'resumeFailed'); return; }
+        if (room.rematch?.initialized && room.rematch.transfers[player.id]) { this.send(socket, 'roomTransfer', room.rematch.transfers[player.id]); return; }
         for (const [old, connection] of this.sockets) {
             if (old !== socket && connection.playerId === player.id) {
                 this.sockets.delete(old);
@@ -242,18 +263,20 @@ export class RoomDurableObject {
         if (!this.room) return;
         const room = this.room;
         const wasOver = room.state === 'GAME_OVER';
-        const skipped = removePlayer(room, player.id);
+        const viewer = isSpectator(room, player);
+        const skipped = viewer ? 0 : removePlayer(room, player.id);
+        if (viewer) room.spectators = room.spectators?.filter(p => p.id !== player.id);
         if (room.players.length) playArchiveVideo(room);
         if (skipped) await service(this.env, '/quota/drop', { code: room.code, generations: skipped, playerId: player.id });
         this.sockets.delete(socket);
-        if (!this.room.players.length) { await service(this.env, '/quota/release', { code: this.roomCode }); this.room = null; }
+        if (!this.room.players.length) { this.ejectSpectators(room); await service(this.env, '/quota/release', { code: this.roomCode }); this.room = null; }
         await this.saveRoom();
         this.send(socket, 'leftRoom');
         socket.close(1000, 'Left room');
         this.broadcast('roomNotice', `${player.name} hat das Spiel verlassen.`);
         if (this.room && !wasOver && room.state === 'GAME_OVER') await this.queueFinal();
         await this.checkVotingComplete();
-        await this.refreshLobbyQuota();
+        if (!viewer) await this.refreshLobbyQuota();
         this.broadcastRoomUpdate();
         await this.scheduleAlarm();
     }
@@ -261,12 +284,14 @@ export class RoomDurableObject {
     private async startGame(player: Player) {
         const room = this.room!;
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
-        if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
+        if (startProblem(room)) throw new Error(startProblem(room));
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
         if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
         if (isArchiveGame(room)) prepareArchive(room, await getDatabase(this.env.DATABASE_URL)?.playableArchive() || []);
         else await service(this.env, '/quota/reserve', { code: room.code, rounds: room.maxRounds, players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players });
+        const disconnected = room.players.some(p => ![...this.sockets].some(([socket, meta]) => meta.playerId === p.id && socket.readyState === 1));
+        if (startProblem(room) || disconnected) { await service(this.env, '/quota/release', { code: room.code }); throw new Error(startProblem(room) || 'Warte, bis alle Spieler verbunden sind.'); }
         startRounds(room);
         playArchiveVideo(room);
         await this.saveRoom();
@@ -282,7 +307,9 @@ export class RoomDurableObject {
         if (room.state === 'GAME_OVER') room.extensionQuota = capacity;
         else {
             room.quota = capacity;
-            room.maxRounds = capacity.aiRoundLimit ? maxRounds(room.maxRounds || 1, capacity.aiRoundLimit) : 0;
+            const rounds = capacity.aiRoundLimit ? maxRounds(room.maxRounds || 1, capacity.aiRoundLimit) : 0;
+            if (rounds !== room.maxRounds) resetReady(room);
+            room.maxRounds = rounds;
         }
         await this.saveRoom();
         this.broadcastRoomUpdate();
@@ -293,7 +320,7 @@ export class RoomDurableObject {
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
         await this.refreshLobbyQuota();
         if (!room.quota?.aiRoundLimit) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
-        room.maxRounds = maxRounds(payload.rounds, room.quota.aiRoundLimit);
+        room.maxRounds = maxRounds(payload.rounds, room.quota.aiRoundLimit); resetReady(room);
         await this.saveRoom();
         this.broadcastRoomUpdate();
         await this.persistMembers();
@@ -302,7 +329,7 @@ export class RoomDurableObject {
     private async setGameOptions(player: Player, payload: Record<string, unknown>) {
         const room = this.room!;
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
-        room.options = gameOptions(payload.options);
+        room.options = gameOptions(payload.options); resetReady(room);
         await this.refreshLobbyQuota(); await this.persistMembers();
     }
 
@@ -311,7 +338,7 @@ export class RoomDurableObject {
         const recovering = room.state === 'IDLE' && gameOptions(room.options).sharedImage && (!room.sharedImage || room.sharedImage.expiresAt <= Date.now());
         if ((!['LOBBY', 'GAME_OVER'].includes(room.state) && !recovering) || room.hostId !== player.id) return;
         const image = await writeSharedImage(this.state.storage, payload.imageBase64), old = room.sharedImage;
-        room.sharedImage = image;
+        room.sharedImage = image; resetReady(room);
         try { await this.saveRoom(); }
         catch (error) { room.sharedImage = old; await deleteSharedImage(this.state.storage, image); throw error; }
         await deleteSharedImage(this.state.storage, old);
@@ -561,13 +588,47 @@ export class RoomDurableObject {
         await this.scheduleAlarm();
     }
 
+    private async rematchGame(player: Player) {
+        const room = this.room!;
+        if (room.state !== 'GAME_OVER' || room.hostId !== player.id) return;
+        if (room.players.some(p => !p.connected)) throw new Error('Warte, bis alle Spieler verbunden sind.');
+        await this.flushPendingRounds();
+        if (this.pendingRounds.length) throw new Error('Die Partie wird noch gespeichert. Bitte versuche es gleich erneut.');
+        for (let attempt = 0; attempt < 8; attempt++) {
+            if (!room.rematch) {
+                const code = crypto.randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+                if (code === room.code) continue;
+                room.rematch = prepareRematch(room, code);
+                await this.saveRoom();
+            }
+            const plan = room.rematch;
+            if (!plan.initialized) {
+                const response = await this.env.ROOMS.get(this.env.ROOMS.idFromName(plan.room.code)).fetch(new Request('https://internal/rematch', { method: 'POST', body: JSON.stringify({ requestId: plan.requestId, room: plan.room }) }));
+                if (response.status === 409) { room.rematch = undefined; await this.saveRoom(); continue; }
+                if (!response.ok) throw new Error('Die Revanche konnte noch nicht vorbereitet werden. Bitte erneut versuchen.');
+                plan.initialized = true; await this.saveRoom();
+            }
+            for (const [socket, meta] of this.sockets) if (meta.playerId && plan.transfers[meta.playerId]) this.send(socket, 'roomTransfer', plan.transfers[meta.playerId]);
+            return;
+        }
+        throw new Error('Kein freier Raumcode gefunden. Bitte erneut versuchen.');
+    }
+
+    private ejectSpectators(room: RoomState) {
+        for (const [socket, meta] of this.sockets) if (room.spectators?.some(p => p.id === meta.playerId)) {
+            this.sockets.delete(socket); this.send(socket, 'leftRoom'); socket.close(1000, 'Room empty');
+        }
+        room.spectators = [];
+    }
+
     private async disconnect(socket: CloudflareWebSocket) {
         const meta = this.sockets.get(socket);
         this.sockets.delete(socket);
         if (!meta || !this.room) return;
-        const player = playerForConnection(this.room, meta.socketId);
+        const player = participantForConnection(this.room, meta.socketId);
         if (!player) return;
         player.connected = false;
+        player.ready = false;
         player.disconnectedAt = Date.now();
         await this.saveRoom();
         this.broadcastRoomUpdate();
@@ -580,16 +641,18 @@ export class RoomDurableObject {
             if (room) {
                 if (room.phaseDeadline && room.phaseDeadline <= Date.now()) await this.endPhase();
                 if (room.sharedImage && room.sharedImage.expiresAt <= Date.now()) {
-                    await deleteSharedImage(this.state.storage, room.sharedImage); room.sharedImage = undefined;
+                    await deleteSharedImage(this.state.storage, room.sharedImage); room.sharedImage = undefined; resetReady(room);
                 }
                 const wasOver = room.state === 'GAME_OVER';
-                for (const p of [...room.players]) {
+                for (const p of participants(room)) {
                     if (!p.connected && p.disconnectedAt && Date.now() - p.disconnectedAt >= DISCONNECT_GRACE_MS) {
-                        const skipped = removePlayer(room, p.id);
+                        const viewer = isSpectator(room, p);
+                        const skipped = viewer ? 0 : removePlayer(room, p.id);
+                        if (viewer) room.spectators = room.spectators?.filter(item => item.id !== p.id);
                         if (skipped) await service(this.env, '/quota/drop', { code: room.code, generations: skipped, playerId: p.id });
                     }
                 }
-                if (!room.players.length) { await service(this.env, '/quota/release', { code: room.code }); this.room = null; }
+                if (!room.players.length) { this.ejectSpectators(room); await service(this.env, '/quota/release', { code: room.code }); this.room = null; }
                 else playArchiveVideo(room);
                 await this.saveRoom();
                 if (this.room && !wasOver && room.state === 'GAME_OVER') await this.queueFinal();
@@ -609,7 +672,7 @@ export class RoomDurableObject {
     }
 
     private async scheduleAlarm() {
-        const deadlines = this.room?.players.filter(p => !p.connected && p.disconnectedAt).map(p => p.disconnectedAt! + DISCONNECT_GRACE_MS) || [];
+        const deadlines = this.room ? participants(this.room).filter(p => !p.connected && p.disconnectedAt).map(p => p.disconnectedAt! + DISCONNECT_GRACE_MS) : [];
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
@@ -639,7 +702,21 @@ export class RoomDurableObject {
     private broadcastRoomUpdate() {
         if (this.room) { syncPhase(this.room); this.state.waitUntil(this.scheduleAlarm()); }
         if (this.room) for (const [socket, meta] of this.sockets) {
-            if (meta.playerId && this.room.players.some(player => player.id === meta.playerId)) this.send(socket, 'roomDataUpdate', roomSnapshot(this.room, meta.playerId));
+            if (!meta.playerId || !participants(this.room).some(player => player.id === meta.playerId)) continue;
+            if (authDisabled(this.env)) { this.send(socket, 'roomDataUpdate', roomSnapshot(this.room, meta.playerId)); continue; }
+            if (this.snapshotChecks.has(socket)) continue;
+            this.snapshotChecks.add(socket);
+            const account = meta.account;
+            this.state.waitUntil(accountIsCurrent(account!, cloudflareAuth(this.env)).then(valid => this.enqueue(async () => {
+                this.snapshotChecks.delete(socket);
+                if (this.sockets.get(socket) !== meta || !this.room) return;
+                if (meta.account !== account) { this.broadcastRoomUpdate(); return; }
+                const player = participantForConnection(this.room, meta.socketId);
+                if (!player) return;
+                if (!valid || account!.expiresAt <= Date.now()) { this.send(socket, 'authExpired'); await this.leaveRoom(socket, player); return; }
+                // Read the newest state after authorization, never a stale queued snapshot.
+                this.send(socket, 'roomDataUpdate', roomSnapshot(this.room, player.id));
+            })).catch(() => { this.snapshotChecks.delete(socket); this.send(socket, 'roomNotice', 'Die Sitzungsprüfung ist gerade nicht erreichbar.'); }));
         }
     }
     private async endPhase() {
@@ -656,7 +733,7 @@ export class RoomDurableObject {
     }
     private broadcast(type: string, payload?: unknown) {
         for (const [socket, meta] of this.sockets) {
-            if (meta.playerId && this.room?.players.some(p => p.id === meta.playerId)) this.send(socket, type, payload);
+            if (meta.playerId && this.room && participants(this.room).some(p => p.id === meta.playerId)) this.send(socket, type, payload);
         }
     }
     private send(socket: CloudflareWebSocket, type: string, payload?: unknown) {

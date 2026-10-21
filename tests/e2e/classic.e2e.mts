@@ -36,8 +36,8 @@ try {
     assert.equal(config.mockAi, true); assert.equal(config.authEnabled, true, 'Mock videos must not require disabling normal profiles.');
     for (const [index, page] of pages.entries()) {
         await page.goto(base); await visible(page, 'screenAuth');
-        assert.equal(await page.locator('#authForm input').count(), 1);
-        assert.equal(await page.locator('#authForm input[type=password]').count(), 0);
+        assert.equal(await page.locator('#authForm input[type=text]').count(), 1);
+        assert.equal(await page.locator('#authPassword').isVisible(), false);
         await page.locator('#authUsername').fill(names[index]); await page.locator('#authSubmit').click();
         await visible(page, 'screenLobby');
         assert.equal(await page.locator('#usernameInput').isVisible(), false, 'The normal profile replaces the legacy lobby-name field.');

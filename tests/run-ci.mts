@@ -46,6 +46,7 @@ try {
         await run(['tests/e2e/video.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/statistics.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/history.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
+        await run(['tests/e2e/undo-batch.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/variants.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/party.e2e.mts'], browserEnv);
         for (const port of [3310, 3311]) await run(['tests/e2e/ten-player.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
@@ -54,6 +55,7 @@ try {
         await run(['tests/e2e/auth.e2e.mts', 'http://127.0.0.1:3312'], browserEnv);
         await run(['tests/e2e/huggingface.e2e.mts'], browserEnv);
         for (const port of [3312, 3314]) await run(['tests/e2e/classic.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
+        for (const port of [3312, 3314]) await run(['tests/e2e/participants.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/quota.e2e.mts'], browserEnv);
         await run(['tests/e2e/extension.e2e.mts'], browserEnv);
         for (const file of ['browser', 'video', 'statistics', 'history', 'variants']) {

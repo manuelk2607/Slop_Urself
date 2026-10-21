@@ -58,6 +58,7 @@ button:focus-visible, .custom-file-btn:focus-visible {
 
 .header-info {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 12px;
     color: #a4b0be;
@@ -184,6 +185,7 @@ button:disabled {
 
 input[type="text"],
 input[type="number"],
+input[type="password"],
 select,
 #authForm input {
     width: 100%;
@@ -888,3 +890,12 @@ body.statistics-open {
 @media (max-width: 360px) {
     #authForm button { min-height: 72px; }
 }
+/* Participant statuses and password dialogs stay in document flow on small screens. */
+.ready-control { display: flex; align-items: center; gap: 8px; margin: 12px 0; text-align: left; }
+.ready-control input { width: 20px; height: 20px; margin: 0; flex: 0 0 20px; }
+#profilePasswordDialog { box-sizing: border-box; width: min(480px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; margin: auto; padding: 24px; border-radius: 8px; background: #1e222e; color: #f3f4f6; border: 1px solid #555b68; }
+#profilePasswordDialog::backdrop { background: #0009; }
+#profilePasswordDialog label { display: block; text-align: left; margin: 12px 0; }
+#profilePasswordDialog p, #spectatorNames, #readyStatus { overflow-wrap: anywhere; }
+.account-management-item { flex-wrap: wrap; }
+#authPasswordSection { text-align: left; }

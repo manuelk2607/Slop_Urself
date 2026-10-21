@@ -9,16 +9,23 @@ const browser = await engine.launch({ headless: true, executablePath: process.en
 const errors: string[] = [];
 const contexts = await Promise.all([0, 1, 2].map(i => browser.newContext({ viewport: i === 1 ? { width: 375, height: 812 } : { width: 1280, height: 900 } })));
 const pages = await Promise.all(contexts.map(c => c.newPage()));
-const snapshots = new Map<Page, unknown>();
+const snapshots = new Map<Page, { gameState?: string; playerCount?: number }>();
+const wireEvents = new Map<Page, string[]>();
 for (const page of pages) {
     page.on('pageerror', error => errors.push(error.message));
     page.on('dialog', dialog => { errors.push(dialog.message()); void dialog.dismiss(); });
-    page.on('websocket', ws => ws.on('framereceived', ({ payload }) => {
+    page.on('websocket', ws => {
+        const events: string[] = []; wireEvents.set(page, events);
+        ws.on('framesent', ({ payload }) => { try { const message = JSON.parse(String(payload)); if (typeof message.type === 'string') events.push(`send:${message.type}`); } catch {} });
+        ws.on('close', () => events.push('closed'));
+        ws.on('framereceived', ({ payload }) => {
         try {
             const message = JSON.parse(String(payload));
+            events.push(`receive:${message.type}:${message.payload?.gameState || ''}`);
             if (message.type === 'roomDataUpdate') snapshots.set(page, message.payload);
         } catch {}
-    }));
+        });
+    });
 }
 const [host, guest, third] = pages;
 const png = testImage(320, 240);
@@ -197,7 +204,9 @@ try {
     console.log('PASS: no JavaScript errors; mobile layout stays within viewport.');
 } catch (error) {
     for (const [index, page] of pages.entries()) {
-        console.error(JSON.stringify({ index, snapshot: snapshots.get(page), screen: await page.locator('.game-screen:visible').getAttribute('id'), errors }));
+        const snapshot = snapshots.get(page);
+        console.error(JSON.stringify({ index, state: snapshot?.gameState, players: snapshot?.playerCount,
+            wire: wireEvents.get(page)?.slice(-20), screen: await page.locator('.game-screen:visible').getAttribute('id'), errors }));
         await page.screenshot({ path: artifactPath(`slopurself-failed-${index}.png`), fullPage: true });
     }
     throw error;

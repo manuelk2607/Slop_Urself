@@ -3,6 +3,7 @@ import type { AiJob } from '../ai/generation';
 import { gameOptions, assignTasks, type GameOptions } from './options';
 import type { SharedImage } from './images';
 import { isArchiveGame, type ArchiveClip } from './archive-play';
+import { resetReady, startProblem } from './participants';
 
 export type GameState = 'LOBBY' | 'IDLE' | 'GENERATING' | 'VOTING' | 'GUESS_REVIEW' | 'RESULTS' | 'GAME_OVER';
 export const DISCONNECT_GRACE_MS = 15_000;
@@ -17,6 +18,7 @@ export interface Player {
     score: number;
     guessPoints?: number;
     connected: boolean;
+    ready?: boolean;
     disconnectedAt?: number;
 }
 
@@ -24,6 +26,9 @@ export interface Room {
     code: string;
     hostId: string;
     players: Player[];
+    spectators?: Player[];
+    rematch?: ReturnType<typeof import('./participants').prepareRematch>;
+    rematchSource?: string;
     state: GameState;
     activeCreatorIndex: number;
     currentVotes: Record<string, number>;
@@ -135,13 +140,17 @@ export function playerForConnection(room: Room, connectionId: string) {
 }
 
 export function publicPlayers(room: Room) {
-    return room.players.map(({ id, name, score, connected }) => ({ id, name, score, connected }));
+    return room.players.map(({ id, name, score, connected, ready }) => ({ id, name, score, connected, ready: ready === true }));
 }
 
 export function roomSnapshot(room: Room, viewerId?: string) {
     const creator = activeCreator(room);
     return {
         roomId: room.code, playerCount: room.players.filter(p => p.connected).length,
+        spectators: (room.spectators || []).map(({ id, name, connected }) => ({ id, name, connected })),
+        spectatorCount: (room.spectators || []).filter(p => p.connected).length,
+        role: room.players.some(p => p.id === viewerId) ? 'player' : 'spectator',
+        startProblem: startProblem(room),
         players: publicPlayers(room), hostId: room.hostId, gameState: room.state,
         currentRound: room.currentRound, maxRounds: room.maxRounds,
         videoNumber: room.videoNumber || room.currentRound,
@@ -157,7 +166,7 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         sharedImageUrl: room.sharedImage ? `/api/rooms/${room.code}/image?id=${room.sharedImage.id}` : undefined,
         ownTask: viewerId === creator?.id ? room.tasks?.[viewerId] : undefined,
         ownGuess: viewerId ? room.guesses?.[viewerId]?.text : undefined,
-        task: revealedTask(room),
+        task: room.players.some(p => p.id === viewerId) ? revealedTask(room) : undefined,
         reviewPrompt: room.state === 'GUESS_REVIEW' && viewerId === creator?.id ? room.currentPrompt : undefined,
         reviewGuesses: room.state === 'GUESS_REVIEW' && viewerId === creator?.id ? guessList(room) : undefined,
         reveal: ['RESULTS', 'GAME_OVER'].includes(room.state) ? { prompt: room.currentPrompt, task: room.tasks?.[creator?.id || ''], guesses: guessList(room) } : undefined
@@ -183,6 +192,7 @@ export function removePlayer(room: Room, playerId: string) {
     if (room.roundPlayers) room.roundPlayers = room.roundPlayers.filter(id => id !== playerId);
     if (room.pendingCreators) room.pendingCreators = room.pendingCreators.filter(id => id !== playerId);
     room.players.splice(index, 1);
+    resetReady(room);
     delete room.currentVotes[playerId];
     if (room.guesses) delete room.guesses[playerId];
     if (room.voteDetails) delete room.voteDetails[playerId];
@@ -239,6 +249,7 @@ export function guessList(room: Room) {
 }
 
 export function recordVote(room: Room, player: Player, payload: Record<string, unknown>) {
+    if (!room.players.some(p => p.id === player.id)) throw new Error('Zuschauer dürfen nicht bewerten.');
     if (room.state !== 'VOTING' || (gameOptions(room.options).mode !== 'archive-vote' && activeCreator(room)?.id === player.id) || room.currentVotes[player.id] !== undefined) return;
     const options = gameOptions(room.options);
     let points = Number(payload.points);

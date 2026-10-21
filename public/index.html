@@ -46,6 +46,11 @@
         <p id="authHint" class="subtitle">Neu dabei? Registriere dich. Schon gespielt? Melde dich mit deinem bisherigen Benutzernamen an.</p>
         <form id="authForm">
             <label>Benutzername<input id="authUsername" type="text" autocomplete="nickname" maxlength="30" aria-describedby="authHint authError" required></label>
+            <details id="authPasswordSection" class="variant-settings">
+                <summary>Passwortschutz (optional)</summary>
+                <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" maxlength="200" aria-describedby="authPasswordHint authError"></label>
+                <p id="authPasswordHint" class="hint-text">Neue Profile: freiwillig 12 bis 200 Zeichen. Geschützte Profile: bisheriges Passwort eingeben.</p>
+            </details>
             <p id="authError" class="error-msg" role="alert"></p>
             <button id="authSubmit" class="btn-primary" type="submit">Neuen Benutzer registrieren</button>
             <button id="existingNameButton" class="btn-muted" type="button">Vorhandenen Benutzer anmelden</button>
@@ -57,6 +62,8 @@
         <div class="header-info">
             <span>Raum: <strong id="displayRoomCode">----</strong></span>
             <span>Spieler: <strong id="playerCount">1</strong></span>
+            <span>Zuschauer: <strong id="spectatorCount">0</strong></span>
+            <span id="spectatorRole" hidden>Du schaust zu</span>
             <span>Runden: <strong id="roundCounter">1/1</strong></span>
             <span id="turnInfo" style="display:none;">Video: <strong id="turnCounter">1/1</strong></span>
         </div>
@@ -83,6 +90,7 @@
             <input type="text" id="roomCodeInput" placeholder="CODE" maxlength="4" aria-label="Raumcode" autocapitalize="characters">
             <button id="joinRoomButton" class="btn-secondary">Beitreten</button>
         </div>
+        <button id="watchRoomButton" class="btn-muted" type="button">Mit diesem Code zuschauen</button>
         <p id="lobbyError" class="error-msg" role="alert"></p>
         <p id="invitationNotice" class="room-notice" hidden></p>
     </section>
@@ -148,6 +156,9 @@
         <p id="hostNotice" class="subtitle">Warte auf den Host...</p>
 
         <ul id="lobbyPlayerList" class="scoreboard-list"></ul>
+        <p id="spectatorNames" class="hint-text" hidden></p>
+        <label id="readyControl" class="ready-control"><input id="readyInput" type="checkbox"> Ich bin bereit</label>
+        <p id="readyStatus" class="hint-text" role="status"></p>
         <div class="room-mode">
             <span>Spielmodus: <strong id="gameModeName">Klassisch</strong></span>
             <button id="classicModeButton" class="icon-button" type="button" title="Klassisch spielen" aria-label="Klassisch spielen" hidden></button>
@@ -167,6 +178,7 @@
                 <label><input id="guessPromptOption" type="checkbox"> Prompt erraten</label>
             </fieldset>
         </details>
+        <label class="ready-control"><input id="requireReadyOption" type="checkbox"> Nur starten, wenn alle bereit sind</label>
         <label class="field-label" for="generationQuality">KI-Modus</label>
         <select id="generationQuality">
             <option value="auto">Automatisch: Qualität nach Budget</option>
@@ -318,10 +330,23 @@
 
         <p id="extensionQuotaHint" class="hint-text" role="status">Rundenlimit wird geprüft.</p>
         <button id="extendGameButton" class="btn-secondary" type="button" disabled>Zusatzrunde spielen</button>
+        <button id="rematchGameButton" class="btn-secondary" type="button" hidden>Revanche mit dieser Gruppe</button>
         <button id="restartButton" class="btn-primary">Neues Spiel starten</button>
     </section>
 
 </div>
+
+<dialog id="profilePasswordDialog" aria-labelledby="profilePasswordTitle">
+    <form id="profilePasswordForm">
+        <h2 id="profilePasswordTitle">Profil schützen</h2>
+        <p id="profilePasswordTarget"></p>
+        <label>Benutzernamen zur Bestätigung eingeben<input id="profilePasswordConfirmation" type="text" autocomplete="off" required></label>
+        <label>Neues Passwort<input id="profilePasswordValue" type="password" autocomplete="new-password" minlength="12" maxlength="200" required></label>
+        <p id="profilePasswordError" class="error-msg" role="alert"></p>
+        <button class="btn-primary" type="submit">Passwort speichern</button>
+        <button id="profilePasswordCancel" class="btn-muted" type="button">Abbrechen</button>
+    </form>
+</dialog>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="startup.js"></script>

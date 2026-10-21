@@ -18,6 +18,17 @@ das bestehende Jobjournal und globale GPU-Reservierungen bleiben maßgeblich.
 
 ## Gemeinsamer Kern
 
+`src/game/participants.ts` enthält Teilnehmergrenzen, Bereitschaft, Rollenprüfung
+und das Erzeugen frischer Revanche-Räume. Spieler und Zuschauer werden getrennt
+gespeichert; nur Spieler gelangen in Budgetlisten, Runden und Statistiken.
+Öffentliche Snapshots projizieren erlaubte Felder statt private Teilnehmerobjekte
+zu verbreiten. Revanche-Übergaben enthalten nur die eigene neue Raum-/Spieler-ID
+und den eigenen Sitzungsschlüssel. Node verschiebt Socket.IO-Mitgliedschaften
+direkt. Cloudflare initialisiert das Ziel idempotent und lässt Browser unabhängig
+wiederverbinden; die geplante Übergabe bleibt vor jedem Netzaufruf gespeichert.
+Eine neue Revanche wartet auf offene alte Rundenwrites. Node behält fehlgeschlagene
+Writes in Reihenfolge im Speicher; Cloudflare behält seine dauerhafte Retry-Queue.
+
 `src/game/rules.ts` definiert Raumzustand, Spielphasen, Spielerwechsel,
 Bewertungen und Punkte. `src/game/persistence.ts` wandelt abgeschlossene
 Runden in das gemeinsame Datenbankformat um.
@@ -48,6 +59,18 @@ Anbieterfehler werden in feste, datensparsame Hinweise übersetzt, niemals mit
 ungefilterten Prompts, Pfaden oder Anmeldedaten ausgegeben.
 
 `src/auth` verwaltet Benutzerprofile und signierte Browsersitzungen.
+`passwords.ts` implementiert optionales PBKDF2-SHA256 mit 100.000 Iterationen,
+zufälligem Salt und konstantzeitlichem Hashvergleich. Nur neue Registrierungen
+oder separat freigeschaltete Admin-Operationen können einen Hash setzen.
+`auth_version` bindet JWTs an den aktuellen Profilzustand, standardmäßig `0`
+für bestehende Profile und Tokens. Passwortänderungen rotieren diese Version;
+HTTP und WebSocket-Kommandos validieren sie gegen den Profilstore. Auch HF-
+Anmeldevorgänge und Admin-Freigaben behalten die passende Auth-Version.
+Vor neuen personalisierten Snapshots wird ebenfalls frisch autorisiert. Pro
+Verbindung wird höchstens eine solche Prüfung gleichzeitig ausgeführt; nach der
+Prüfung wird der aktuelle Zustand gelesen, damit verzögerte Antworten keine
+ältere Phase über eine neuere schreiben. Ein DB-Ausfall widerruft nicht pauschal
+gültige Sitzungen, gibt aber auch keine ungeprüften privaten Snapshots frei.
 `src/security` begrenzt schnelle Anfragen. `src/storage` archiviert Videos
 und entfernt bei Bedarf die ältesten Dateien.
 
@@ -71,6 +94,11 @@ und wiederholbar, ohne Bonuspunkte erneut zu addieren.
 gespielter Videos. Raum-Fremdschlüssel betreffen diese Daten nicht. Unveränderliche
 Video-IDs bleiben auch nach Raumlöschungen und wiederverwendeten Raumcodes gültig.
 Die Löschfrist liegt in Postgres; Löschmarker verhindern versehentliches Wiederanlegen.
+Sammelwiederherstellung nutzt eine einzige parameterisierte CTE mit einem
+gemeinsamen `statement_timestamp()`. Berechtigte Videos werden atomar aktiviert,
+vorhandene Runden wieder verknüpft und Ergebnisse pro angefragter ID geliefert.
+`src/shared/history.ts` definiert die 200-ID-Grenze und Ergebnistypen, während
+`src/server/body.ts` den Körper beim Lesen auf maximal 8 KiB begrenzt.
 `evicted_at` markiert automatisch entfernte Dateien, ohne Metadaten und Spielpunkte
 zu löschen. `pagination.ts` kodiert validierte Cursor; Datum plus unveränderliche
 Video-ID bzw. Raumcode bilden stabile Keysets mit einer Vorschauzeile pro Seite.
@@ -148,3 +176,15 @@ SQLite-Durable-Objects in workerd und blockiert ausgehende Netzwerkzugriffe.
 Die Browser-Suiten laufen dort ebenfalls. `cloudflare-runtime.mts` ersetzt nur
 die externen Neon-HTTP-/S3-Verträge und prüft Routing, Ranges, Downloads und
 den persistenten Löschalarm nach Object-Eviction ohne offene Browser.
+
+`participants.e2e.mts` prüft optionalen Passwortschutz, Bereitschaft, laufenden
+Zuschauerbeitritt, Wiedergabe/Reload und Revanche auf beiden Backends. Erst nach
+vollständiger Wiederverbindung wird die Teilnehmerzahl geprüft.
+`undo-batch.e2e.mts` hält frühe Antworten bis zum Eintreffen aller Pakete zurück
+und prüft erneute Versuche nach einem temporären Fehler.
+`features-db.mts` verlangt eine explizite lokale `TEST_DATABASE_URL` und PostgreSQL
+17; temporäre Tabellen prüfen Migration sowie Fristen während eines langsamen
+SQL-Statements. GitHub Actions verwendet getrennte Chromium-/WebKit-Jobs auf
+Node 24, `fail-fast: false`, je 25 Minuten und eigene Fehlerartefakte.
+`tools/hf-live-check.mts` ist ein ausdrücklich aktivierbarer manueller Nachweis,
+nicht Teil der CI und ohne automatische GPU-Wiederholungen.

@@ -9,6 +9,7 @@ import { testImageData } from '../support/images';
 import { gameOptions } from '../../src/game/options';
 
 class TestSocket {
+    get readyState() { return this.closed ? 3 : 1; }
     messages: { type: string; payload: any }[] = [];
     closed = false;
     constructor(public attachment: any) {}
@@ -63,6 +64,99 @@ test('Worker serializes votes and ignores duplicates; outsiders cannot vote or r
     assert.equal(f.outsider.messages.some(m => m.type === 'roomDataUpdate'), false);
     assert.equal(f.outsider.messages[0].type, 'errorMsg');
     assert.equal(JSON.stringify(f.sockets[0].messages).includes('session-'), false);
+});
+
+test('Worker enforces ready on the server, resets it on options and disconnect, and excludes spectators', async () => {
+    const f = await fixture('LOBBY', {}, 1, { options: gameOptions({ requireReady: true }) });
+    await f.message(f.outsider, 'joinRoom', { username: 'Viewer', role: 'spectator' });
+    await f.message(f.sockets[0], 'startGame'); assert.equal((f.data.get('room') as Room).state, 'LOBBY');
+    for (const socket of f.sockets.slice(0, 3)) await f.message(socket, 'setReady', { ready: true });
+    await f.message(f.sockets[0], 'setGameOptions', { options: { requireReady: true } });
+    assert.equal((f.data.get('room') as Room).players.some(p => p.ready), false);
+    for (const socket of f.sockets.slice(0, 3)) await f.message(socket, 'setReady', { ready: true });
+    await f.message(f.sockets[0], 'startGame'); assert.equal((f.data.get('room') as Room).state, 'IDLE');
+    for (const type of ['sendImage', 'submitVote', 'judgeGuesses', 'setReady', 'setGameOptions', 'startNextRound', 'rematchGame']) {
+        await f.message(f.outsider, type, { points: 5, ready: true }); assert.match(f.outsider.messages.at(-1)!.payload, /Zuschauer/);
+    }
+    const before = (f.data.get('room') as Room).players.map(p => p.score);
+    assert.deepEqual(before, [0, 0, 0]);
+    const restored = await f.recreate();
+    await restored.webSocketClose(f.sockets[1] as any);
+    assert.equal((f.data.get('room') as Room).players[1].ready, false);
+    assert.equal((f.data.get('room') as Room).spectators!.length, 1);
+});
+
+test('Worker rematch is durable/idempotent, transfers only own sessions and initializes a new room once', async () => {
+    const target = await fixture('LOBBY'); target.data.delete('room'); target.sockets.length = 0;
+    const targetWorker = await target.recreate(); let calls = 0;
+    const f = await fixture('GAME_OVER', { ROOMS: { idFromName: name => name, get: () => ({ fetch: async request => { calls++; return targetWorker.fetch(request); } }) } as any });
+    await f.message(f.outsider, 'joinRoom', { username: 'Viewer', role: 'spectator' });
+    await f.message(f.sockets[1], 'rematchGame'); assert.equal(calls, 0);
+    await f.message(f.sockets[0], 'rematchGame');
+    const old = f.data.get('room') as Room, next = target.data.get('room') as Room;
+    assert.equal(old.state, 'GAME_OVER'); assert.equal(old.currentVideoUrl, '/assets/mock-video.mp4');
+    assert.equal(next.players.length, 3); assert.equal(next.spectators!.length, 1); assert.equal(next.currentVideoUrl, '');
+    assert.equal(next.players.every(p => !p.ready && p.score === 0), true);
+    for (const socket of f.sockets) {
+        const transfer = socket.messages.find(m => m.type === 'roomTransfer')!.payload;
+        assert.equal(Object.keys(transfer).sort().join(','), 'playerId,roomId,sessionId');
+        assert.notEqual(transfer.sessionId, socket.attachment.sessionId);
+        assert.equal(next.players.concat(next.spectators!).some(p => p.sessionId === transfer.sessionId), true);
+    }
+    const code = next.code;
+    await f.message(f.sockets[0], 'rematchGame'); assert.equal((target.data.get('room') as Room).code, code); assert.equal(calls, 1);
+    const restored = await f.recreate();
+    await restored.webSocketMessage(f.sockets[0] as any, JSON.stringify({ type: 'resumeRoom', payload: { sessionId: old.players[0].sessionId } }));
+    assert.equal(f.sockets[0].messages.at(-1)!.type, 'roomTransfer');
+});
+
+test('Worker rechecks socket connectivity after an asynchronous budget reservation', async () => {
+    let f: Awaited<ReturnType<typeof fixture>>, releases = 0;
+    const services = { idFromName: (name: string) => name, get: () => ({ fetch: async (request: Request) => {
+        if (request.url.endsWith('/quota/reserve')) { await Promise.resolve(); f.sockets[1].closed = true; }
+        if (request.url.endsWith('/quota/release')) releases++;
+        return Response.json({ aiRoundLimit: 5, quotaMode: 'mock' });
+    } }) };
+    f = await fixture('LOBBY', { SERVICES: services as any });
+    await f.message(f.sockets[0], 'startGame');
+    assert.equal((f.data.get('room') as Room).state, 'LOBBY'); assert.equal(releases, 1);
+    assert.match(f.sockets[0].messages.at(-1)!.payload, /verbunden/);
+});
+
+test('Worker withholds new private snapshots from a revoked idle WebSocket session', async () => {
+    let rotated = false;
+    const services = { idFromName: (name: string) => name, get: () => ({ fetch: async (request: Request) => {
+        if (request.url.endsWith('/profiles/find')) {
+            const data = await request.json() as any;
+            return Response.json({ profile: { id: data.name, name: data.name, authVersion: rotated && data.name === 'a' ? 'new-version' : '0' } });
+        }
+        return Response.json({ aiRoundLimit: 5, quotaMode: 'mock' });
+    } }) };
+    const f = await fixture('IDLE', { AUTH_MODE: '', SERVICES: services as any });
+    for (const socket of f.sockets.slice(0, 3)) socket.attachment.account = { id: socket.attachment.playerId, name: socket.attachment.playerId, expiresAt: Date.now() + 60_000, authVersion: '0' };
+    (f.worker as any).broadcastRoomUpdate(); await Promise.all(f.pending);
+    const previous = f.sockets[0].messages.filter(m => m.type === 'roomDataUpdate').length;
+    assert.equal(previous, 1); rotated = true;
+    (f.worker as any).broadcastRoomUpdate(); await Promise.all(f.pending);
+    assert.equal(f.sockets[0].messages.filter(m => m.type === 'roomDataUpdate').length, previous);
+    assert.equal(f.sockets[0].messages.some(m => m.type === 'authExpired'), true); assert.equal(f.sockets[0].closed, true);
+});
+
+test('Worker retries the same initialized rematch after an ambiguous target response', async () => {
+    const target = await fixture('LOBBY'); target.data.delete('room'); target.sockets.length = 0;
+    const worker = await target.recreate(); const codes: string[] = [];
+    const f = await fixture('GAME_OVER', { ROOMS: { idFromName: (name: string) => name, get: (name: string) => ({ fetch: async (request: Request) => {
+        codes.push(name); const response = await worker.fetch(request);
+        if (codes.length === 1) throw new Error('Response lost after initialization'); return response;
+    } }) } as any });
+    await f.message(f.sockets[0], 'rematchGame');
+    assert.equal(f.sockets[0].messages.some(m => m.type === 'roomTransfer'), false);
+    assert.equal((f.data.get('room') as Room).rematch!.initialized, false);
+    const restored = await f.recreate();
+    await restored.webSocketMessage(f.sockets[0] as any, JSON.stringify({ type: 'rematchGame' }));
+    assert.equal(codes.length, 2); assert.equal(codes[0], codes[1]);
+    assert.equal((f.data.get('room') as Room).rematch!.initialized, true);
+    assert.equal((target.data.get('room') as Room).code, codes[0]);
 });
 
 test('Worker phase clock survives recreation, enforces host-only closing and ignores stale commands', async () => {

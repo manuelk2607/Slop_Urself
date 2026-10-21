@@ -52,14 +52,15 @@ cf:secrets überträgt HF_TOKEN, DATABASE_URL,
 AUTH_COOKIE_SECRET und die zwei privaten Storage-Schlüssel aus .env.local.
 Der Spiellink benötigt keinen zusätzlichen Zugangscode. Jeder Spieler legt
 nur einen eindeutigen Benutzernamen an oder verwendet einen bestehenden Namen.
-Neon Auth und Passwörter werden nicht mehr benutzt. Dies ist bewusst keine
-Authentifizierung; ein bekannter Name kann von jedem verwendet werden.
+Neon Auth wird nicht verwendet. Neue Profile können optional ein Passwort
+setzen; offene Profile bleiben per Benutzername zugänglich. Ein offener Name
+ist kein Identitätsnachweis. Geschützte Profile benötigen ihr Passwort.
 
 SERVICES ist ein zweiter SQLite-Durable-Object-Binding (Migration v2).
 Es reserviert das echte kostenlose HF-Kontingent für alle Räume gemeinsam
 und serialisiert die Archivierung mit automatischer Löschung alter Videos.
 Die Rundenbegrenzung verwendet den günstigsten konfigurierten 5-Sekunden-Modus
-aus wan22, wan22-fast und ltx. Alle Spaces teilen dasselbe HF-Account-Kontingent;
+aus den gewählten Wan-2.2-Modi. Alle Spaces teilen dasselbe HF-Account-Kontingent;
 ihre Budgets werden nicht addiert. Bei 185 GPU-Sekunden erlaubt der native
 4-Schritte-Modus eine Runde mit zwei Spielern. Der 8-Schritte-Modus wird nur
 versucht, wenn ausreichend Budget für die verbleibenden Videos reserviert bleibt.
@@ -73,9 +74,40 @@ HTTP-only, signiert, 30 Tage gültig und werden beim Neuladen wiederhergestellt.
 
 ## Benutzerverwaltung
 
-Die normale Anmeldung bleibt ohne Passwort. Nur das festgelegte Besitzerkonto
+Der Passwortschutz ist freiwillig. Nur das festgelegte Besitzerkonto
 kann die Benutzerverwaltung mit einem zusätzlichen privaten Schlüssel freischalten.
 Eine Anmeldung mit dem Besitzernamen allein reicht dafür nicht aus.
+
+Die freigeschaltete Verwaltung bietet zusätzlich einen Passwortdialog mit exakter
+Zielbestätigung. PBKDF2-SHA256 (100.000 Iterationen, 16-Byte-Salt) funktioniert
+identisch in Workers und Node. Additive Migrationen ergänzen `password_hash` und
+`auth_version`, ohne Benutzer-IDs oder Historie zu ersetzen. Eine Änderung
+widerruft alte HTTP-Sitzungen und WebSocket-Kommandos, einschließlich alter
+Besitzerfreigaben. Keine neuen Secrets oder Bindings sind dafür nötig.
+
+## Teilnehmer und Wiederherstellung
+
+Spieler und Zuschauer liegen getrennt im Room-Durable-Object; maximal zehn
+Spieler und zwanzig Zuschauer. Hibernation übernimmt beide Rollen aus den
+privaten WebSocket-Attachments. Zuschauer verändern weder Punkte noch Budget
+und können keine Spielkommandos ausführen. Die optionale Bereitschaftssperre
+prüft ausschließlich Spieler, auch nach der asynchronen Budgetreservierung.
+
+Eine Revanche wird nach vollständiger Speicherung der alten Partie vorbereitet.
+Das alte Object speichert eine Übergabe-ID und den geplanten Zielraum vor dessen
+Initialisierung. Das Ziel erkennt dieselbe Übergabe wieder, auch bei verlorener
+Antwort. Nur ein bestätigter Codekonflikt erlaubt einen anderen Zielcode.
+Jeder Teilnehmer erhält privat ausschließlich seine eigenen neuen Sitzungsdaten
+und verbindet sich selbstständig zum neuen Raum. Dafür gilt eine Übergabefrist
+von etwa einer Minute. Starten bleibt bis zur vollständigen Wiederverbindung
+gesperrt. Alte Statistiken bleiben unverändert, das gemeinsame Bild wird nicht kopiert.
+
+Sammelwiederherstellungen laufen über `POST /api/stats/videos/restore` in derselben
+globalen Archivwarteschlange wie Dateilöschung und Archivierung. Dadurch kann die
+Bereinigung keine gleichzeitig wiederhergestellte Datei entfernen. Die Fristen
+werden innerhalb eines SQL-Statements mit `statement_timestamp()` geprüft.
+Der Browser startet Pakete bis 200 IDs parallel; temporäre Fehler sind erneut
+versuchbar. Keine manuelle Migration auf Produktion für lokale Tests erforderlich.
 
 ```bash
 npm run admin:setup -- Manuel

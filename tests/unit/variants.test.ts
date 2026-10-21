@@ -16,7 +16,7 @@ function room(): Room {
     startRounds(value); value.state = 'VOTING'; value.currentPrompt = 'private prompt'; return value;
 }
 test('classic is the default: personal uploads, ordinary votes and no task or guessing phase', () => {
-    assert.deepEqual(gameOptions(), { sharedImage: false, secretTasks: false, guessPrompt: false, quality: 'auto', mode: 'classic', phaseSeconds: 0 });
+    assert.deepEqual(gameOptions(), { requireReady: false, sharedImage: false, secretTasks: false, guessPrompt: false, quality: 'auto', mode: 'classic', phaseSeconds: 0 });
     const r = room(); r.options = gameOptions(); startRounds(r); r.state = 'VOTING';
     assert.deepEqual(r.tasks, {});
     assert.equal(roomSnapshot(r, 'a').ownTask, undefined);

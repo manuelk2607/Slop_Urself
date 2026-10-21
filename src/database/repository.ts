@@ -127,13 +127,20 @@ export class GameRepository {
         return rows[0];
     }
     async restoreVideo(id: string) {
-        const rows = await this.query<{ id: string }>(`with restored as (
-            update video_history set delete_after = null
-            where id = $1::bigint and video_url <> '' and (delete_after is null or delete_after > clock_timestamp())
-            returning id, video_url
+        return (await this.restoreVideos([id]))[0]?.status === 'restored';
+    }
+    async restoreVideos(ids: string[]) {
+        return this.query<import('../shared/history').RestoreResult>(`with requested as (
+            select distinct unnest($1::bigint[]) as id
+        ), restored as (
+            update video_history h set delete_after = null from requested q
+            where h.id = q.id and h.video_url <> '' and (h.delete_after is null or h.delete_after > statement_timestamp())
+            returning h.id, h.video_url
         ), relinked as (update rounds r set video_url = h.video_url from restored h where r.id = h.id)
-        select id::text as id from restored`, [id]);
-        return rows.length > 0;
+        select q.id::text as id, case when r.id is not null then 'restored'
+            when h.id is null then 'not_found'
+            when h.delete_after <= statement_timestamp() then 'expired' else 'unavailable' end as status
+        from requested q left join restored r on r.id = q.id left join video_history h on h.id = q.id`, [ids]);
     }
     async expiredVideos() {
         return this.query<{ id: string; videoUrl: string }>(`select id::text as id, video_url as "videoUrl"

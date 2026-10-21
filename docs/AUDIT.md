@@ -1,5 +1,93 @@
 # Technische Prüfung
 
+## Neuimplementierung vom 21. Oktober 2026
+
+Ausgangspunkt und unveränderter Git-HEAD: `d166133ab02dd7c3a6094811524df63f16d848d6`.
+Die Anforderungen wurden in diesem Repository neu implementiert; Zahlen aus der
+verlorenen Cloud-Arbeitskopie wurden nicht als Testnachweis übernommen.
+
+- Atomare Sammelwiederherstellung mit maximal 200 deduplizierten bigint-IDs,
+  8-KiB-Grenze, Same-Origin/Sitzungsprüfung und gemeinsamem SQL-Anweisungsbeginn.
+  Vorhandene Runden werden wieder verknüpft; abgelaufene Fristen bleiben endgültig.
+  Browserpakete starten parallel, temporäre Fehler bleiben bis zur Frist erneut
+  versuchbar. Die sofortige Anzeige und Tab-Wiederaufnahme bleiben erhalten.
+- Freiwilliger Profilpasswortschutz mit PBKDF2-SHA256, 100.000 Iterationen,
+  zufälligem 16-Byte-Salt und konstantzeitlichem Vergleich. Additive SQL-Spalten
+  `password_hash`/`auth_version`, entsprechender DO-Store und separate Admin-
+  Freigabe mit exakter Zielbestätigung. Alte HTTP-/WebSocket-Anfragen werden
+  widerrufen; auch vor neuen privaten Snapshots wird die Sitzung frisch geprüft.
+  Zusammenfallende Snapshot-Prüfungen liefern den neuesten Zustand statt alte
+  wartende Ansichten. Passwortwerte werden beim Schließen sofort geleert.
+- Persönliche Bereitschaft und standardmäßig deaktiviertes `requireReady`;
+  erneute Serverprüfung nach Budgetabfragen. Änderungen an Besetzung, Runden,
+  Regeln und gemeinsamem Bild setzen die Bereitschaft zurück.
+- Bis zu zehn Spieler und zwanzig getrennte Zuschauer, einschließlich Beitritt
+  während einer Partie, Wiederaufnahme, Hibernation und Rückführung beim letzten
+  Spielerabgang. Zuschauer haben keine Schreibrechte, Punkte oder GPU-Reservierung
+  und erhalten keine privaten Aufgaben, unveröffentlichten Rateversuche oder Keys.
+- Host-Revanche mit neuem Raumcode, frischen persönlichen Sitzungen und leerem
+  Spielzustand. Historie bleibt erhalten; ausstehende alte Writes werden vorher
+  abgearbeitet. Node hält fehlgeschlagene Writes in Reihenfolge zurück;
+  Cloudflare verwendet seine dauerhafte Queue und eine idempotente Zielübergabe.
+  Eine verlorene Antwort erzeugt beim nächsten Versuch keinen zweiten Raum.
+- GitHub Actions als getrennte Chromium-/WebKit-Matrix, Node 24, je 25 Minuten,
+  `fail-fast: false`, eindeutige Artefakte und isolierter PostgreSQL-17-Service.
+- Manueller persönlicher HF-Nachweis vorbereitet: explizites Flag und erwartetes
+  Konto, exklusive Ausführungssperre und persistenter Einmalzaun vor dem Klick.
+  Genau ein synthetisches fünfsekündiges Economy-Video, MP4/Range/Wiedergabe,
+  gespeicherte Statistik und beobachtete persönliche Abbuchung als Erfolgskriterien.
+  Nicht in CI, keine GPU-Ausführung im Rahmen dieses Auftrags.
+
+### Tatsächlich geprüft
+
+- Beide TypeScript-Projekte und Browser-Bundles erfolgreich gebaut.
+- 141 Unit-Tests erfolgreich, einschließlich Passwortmigration/-widerruf,
+  Zuschauerschutz, Bereitschaft nach asynchroner Reservierung, idempotenter
+  Revanche bei verlorener Antwort und HF-Evidenzsperre.
+- Isoliertes lokales PostgreSQL 17: Legacy-Profil mit unveränderter ID migriert,
+  Passwort geprüft und altes JWT widerrufen. Ein verlangsamter SQL-Trigger lässt
+  Fristen während des Statements verstreichen: berechtigte Videos werden trotzdem
+  gemeinsam wiederhergestellt, zuvor abgelaufene nicht. Relinking, Wiederholung
+  und Wiederherstellung ohne alten Raum bestanden.
+  Eine neu angelegte Revanche-Lobby mit frischen IDs und Nullpunkten erhält
+  nachweislich alte Partien, Videos, Siege und kumulierte Spielerpunkte.
+- Die bestehende vollständige PostgreSQL-Integration mit temporären Tabellen
+  ebenfalls bestanden: Runden, Stimmen, Endwertung, Statistik, Rollback,
+  Archivtrennung und bestehende additive Migrationen.
+- Live-Nachweiswerkzeug separat mit TypeScript geprüft. Seine Sperrlogik wurde
+  ohne Browser-/Netzwerkzugriff und ohne echten KI-Auftrag getestet.
+- Mobile Screenshots für Passwortdialog und Zuschauer-Revanche visuell geprüft;
+  keine Überlappungen oder horizontales Überlaufen in den geprüften Ansichten.
+- Abschließender vollständiger Chromium-/WebKit-Gesamtlauf erfolgreich (Exit 0),
+  einschließlich Node, echter workerd-/SQLite-Durable-Object-Laufzeit,
+  Passwortänderung und Widerruf einer untätigen Verbindung, Bereitschaft,
+  absichtlich verbotenen Zuschauerkommandos, Revanche, vollständiger unabhängiger
+  Wiederverbindung und Bereinigung beim letzten Spielerabgang.
+  Die 451-ID-Browserprüfung bestätigt gleichzeitig gestartete Pakete sowie
+  Wiederholung nach temporärem Fehler und Reload.
+- Lokale Tests liefen mit Node 26.8.1 auf macOS. Node 24 ist für GitHub Actions
+  konfiguriert; ein neuer externer CI-Lauf wurde nicht ausgelöst. Beim ersten
+  WebKit-Start fehlte lokal die Browserdatei; nach Installation vollständig geprüft.
+- Ein vorheriger Gesamtlauf hatte einmal einen 15-Sekunden-Timeout beim Erstellen
+  eines Cloudflare-Mock-Raums. Im isolierten Test und im vollständigen Nachlauf
+  nicht erneut aufgetreten; Ursache nicht belegt. Datensparsame Diagnose protokolliert
+  bei Testfehlern nur Nachrichtentypen, Phase und Teilnehmerzahl, keine Sitzungskeys
+  oder vollständigen Snapshots. Keine automatische Testwiederholung oder schwächere
+  Erfolgsprüfung eingebaut. Dieser sporadische Testbefund bleibt zu beobachten.
+
+### Separat offen
+
+- Genau ein echtes persönliches HF-Video mit nachgewiesener Kontingentabbuchung.
+  Anmeldung und simulierte Zuordnung allein ersetzen diesen Nachweis nicht.
+- Bestätigung des externen GitHub-Actions-Laufs zu `d166133`; nicht aus lokalen
+  Tests abgeleitet und für diesen Auftrag nicht abgefragt.
+- Kein Push, Commit, Deployment, Secret-Upload oder produktiver DB-Eingriff.
+  Alle Änderungen bleiben lokal. Die lokale PostgreSQL-Instanz ist ausschließlich
+  ein Testsystem; keine Neon-Produktivdaten wurden migriert oder gelöscht.
+- Keine ungeprüfte Übernahme der früheren Cloud-Proxy-Diagnose. Ein tatsächlicher
+  CONNECT-Fehler wäre vor der API einzuordnen; erst bei erreichbarer GitHub-API
+  wären deren Anmeldung und Rechte zu prüfen. Zugangsdaten wurden nicht übertragen.
+
 ## Sicherheits- und Stabilitätskorrekturen vom 19. Oktober 2026
 
 - Den globalen Rate-Limiter gegen Registry-Erschöpfung abgesichert:
