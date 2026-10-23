@@ -1,5 +1,16 @@
 # Technische Prüfung
 
+## Erneute robots.txt-Ursachenanalyse vom 23. Oktober 2026
+
+Google hat die produktive Startseite, robots.txt und Sitemap zwischen 13:10 und
+13:13 UTC erfolgreich abgerufen. Für robots.txt sind HTTP 200, text/plain und die
+tatsächlichen Regeln direkt in Googles Prüfbericht nachgewiesen. Eine aktuelle
+Sperre und die historische Ursache des gemeldeten Search-Console-Fehlers sind
+nicht nachgewiesen. Die frühere Ursachenbehauptung zum Asset-Routing wird nicht
+aufrechterhalten. Keine weiteren spekulativen Codeänderungen oder Deployments.
+HTTP-Matrix, produktive Cloudflare-Einstellungen, Grenzen der WAF-Prüfung und
+die notwendigen nächsten Berichtsdaten stehen in [ROBOTS-INCIDENT.md](ROBOTS-INCIDENT.md).
+
 ## Verpflichtende persönliche HF-Verbindung und SEO vom 23. Oktober 2026
 
 Ausgangspunkt: `91c4b60`, Implementierung auf `codex/mandatory-hf-seo`.
