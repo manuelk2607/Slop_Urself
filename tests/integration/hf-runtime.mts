@@ -9,7 +9,7 @@ const runtime = await cloudflareRuntime({ bindings: { AI_PROVIDER: 'wan22', AI_P
         assert.equal(url.hostname, 'huggingface.co');
         if (url.pathname === '/oauth/device') return Response.json({ device_code: 'private-device-code', user_code: 'ABCD-1234', verification_uri: 'https://hf.co/oauth/device', expires_in: 300, interval: 5 });
         if (url.pathname === '/oauth/token') return Response.json({ access_token: 'personal', token_type: 'Bearer', expires_in: 28800 });
-        assert.ok(['personal', 'central'].includes(token || ''));
+        assert.equal(token, 'personal', 'The server token must never be sent to HF.');
         if (url.pathname === '/oauth/userinfo') return Response.json({ sub: 'personal', preferred_username: 'HF_Test' });
         if (url.pathname === '/api/whoami-v2') return Response.json({ id: token, name: token === 'personal' ? 'HF_Test' : 'Central' });
         if (url.pathname === '/api/spaces/zero-gpu/quota') return Response.json({ base: 300, current: token === 'personal' ? 300 : 75, resetsAt: null, runs: { remaining: 8 } });
@@ -22,6 +22,22 @@ try {
         try { return await fetch(base + path, { method, redirect: 'manual', headers: { origin: base, cookie, connection: 'close', 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); }
         catch (error) { throw new Error(`HF runtime request failed: ${method} ${path.split('?')[0]}`, { cause: error }); }
     };
+    const command = async (cookie: string, type: string, payload: object, expected: string) => {
+        const upgrade = await runtime.dispatchFetch(`${base}/ws/HF01`, { headers: { upgrade: 'websocket', origin: base, cookie } });
+        assert.equal(upgrade.status, 101);
+        const socket = upgrade.webSocket!; socket.accept();
+        try {
+            const result = new Promise<unknown>((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(`Missing ${expected} response`)), 5000);
+                socket.addEventListener('message', event => {
+                    const message = JSON.parse(String(event.data));
+                    if (message.type === expected) { clearTimeout(timer); resolve(message.payload); }
+                });
+            });
+            socket.send(JSON.stringify({ type, payload }));
+            return await result;
+        } finally { socket.close(1000); }
+    };
     const metadata = await request('/.well-known/oauth-cimd');
     assert.equal(metadata.status, 200); assert.match(metadata.headers.get('content-type')!, /application\/json/);
     assert.deepEqual((await metadata.json()).redirect_uris, [`${base}/api/hf/callback`]);
@@ -29,6 +45,7 @@ try {
     assert.equal(login.status, 200);
     const auth = login.headers.getSetCookie()[0].split(';')[0];
     assert.equal((await (await request('/api/config', 'GET', auth)).json()).aiRoundLimit, 0);
+    assert.match(String(await command(auth, 'createRoom', {}, 'hfRequired')), /Hugging-Face-Konto/);
     const start = await request('/api/hf/connect', 'POST', auth);
     assert.equal(start.status, 200);
     const authorization = new URL((await start.json()).url);
@@ -39,6 +56,12 @@ try {
     assert.equal(callback.status, 303); assert.equal(callback.headers.get('location'), '/?hf=connected');
     const connection = callback.headers.getSetCookie().find(value => value.startsWith('slop_hf='))!.split(';')[0];
     const cookie = `${auth}; ${connection}`;
+    const other = await request('/api/session', 'POST', '', { mode: 'create', username: 'HfUnlinked' });
+    const otherAuth = other.headers.getSetCookie()[0].split(';')[0];
+    assert.match(String(await command(`${otherAuth}; ${connection}`, 'createRoom', {}, 'hfRequired')), /Hugging-Face-Konto/);
+    await command(cookie, 'createRoom', {}, 'roomCreated');
+    assert.match(String(await command(otherAuth, 'joinRoom', {}, 'hfRequired')), /Hugging-Face-Konto/);
+    await command(otherAuth, 'joinRoom', { role: 'spectator' }, 'joinedSuccess');
     await runtime.unsafeEvictDurableObject('slopurself-test', 'ServiceDurableObject', { name: 'global' });
     const status = await (await request('/api/hf', 'GET', cookie)).json();
     assert.equal(status.connected, true); assert.equal(status.remainingSeconds, 300);

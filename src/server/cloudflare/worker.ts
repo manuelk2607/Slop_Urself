@@ -11,6 +11,7 @@ import { historyResponse, historyListing, restoreHistoryResponse, HistoryError }
 import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
+import { indexingResponse } from '../indexing';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
@@ -18,6 +19,11 @@ export type { Env } from './types';
 
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
+        return indexingResponse(request, await handleRequest(request, env));
+    }
+};
+
+async function handleRequest(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
         const auth = cloudflareAuth(env);
         const rule = httpRateRule(url.pathname, request.method);
@@ -46,6 +52,7 @@ export default {
                 authEnabled: !authDisabled(env),
                 aiProvider: env.AI_PROVIDER === 'mock' ? 'mock' : env.AI_PROVIDER_CHAIN || env.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN,
                 mockAi: env.AI_PROVIDER === 'mock',
+                hfRequired: env.AI_PROVIDER !== 'mock',
                 videoDuration: Math.max(5, Number(env.LTX_DURATION) || 5)
             }, { headers: { 'Cache-Control': 'no-store' } });
         }
@@ -103,5 +110,4 @@ export default {
         }
 
         return env.ASSETS.fetch(request);
-    }
-};
+}

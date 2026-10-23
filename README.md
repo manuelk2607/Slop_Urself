@@ -4,6 +4,18 @@ Das Spiel läuft auf Cloudflare Workers mit statischen Assets, nativen WebSocket
 und einem Durable Object pro Raum. Neon speichert Spieler, Punkte, Runden und
 Bewertungen. Der Mac muss für die veröffentlichte Version nicht laufen.
 
+Für echte Partien verbindet jeder Spieler vor dem Raumbeitritt sein persönliches
+Hugging-Face-Konto. Videos, Fallbacks und Budgetreservierungen nutzen nur den
+Zugang des jeweiligen Erstellers. Es gibt kein gemeinsames Ersatzkontingent.
+Die maximale Rundenzahl richtet sich nach dem kleinsten verfügbaren Spielerbudget.
+Zuschauer brauchen keine HF-Verbindung; lokale Mock-Tests sind ausgenommen.
+Die kurze Anleitung steht in [docs/HUGGINGFACE.md](docs/HUGGINGFACE.md).
+
+Die öffentliche Startseite ist ohne Anmeldung und JavaScript lesbar. Canonical,
+Open Graph, strukturierte Daten, Sitemap, robots.txt und Google-Verifizierung
+liegen in `public/` und werden in den Cloudflare-Build übernommen. Einzelheiten
+zur Indexierung und Search Console: [docs/SEO.md](docs/SEO.md).
+
 ## Projektstruktur
 
 ```text
@@ -175,7 +187,6 @@ Lokale Konfiguration in der ignorierten .env.local:
 AI_PROVIDER=wan22
 AI_PROVIDER_CHAIN=wan22,wan22-fast
 AI_IMAGE_PROFILE=bounded
-HF_TOKEN=DEIN_GUELTIGER_HF_READ_TOKEN
 AI_ROUND_LIMIT=5
 AI_GPU_SECONDS_PER_ROUND=0
 LTX_DURATION=5
@@ -210,17 +221,20 @@ einschließlich 2x-Kosten für xlarge, kalibriert mit den Live-Messungen vom
 16. Oktober (etwa 73–75 Sekunden für vier Schritte und 122 Sekunden für acht
 Schritte) plus Reserve. Das ist eine Planung, keine Laufzeitgarantie. Die Lobby reserviert den größten zulässigen
 Bildtyp und den günstigsten Modus der gewählten Qualitätseinstellung.
-Die Grenze ist `floor(verfügbare Videos / Spielerzahl)`;
-die verfügbaren Videos ergeben sich aus GPU-Zeit, Aufrufen und Reservierungen.
+Pro unabhängigem HF-Konto ergeben sich die verfügbaren Videos aus GPU-Zeit,
+Aufrufen und eigenen Reservierungen. Die Raumgrenze ist das Minimum dieser
+persönlichen Videobudgets. Nutzen mehrere Profile dasselbe HF-Konto, werden
+dessen Videos durch die Anzahl dieser Profile geteilt, statt sie mehrfach zu zählen.
 Das kostenlose Gesamtbudget beträgt derzeit fünf Minuten, also 300 Sekunden.
 Es wird aus `quota.base` gelesen, nicht mit dem Restbudget verwechselt oder
 pro Fallback addiert. `quota.current` ist bereits GPU-gewichtet und wird nicht
 noch einmal halbiert. Bei vollen 300 Sekunden passen nach dieser sicheren
-Planung drei Sparmodus-Videos oder zwei Qualitätsvideos ins Budget. Für zwei
-Spieler ist damit zunächst ein vollständiger Durchgang reservierbar, nicht
-zwei garantierte Durchgänge. Zusätzliche Runden werden nach Abschluss erneut
-anhand der wirklichen Restzeit geprüft. Bei 185 verbleibenden Sekunden passt
-ein Durchgang für zwei Spieler; drei Spieler benötigen mindestens 237 Sekunden. Die UI zeigt nur die
+Planung drei Sparmodus-Videos oder zwei Qualitätsvideos je eigenem Konto ins
+Budget. Zwei Spieler mit je 300 Sekunden können deshalb drei Sparmodus-Runden
+mit insgesamt sechs Videos reservieren. Zusätzliche Runden werden nach Abschluss
+anhand der wirklichen persönlichen Restzeiten geprüft. Bei jeweils 185 Sekunden
+passen zwei Sparmodus-Runden; maßgeblich bleibt der Spieler mit dem kleinsten
+verfügbaren Budget. Die UI zeigt nur die
 aktuell maximale Rundenzahl. Acht Schritte werden nur versucht, wenn sie die
 noch ausstehenden Videos nicht gefährden.
 Längere Videos erhöhen das Budget automatisch.

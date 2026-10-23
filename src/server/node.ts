@@ -7,9 +7,10 @@ import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDi
 import { accountsResponse } from './accounts';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
-import { HfConnections, type HfConfig } from '../auth/huggingface';
+import { HfConnections, HfRequiredError, requirePlayerHf, type HfConfig } from '../auth/huggingface';
 import { nodeHfStorage } from '../auth/node-hf-storage';
 import { huggingFaceResponse } from './huggingface';
+import { privatePath } from './indexing';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
 import { gameOptions } from '../game/options';
@@ -87,6 +88,8 @@ function archive(url: string) {
     archiveWork = result.catch(() => {}); return result;
 }
 app.use(async (req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (privatePath(req.path)) { res.setHeader('X-Robots-Tag', 'noindex, nofollow, nosnippet'); res.setHeader('Cache-Control', 'no-store'); }
     const rule = httpRateRule(req.path, req.method);
     if (rule) {
         const key = await rateKey(req.socket.remoteAddress || 'local', httpRateScope(req.path, req.method), config.AUTH_COOKIE_SECRET);
@@ -135,6 +138,9 @@ app.get('/api/rooms/:code/image', async (req, res) => {
 });
 
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'index.html')));
+app.get(['/index.html', '/index'], (_req, res) => res.redirect(301, '/'));
+app.get('/robots.txt', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'robots.txt')));
+app.get('/sitemap.xml', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'sitemap.xml')));
 app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'favicon.ico')));
 app.get('/apple-touch-icon.png', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'apple-touch-icon.png')));
 app.get('/apple-touch-icon-precomposed.png', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'apple-touch-icon.png')));
@@ -151,7 +157,7 @@ app.get('/api/config', async (req, res) => {
     res.json({
         ...(signedIn ? await budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
         aiProvider: AI_PROVIDER === 'mock' ? 'mock' : AI_PROVIDER_CHAIN,
-        mockAi: AI_PROVIDER === 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
+        mockAi: AI_PROVIDER === 'mock', hfRequired: AI_PROVIDER !== 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
     });
 });
 app.get('/api/stats', async (req, res) => {
@@ -421,7 +427,7 @@ io.on('connection', (socket: Socket) => {
                     socket.emit('authExpired'); socket.disconnect(true); return;
                 }
                 await handler(data);
-            }).catch(error => socket.emit('errorMsg', error instanceof Error ? error.message : 'Nachricht konnte nicht verarbeitet werden.'));
+            }).catch(error => socket.emit(error instanceof HfRequiredError ? 'hfRequired' : 'errorMsg', error instanceof Error ? error.message : 'Nachricht konnte nicht verarbeitet werden.'));
         });
     }
     socket.on('refreshAuth', (payload: { token: unknown }) => {
@@ -435,6 +441,7 @@ io.on('connection', (socket: Socket) => {
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
         socket.data.creatingRoom = true;
         try {
+            await requirePlayerHf(config, socket.data.account, hf);
             const capacity = await budget.capacity(1, 'auto', socket.data.account?.hfConnectionId ? [{ id: socket.id, accountId: socket.data.account.id, hfConnectionId: socket.data.account.hfConnectionId }] : undefined);
             let code: string;
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
@@ -458,6 +465,9 @@ io.on('connection', (socket: Socket) => {
         const name = socket.data.account?.name || sanitizeUsername(payload.username);
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
         checkJoin(room, name, socket.data.account?.id, spectator);
+        if (!spectator) await requirePlayerHf(config, socket.data.account, hf);
+        if (rooms.get(room.code) !== room || socket.data.roomId) throw new Error('Der Raum hat sich geändert. Bitte erneut beitreten.');
+        checkJoin(room, name, socket.data.account?.id, spectator);
         const player: Player = { id: socket.id, accountId: socket.data.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || randomUUID(), name, score: 0, connected: true };
         if (participants(room).some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
         if (spectator) (room.spectators ??= []).push(player);
@@ -472,6 +482,8 @@ io.on('connection', (socket: Socket) => {
         if (!room || !player || (!authDisabled(config) && player.accountId !== socket.data.account?.id)) { socket.emit('resumeFailed'); return; }
         if (room.rematch?.initialized && room.rematch.transfers[player.id]) { socket.emit('roomTransfer', room.rematch.transfers[player.id]); return; }
         if (socket.data.roomId && socket.data.roomId !== room.code) throw new Error('Du bist bereits in einem Raum.');
+        if (!isSpectator(room, player)) await requirePlayerHf(config, socket.data.account, hf);
+        if (rooms.get(room.code) !== room || !participants(room).includes(player)) { socket.emit('resumeFailed'); return; }
         const timer = disconnectTimers.get(player.sessionId);
         if (timer) clearTimeout(timer);
         disconnectTimers.delete(player.sessionId);

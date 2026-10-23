@@ -13,7 +13,9 @@ test('Cloudflare secret setup validates required values without revealing their 
     const env = { HF_TOKEN: 'private-hf-token', DATABASE_URL: 'private-database-url',
         AUTH_COOKIE_SECRET: 'test-only-cookie-secret-at-least-32-characters',
         AWS_ACCESS_KEY_ID: 'private-access-key', AWS_SECRET_ACCESS_KEY: 'private-storage-secret' };
-    assert.deepEqual(prepareSecrets(env), env);
+    const { HF_TOKEN, ...required } = env;
+    assert.deepEqual(prepareSecrets(env), required);
+    assert.deepEqual(prepareSecrets(required), required);
     assert.throws(() => prepareSecrets({ HF_TOKEN: env.HF_TOKEN }), {
         message: 'Fehlende Werte in .env.local: DATABASE_URL, AUTH_COOKIE_SECRET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY'
     });

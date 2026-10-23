@@ -48,7 +48,7 @@ eingerichtetes Archiv ebenfalls abgelehnt, bevor GPU-Kontingent verbraucht wird.
 Das Video wird vor VOTING archiviert. Ein fehlgeschlagener Archiv-Abruf wird
 nicht als erfolgreich vorbereitetes Video mit temporärem Link veröffentlicht.
 
-cf:secrets überträgt HF_TOKEN, DATABASE_URL,
+cf:secrets überträgt DATABASE_URL,
 AUTH_COOKIE_SECRET und die zwei privaten Storage-Schlüssel aus .env.local.
 Der Spiellink benötigt keinen zusätzlichen Zugangscode. Jeder Spieler legt
 nur einen eindeutigen Benutzernamen an oder verwendet einen bestehenden Namen.
@@ -57,12 +57,16 @@ setzen; offene Profile bleiben per Benutzername zugänglich. Ein offener Name
 ist kein Identitätsnachweis. Geschützte Profile benötigen ihr Passwort.
 
 SERVICES ist ein zweiter SQLite-Durable-Object-Binding (Migration v2).
-Es reserviert das echte kostenlose HF-Kontingent für alle Räume gemeinsam
+Es reserviert das echte kostenlose HF-Kontingent pro verifiziertem Spielerkonto raumübergreifend
 und serialisiert die Archivierung mit automatischer Löschung alter Videos.
 Die Rundenbegrenzung verwendet den günstigsten konfigurierten 5-Sekunden-Modus
 aus den gewählten Wan-2.2-Modi. Alle Spaces teilen dasselbe HF-Account-Kontingent;
-ihre Budgets werden nicht addiert. Bei 185 GPU-Sekunden erlaubt der native
-4-Schritte-Modus eine Runde mit zwei Spielern. Der 8-Schritte-Modus wird nur
+ihre Budgets werden nicht addiert. Zwei unabhängige Konten mit jeweils 185
+GPU-Sekunden erlauben im nativen 4-Schritte-Modus je zwei Videos, also zwei
+Runden. Ein einzelnes von zwei Profilen geteiltes HF-Konto zählt nur einmal.
+Ein zentraler HF_TOKEN ist nicht erforderlich und wird für echte Aufträge nie
+verwendet. Jeder Spieler muss HF vor dem Raumbeitritt verbinden; Zuschauer und
+Mock-Tests sind ausgenommen. Der 8-Schritte-Modus wird nur
 versucht, wenn ausreichend Budget für die verbleibenden Videos reserviert bleibt.
 Nach dem letzten Durchgang bietet das Spiel bei ausreichendem Restkontingent
 eine hostgesteuerte Zusatzrunde an. Punkte und Raum bleiben erhalten. Die

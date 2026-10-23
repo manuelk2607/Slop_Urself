@@ -12,6 +12,12 @@ export interface HfStorage {
     delete(key: string): Promise<unknown>;
 }
 export interface HfCredential { token: string; subject: string; username: string; expiresAt: number; accountId: string }
+export class HfRequiredError extends Error {
+    constructor() { super('Bitte verbinde dein persönliches Hugging-Face-Konto, um mitzuspielen.'); }
+}
+export async function requirePlayerHf(config: { AI_PROVIDER?: string }, account: Account | undefined, connections: HfConnections) {
+    if (config.AI_PROVIDER !== 'mock') await connections.credential(account?.hfConnectionId, account?.id);
+}
 export class HfOAuthError extends Error {
     constructor(readonly code: 'state_invalid' | 'exchange_failed' | 'token_invalid' | 'identity_failed' | 'identity_invalid' | 'validation_failed' | 'quota_forbidden' | 'quota_unavailable', message: string) { super(message); }
 }
@@ -237,9 +243,9 @@ export class HfConnections {
         return { connected: true, ...pending.completed };
     }
     async credential(connection: string | undefined, accountId: string | undefined) {
-        if (!secretId(connection) || !accountId) throw new Error('Bitte verbinde dein Hugging-Face-Konto erneut.');
+        if (!secretId(connection) || !accountId) throw new HfRequiredError();
         const value = await this.load<HfCredential>(`hf-connection:${connection}`);
-        if (!value || value.accountId !== accountId) throw new Error('Bitte verbinde dein Hugging-Face-Konto erneut.');
+        if (!value || value.accountId !== accountId) throw new HfRequiredError();
         return value;
     }
     async status(connection: string | undefined, accountId: string) {

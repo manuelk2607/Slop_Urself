@@ -160,19 +160,21 @@ test('additional rounds use actual remaining quota and retain abandoned in-fligh
 });
 test('global Worker budget serializes simultaneous game starts and retains active abandoned jobs', async () => {
     const data = new Map<string, any>();
-    const state = { storage: { get: async (key: string) => structuredClone(data.get(key)), put: async (key: string, value: any) => { data.set(key, structuredClone(value)); } } };
+    const personal = await testHfPlayers(data, ['a']);
+    const state = { storage: personal.storage };
     const original = globalThis.fetch;
     globalThis.fetch = async () => Response.json({ base: 300, current: 300, resetsAt: null, runs: { remaining: 8 } });
     try {
-        const env = { HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'ltx' };
+        const env = { ...personal.config, HF_TOKEN: 'must-never-be-used', AI_PROVIDER_CHAIN: 'ltx' };
         const worker = new ServiceDurableObject(state as any, env as any);
         const post = (path: string, body: unknown) => worker.fetch(new Request(`https://test/quota/${path}`, { method: 'POST', body: JSON.stringify(body) }));
-        const starts = await Promise.all([post('reserve', { code: 'AAAA', rounds: 2 }), post('reserve', { code: 'BBBB', rounds: 2 })]);
+        const starts = await Promise.all([post('reserve', { code: 'AAAA', rounds: 2, participants: personal.players }), post('reserve', { code: 'BBBB', rounds: 2, participants: personal.players })]);
         assert.deepEqual(starts.map(response => response.status), [200, 503]);
-        await post('begin', { code: 'AAAA' }); await post('release', { code: 'AAAA' });
-        assert.equal(data.get('reservations').AAAA.rounds, 1);
-        await post('consume', { code: 'AAAA' });
-        assert.equal((await new QuotaBudget(state.storage, env).capacity()).aiRoundLimit, 2);
+        assert.equal((await post('begin', { code: 'AAAA', jobId: 'job-a', playerId: 'a', participant: personal.players[0] })).status, 200);
+        await post('release', { code: 'AAAA' });
+        assert.equal(heldHfVideos(data), 1);
+        await post('consume', { code: 'AAAA', jobId: 'job-a' });
+        assert.equal(heldHfVideos(data), 0);
     } finally { globalThis.fetch = original; }
 });
 test('quota permission/network failures block new games rather than guessing a limit', async () => {
@@ -202,13 +204,14 @@ test('global Worker budget serializes simultaneous additional rounds across room
     const original = globalThis.fetch;
     globalThis.fetch = async () => Response.json({ base: 300, current: 300, resetsAt: null, runs: { remaining: 8 } });
     const data = new Map<string, any>();
-    const worker = new ServiceDurableObject({ storage: { get: async key => structuredClone(data.get(key)), put: async (key, value) => { data.set(key, structuredClone(value)); } } } as any, { HF_TOKEN: 'test' } as any);
+    const personal = await testHfPlayers(data, ['a', 'b']);
+    const worker = new ServiceDurableObject({ storage: personal.storage } as any, { ...personal.config, HF_TOKEN: 'must-never-be-used' } as any);
     try {
-        const extend = (code: string) => worker.fetch(new Request('https://test/quota/extend', { method: 'POST', body: JSON.stringify({ code, players: 2 }) }));
+        const extend = (code: string) => worker.fetch(new Request('https://test/quota/extend', { method: 'POST', body: JSON.stringify({ code, players: 2, participants: personal.players }) }));
         const results = await Promise.all([extend('AAAA'), extend('BBBB')]);
         assert.deepEqual(results.map(result => result.status), [200, 503]);
-        assert.equal(data.get('reservations').AAAA.rounds, 2);
-        assert.equal(data.get('reservations').BBBB, undefined);
+        assert.equal(heldHfVideos(data), 2);
+        assert.equal(data.get('quota-plan:BBBB'), undefined);
     } finally { globalThis.fetch = original; }
 });
 test('fallback attempts cannot spend the GPU budget reserved for later rounds', async () => {
@@ -343,3 +346,4 @@ test('global Worker profile registry serializes same-name creation and survives 
     const response = await restored.fetch(new Request('https://test/profiles/find', { method: 'POST', body: JSON.stringify({ name: 'FRIEND' }) }));
     assert.equal((await response.json() as any).profile.id, results[0].profile.id);
 });
+import { testHfPlayers, heldHfVideos } from '../support/hf-fixture';

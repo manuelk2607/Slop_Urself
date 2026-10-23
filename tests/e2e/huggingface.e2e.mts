@@ -34,6 +34,20 @@ try {
         await page.goto(base); await page.locator('#screenAuth').waitFor({ state: 'visible' });
         await page.locator('#authUsername').fill(i ? 'PersonalB' : 'PersonalA'); await page.locator('#authSubmit').click();
         await page.locator('#screenLobby').waitFor({ state: 'visible' });
+        assert.equal((await (await page.request.get(`${base}/api/config`)).json()).aiRoundLimit, 0);
+        // Bypass the UI gate: the server itself must reject unlinked players.
+        const denial = await page.evaluate(() => new Promise<string>((resolve, reject) => {
+            const io = (window as unknown as { io: (options: object) => { on: (event: string, listener: (data?: string) => void) => void; emit: (event: string, payload: object) => void; disconnect: () => void } }).io;
+            const connection = io({ forceNew: true });
+            const timer = setTimeout(() => { connection.disconnect(); reject(new Error('Missing HF server-side rejection')); }, 5000);
+            connection.on('connect', () => connection.emit('createRoom', {}));
+            connection.on('hfRequired', data => { clearTimeout(timer); connection.disconnect(); resolve(data || ''); });
+        }));
+        assert.match(denial, /Hugging-Face-Konto/);
+        await page.locator('#createRoomButton').click();
+        await page.locator('#hfDialog').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('#screenRoomLobby').isVisible(), false);
+        await page.locator('#hfCloseButton').click();
         await page.locator('#hfAccountButton').click();
         await page.locator('#hfConnectButton').click();
         await page.locator('#hfDevice').waitFor({ state: 'visible' });

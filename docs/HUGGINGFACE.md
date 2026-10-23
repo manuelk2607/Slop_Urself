@@ -82,15 +82,20 @@ läuft spätestens nach acht Stunden ab; danach erneut verbinden. Andere
 Geräte brauchen ihre eigene HF-Verbindung. Der bisherige Benutzername
 allein reicht nicht, um einen gespeicherten HF-Zugang zu übernehmen.
 
-Vor dem Spielstart kann jeder in der Lobby sein eigenes HF-Konto verbinden.
-Während einer laufenden Runde ist die Kontoverwaltung gesperrt. Eine
+Jeder Spieler muss vor dem Erstellen oder Betreten eines Raums sein eigenes
+HF-Konto verbinden. Das gilt auch für Spieler in Archivpartien. Zuschauer
+benötigen nur ein Spielerprofil und den Raumcode. Die Mock-KI ist ausgenommen.
+Während einer laufenden Runde ist die Kontoverwaltung gesperrt; bei einem
+abgelaufenen Zugang öffnet der Server die Wiederverknüpfung. Eine
 Wiederverbindung muss dasselbe HF-Konto verwenden, für das die Runden
 reserviert wurden. Bei einem neuen Konto eine neue Partie starten.
 
-Ohne persönliche Verbindung bleibt das gemeinsame Serverkontingent erhalten.
-Ein nicht erreichbarer oder abgelaufener persönlicher Zugang wird nicht
-heimlich durch das gemeinsame Konto ersetzt. Auch Archivpartien bleiben
-ohne persönliche HF-Anmeldung möglich.
+Ohne persönliche Verbindung blockiert der Server den Spielerbeitritt und
+neue KI-Aufträge. Ein nicht erreichbarer oder abgelaufener persönlicher Zugang
+wird nie durch einen Server-Token ersetzt. Jeder Auftrag pinnt den Zugang des
+Erstellers; auch Ergebnisabruf und erlaubte Fallbacks verwenden genau diesen
+Zugang. Bereits eingereichte Aufträge werden nach einer Browsertrennung mit
+demselben gepinnten Zugang weiter abgefragt, solange dieser gültig ist.
 
 ## Runden und Grenzen
 
@@ -198,9 +203,11 @@ Live-Auftrag überprüft werden. Ein Zugriffsscope für Inference Providers
 ist kein Beleg für ZeroGPU-Zugriff; keine breiteren Rechte auf Verdacht
 erteilen.
 
-Persönliche Verbindungen bleiben auch bei einem ungültigen gemeinsamen
-Server-Token nutzbar. Die zuletzt verifizierte zentrale HF-Identität bleibt
-für die Zuordnung bestehender Reservierungen gespeichert. HF-Anmeldung und
+Ein zentraler `HF_TOKEN` wird für das Spiel nicht mehr benötigt und beim
+Standard-Secret-Upload nicht mehr übertragen. Ein eventuell vorhandener Wert
+wird von echten Spielaufträgen nie verwendet. Die früher verifizierte zentrale
+HF-Identität bleibt ausschließlich für bestehende Reservierungen zugeordnet.
+HF-Anmeldung und
 Kontingentanzeigen blockieren keine Budgetfreigaben anderer Räume; Änderungen
 an Reservierungen bleiben serialisiert und prüfen das Kontingent erneut.
 

@@ -18,7 +18,7 @@ try {
     let configRequests = 0;
     await quota.route('**/api/config', route => {
         configRequests++;
-        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ authEnabled: false, mockAi: false, quotaMode: 'unavailable', aiRoundLimit: 0 }) });
+        return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ authEnabled: false, mockAi: true, hfRequired: false, quotaMode: 'unavailable', aiRoundLimit: 0 }) });
     });
     await quota.goto(base); await quota.locator('#screenLobby').waitFor({ state: 'visible' });
     assert.equal(await quota.locator('#roundCountInput, #roundLimitHint').count(), 0);

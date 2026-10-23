@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HfConnections, HfOAuthError, hfCookie, hfClient, type HfStorage } from '../../src/auth/huggingface';
+import { HfConnections, HfOAuthError, HfRequiredError, hfCookie, hfClient, type HfStorage } from '../../src/auth/huggingface';
 import { PlayerQuotaBudget } from '../../src/ai/player-quota';
 import { huggingFaceResponse } from '../../src/server/huggingface';
 import { sessionResponse } from '../../src/auth/session';
@@ -162,23 +162,24 @@ test('concurrent vault writes preserve the expiry index and callback/device oper
     } finally { f.restore(); }
 });
 
-test('personal budgets remain usable with a revoked central token and retain known central holds', async () => {
+test('personal budgets never query the server token and retain pre-migration holds for their known owner', async () => {
     const f = fixture();
     try {
         const a = await f.connect('a', 'hf-a'), b = await f.connect('b', 'hf-b'), self = await f.connect('self-profile', 'self', 'owner');
         const original = globalThis.fetch;
-        globalThis.fetch = async (url, init) => new Headers(init?.headers).get('authorization') === 'Bearer central'
-            ? new Response(null, { status: 401 }) : original(url, init);
+        globalThis.fetch = async (url, init) => {
+            assert.notEqual(new Headers(init?.headers).get('authorization'), 'Bearer central');
+            return original(url, init);
+        };
         let budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
         assert.equal((await budget.capacity(2, 'economy', [a, b])).aiRoundLimit, 3);
         await budget.reserve('AAAA', 2, 2, 'economy', [a, b]);
         assert.equal((await budget.capacity(2, 'economy', [a, b])).aiRoundLimit, 1);
         assert.equal((await budget.capacity(2, 'economy', [a, { id: 'central-player' }])).aiRoundLimit, 0);
         await budget.release('AAAA');
-        globalThis.fetch = original;
         budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
-        await budget.capacity(1, 'economy', [self]);
-        await budget.reserve('HOLD', 2, 1, 'economy');
+        await f.storage.put('central-identity', { subject: 'self' });
+        await f.storage.put('reservations', { HOLD: { rounds: 2, active: 0, expiresAt: Date.now() + 60_000, reset: null, gpuSecondsPerVideo: 79 } });
         delete f.tokens.central;
         budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
         assert.equal((await budget.capacity(1, 'economy', [self])).aiRoundLimit, 1);
@@ -287,7 +288,7 @@ test('individual quotas give each player three rounds, not one shared round or s
     try {
         const a = await f.connect('a', 'hf-a'), b = await f.connect('b', 'hf-b');
         const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
-        assert.equal((await budget.capacity(2, 'economy')).aiRoundLimit, 1);
+        assert.equal((await budget.capacity(2, 'economy')).aiRoundLimit, 0);
         const capacity = await budget.capacity(2, 'economy', [a, b]);
         assert.equal(capacity.aiRoundLimit, 3); assert.equal(capacity.sharedQuota, false);
         await budget.reserve('AAAA', 3, 2, 'economy', [a, b]);
@@ -310,14 +311,14 @@ test('individual quotas give each player three rounds, not one shared round or s
     } finally { f.restore(); }
 });
 
-test('same HF identity is deduplicated across profiles and the central account, while a weak player limits the room', async () => {
+test('the same HF identity is deduplicated across profiles and a missing or weak personal account limits the room', async () => {
     const f = fixture();
     try {
         const a = await f.connect('a', 'same'), b = await f.connect('b', 'same');
         const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
         assert.equal((await budget.capacity(2, 'economy', [a, b])).aiRoundLimit, 1);
         const self = await f.connect('self-profile', 'self', 'owner');
-        assert.equal((await budget.capacity(2, 'economy', [self, { id: 'central-player' }])).aiRoundLimit, 1);
+        assert.equal((await budget.capacity(2, 'economy', [self, { id: 'central-player' }])).aiRoundLimit, 0);
         f.seconds.same = 70;
         assert.equal((await budget.capacity(2, 'economy', [a, self])).aiRoundLimit, 0);
         assert.equal((await budget.capacity(1, 'economy', [{ ...a, accountId: 'impostor' }])).aiRoundLimit, 0);
@@ -337,6 +338,51 @@ test('personal reservations survive service recreation and serialize simultaneou
         service = new ServiceDurableObject(state, env);
         const capacity = await (await request('/quota/capacity', { players: 2, quality: 'economy', participants: [a, b] })).json();
         assert.equal(capacity.aiRoundLimit, 1);
+    } finally { f.restore(); }
+});
+
+test('missing, expired, foreign and unbound credentials fail closed even with a configured server token', async () => {
+    const f = fixture();
+    try {
+        const a = await f.connect('a', 'hf-a');
+        globalThis.fetch = async () => { throw new Error('No provider request allowed'); };
+        const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        assert.equal((await budget.displayCapacity()).aiRoundLimit, 0);
+        assert.equal((await budget.capacity(1, 'auto', [{ id: 'a' }])).aiRoundLimit, 0);
+        await assert.rejects(budget.reserve('NONE', 1));
+        await assert.rejects(budget.extend('NONE', 1));
+        await assert.rejects(budget.begin('NONE', 1, 'unknown', 'a', 1, a));
+        await assert.rejects(budget.tokenForJob('NONE', 'unknown'));
+        await assert.rejects(budget.allowAttempt('NONE', 79, 'unknown'));
+        assert.equal((await budget.capacity(1, 'auto', [{ ...a, accountId: 'other' }])).aiRoundLimit, 0);
+        const sealed = f.data.get(`hf-connection:${a.hfConnectionId}`);
+        sealed.expiresAt = Date.now() - 1;
+        await assert.rejects(f.connections.credential(a.hfConnectionId, a.accountId));
+    } finally { f.restore(); }
+});
+
+test('a pinned job token must match its reserved player and HF identity', async () => {
+    const f = fixture();
+    try {
+        const a = await f.connect('a', 'hf-a'), b = await f.connect('b', 'hf-b');
+        const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        await budget.reserve('TEST', 1, 2, 'economy', [a, b]);
+        await budget.begin('TEST', 2, 'owned-job', a.id, 1, a);
+        await f.connections.pinJob(b.hfConnectionId, b.accountId, 'owned-job');
+        await assert.rejects(budget.tokenForJob('TEST', 'owned-job'));
+    } finally { f.restore(); }
+});
+
+test('a revoked HF token requests reconnection before any new video can start', async () => {
+    const f = fixture();
+    try {
+        const a = await f.connect('a', 'hf-a');
+        const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        await budget.reserve('TEST', 1, 1, 'economy', [a]);
+        f.setQuotaStatus(401);
+        await assert.rejects(budget.begin('TEST', 1, 'revoked-job', a.id, 1, a), HfRequiredError);
+        assert.equal(f.data.has('hf-job:revoked-job'), false);
+        assert.deepEqual(f.data.get('quota-plan:TEST').jobs, {});
     } finally { f.restore(); }
 });
 

@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import { artifactPath } from '../support/artifacts';
 import { spawn } from 'node:child_process';
 import { chromium, webkit } from 'playwright';
+import { connectTestHf } from '../support/hf-browser';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const port = process.env.TEST_QUOTA_PORT || '3315';
 const base = `http://127.0.0.1:${port}`;
+const directory = await mkdtemp(join(tmpdir(), 'slop-quota-e2e-'));
 const server = spawn(process.execPath, ['--import', 'tsx', 'tests/support/quota-server.ts'], {
-    cwd: process.cwd(), env: { ...process.env, PORT: port, DATABASE_URL: '', AI_PROVIDER: 'wan22', AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded', AI_GPU_SECONDS_PER_ROUND: '0', HF_TOKEN: 'test', AUTH_COOKIE_SECRET: 'quota-test-secret-not-for-production-123456' }, stdio: ['pipe', 'pipe', 'pipe']
+    cwd: process.cwd(), env: { ...process.env, PORT: port, DATABASE_URL: '', AI_PROVIDER: 'wan22', AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded', AI_GPU_SECONDS_PER_ROUND: '0', HF_TOKEN: 'test', HF_OAUTH_CLIENT_ID: 'test-public-client', HF_OAUTH_ORIGIN: '', HF_LOCAL_STORAGE_DIR: directory, AUTH_COOKIE_SECRET: 'quota-test-secret-not-for-production-123456' }, stdio: ['pipe', 'pipe', 'pipe']
 });
 const exited = new Promise<void>(resolve => server.once('exit', () => resolve()));
 const ready = new Promise<void>((resolve, reject) => {
@@ -28,11 +33,13 @@ try {
         await page.locator('#authUsername').fill(`QuotaPlayer${i}`);
         await page.locator('#authSubmit').click();
         await page.locator('#screenLobby').waitFor({ state: 'visible' });
+        await connectTestHf(page, base);
     }
     const [host, guest, third] = pages;
-    const config = await (await host.request.get(`${base}/api/config?players=2`)).json();
-    assert.equal(config.remainingGpuSeconds, 185); assert.equal(config.availableGenerations, 2); assert.equal(config.aiRoundLimit, 1);
-    assert.equal(config.gpuSecondsPerVideo, 79); assert.equal(config.sharedQuota, true);
+    const config = await (await host.request.get(`${base}/api/config`)).json();
+    assert.equal(config.remainingGpuSeconds, 185); assert.equal(config.availableGenerations, 2); assert.equal(config.aiRoundLimit, 2);
+    assert.equal(config.gpuSecondsPerVideo, 79); assert.equal(config.sharedQuota, false); assert.equal(config.hfRequired, true);
+    assert.equal((await (await host.request.get(`${base}/api/config?players=2`)).json()).aiRoundLimit, 0, 'Only room membership can resolve all players’ personal budgets.');
     assert.equal((await host.request.get(`${base}/api/config?players=0`)).status(), 400);
     await host.locator('#createRoomButton').click();
     await host.locator('#screenRoomLobby').waitFor({ state: 'visible' });
@@ -82,9 +89,10 @@ try {
     const reserved = await (await host.request.get(`${base}/api/config`)).json();
     assert.equal(reserved.reservedRounds, 6); assert.equal(reserved.availableGenerations, 0);
     assert.deepEqual(errors, []);
-    console.log('PASS: live quota uses calibrated 79-second economy / 126-second quality costs, membership, shared reservations and host-only changes; no real AI or production database calls.');
+    console.log('PASS: linked HF quotas use calibrated 79-second economy / 126-second quality costs, deduplicate shared identities, reserve by membership and enforce host-only changes; no real AI or production DB calls.');
 } finally {
     await browser?.close();
     server.kill('SIGTERM');
     await exited;
+    await rm(directory, { recursive: true, force: true });
 }

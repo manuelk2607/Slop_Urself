@@ -2,9 +2,16 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium, webkit, type Page } from 'playwright';
 import { artifactPath } from '../support/artifacts';
+import { connectTestHf } from '../support/hf-browser';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+const directory = await mkdtemp(join(tmpdir(), 'slop-party-e2e-'));
 
 const server = spawn(process.execPath, ['--import', 'tsx', 'tests/support/party-server.ts'], { env: { ...process.env,
     PORT: '3317', DATABASE_URL: '', AUTH_MODE: 'disabled', HF_TOKEN: 'test', AI_PROVIDER: 'wan22',
+    HF_OAUTH_CLIENT_ID: 'test-public-client', HF_OAUTH_ORIGIN: '', HF_LOCAL_STORAGE_DIR: directory,
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '' }, stdio: ['ignore', 'pipe', 'inherit'] });
 const exited = new Promise<void>(resolve => server.once('exit', () => resolve()));
 const ready = new Promise<void>((resolve, reject) => {
@@ -22,6 +29,7 @@ try {
         page.on('pageerror', error => errors.push(error.message));
         await page.goto('http://127.0.0.1:3317'); await page.locator('#authUsername').fill(`Replay${i}`);
         await page.locator('#authSubmit').click(); await visible(page, 'screenLobby');
+        await connectTestHf(page, 'http://127.0.0.1:3317');
     }
     for (const mode of ['archive-vote', 'archive-guess']) {
         await host.locator('#createRoomButton').click(); await visible(host, 'screenRoomLobby');
@@ -58,4 +66,4 @@ try {
     }
     assert.deepEqual(errors, []);
     console.log('PASS: both archive modes with zero GPU quota, independent scores, every-voter best-of, rotating guessing judge, invitations, playback, reload and mobile layout.');
-} finally { await browser?.close(); server.kill('SIGTERM'); await exited; }
+} finally { await browser?.close(); server.kill('SIGTERM'); await exited; await rm(directory, { recursive: true, force: true }); }

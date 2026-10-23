@@ -1,5 +1,56 @@
 # Technische Prüfung
 
+## Verpflichtende persönliche HF-Verbindung und SEO vom 23. Oktober 2026
+
+Ausgangspunkt: `91c4b60`, Implementierung auf `codex/mandatory-hf-seo`.
+
+- Node und Cloudflare prüfen die kontogebundene HF-Verbindung vor Raum-Erstellung,
+  Spielerbeitritt und Wiederaufnahme. Zuschauer und ausdrücklich konfigurierte
+  Mock-KI sind ausgenommen. Ein eigener WebSocket-Fehler `hfRequired` öffnet die
+  Wiederverknüpfung, ohne die gespeicherte Raumsitzung zu verwerfen. Der Dialog
+  bleibt bei Zustandsupdates bedienbar. Widerrufene Kontingentrechte blockieren
+  neue Jobs und fordern erneute Verknüpfung an.
+- Echte Reservierungen benötigen sämtliche verifizierten Teilnehmer. Jeder Job
+  pinnt die Ersteller-Verbindung und prüft bei Verwendung Profil-ID und HF-Subjekt.
+  Ein Server-Token wird weder als Ersatz noch zur Kontingentabfrage verwendet.
+  Die alte zentrale Identität dient ausschließlich der Zuordnung bestehender
+  Reservierungen. Fehlende, fremde, abgelaufene und manipulierte Zuordnungen
+  blockieren den Auftrag. Bekannte Aufträge behalten ihren ursprünglichen Zugang.
+- Die Rundengrenze entspricht dem knappsten persönlichen Videobudget. Gleiche
+  HF-Identitäten mehrerer Profile zählen gemeinsam, nicht mehrfach. Zwei getrennte
+  300-Sekunden-Testkonten erlauben bei 79 Sekunden Planbudget drei Runden/sechs
+  Videos. Ein zentraler HF_TOKEN ist keine Deployment-Voraussetzung mehr und wird
+  standardmäßig nicht hochgeladen. Die erforderliche HF_OAUTH_CLIENT_ID ist im
+  bestehenden Cloudflare-Deployment als Secret vorhanden; nur Namen wurden geprüft.
+- Die öffentliche Startseite enthält statisch lesbare Spielinformationen,
+  Sprachangabe, Titel/Beschreibung, Canonical, Open Graph, Twitter-Metadaten,
+  WebSite/VideoGame-JSON-LD und den vorgegebenen Google-Verifizierungstag.
+  robots.txt und Sitemap enthalten die tatsächliche öffentliche Origin.
+  API-Antworten erhalten zusätzlich Noindex- und No-store-Header. Private Inhalte
+  behalten ihre Berechtigungsprüfung. Alle Skripte laden mit defer; der Einstieg
+  benötigt keine zusätzliche Konfigurationsabfrage für die HF-Oberfläche.
+- Die neuen Tests prüfen unter anderem direkte umgangene UI-Sperren in Node und
+  workerd, einen fremden HF-Cookie, gepinnte Job-Zuordnung, widerrufene Rechte,
+  getrennte Ersteller-Tokens, Wiederaufnahme, Kontingentreservierungen und statische
+  Indexierbarkeit ohne JavaScript. Bestehende Tests für gemeinsame Kontingente
+  verwenden nun explizit verknüpfte Testprofile derselben HF-Identität.
+
+Verifikation: TypeScript-/Browser-Build und 144 Unit-Tests bestanden. Sämtliche
+Chromium- und WebKit-Prüfungen bestanden, einschließlich Node und lokalem
+workerd, beider Archivmodi, Mehrspieler-/Zuschauer-/Revanche-Abläufen und SEO.
+Der nach der Unterbrechung separat abgeschlossene WebKit-CI-Lauf endete mit
+Exitcode 0. Alle HF-Aufrufe und
+Videoerstellungen in automatisierten Tests waren simuliert; kein echtes
+GPU-Kontingent, keine Produktivdatenbank und kein Produktivarchiv wurden genutzt.
+Der öffentliche Bestands-Host antwortete vor der Veröffentlichung auch mit
+Googlebot-User-Agent über HTTPS mit HTTP 200. Ein echter persönlicher
+GPU-Abbuchungsnachweis wurde in diesem Auftrag nicht ausgeführt.
+
+Search Console: Der HTML-Tag allein bestätigt die Property noch nicht. Nach dem
+Deployment in der URL-Präfix-Property die Verifizierung bestätigen und
+`sitemap.xml` einreichen; Google bestimmt die Aufnahme in den Suchindex.
+Details stehen in `docs/SEO.md`.
+
 ## Neuimplementierung vom 21. Oktober 2026
 
 Ausgangspunkt und unveränderter Git-HEAD: `d166133ab02dd7c3a6094811524df63f16d848d6`.

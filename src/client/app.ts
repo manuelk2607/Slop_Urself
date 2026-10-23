@@ -172,6 +172,7 @@ function clearSession(preserveStored = false) {
 
 // --- SCREEN SWITCHER ---
 function showScreen(screenToShow: HTMLElement) {
+    document.getElementById('aboutGame')!.hidden = ![document.getElementById('screenStartup'), document.getElementById('screenAuth'), screenLobby].includes(screenToShow);
     document.body.classList.toggle('statistics-open', screenToShow === screenStats);
     if (screenToShow !== screenStats) accounts.reset();
     if (screenToShow !== screenVoting) votingVideoPlayer.pause();
@@ -299,6 +300,8 @@ async function requestCreateRoom() {
 }
 createRoomButton.addEventListener('click', async () => {
     if (lobbyActionPending) return;
+    if (!await hfConnection.ensurePlayer()) return;
+    if (lobbyActionPending) return;
     const username = usernameInput.value.trim();
     if (!username) return triggerNameError();
     clearSession();
@@ -309,6 +312,8 @@ createRoomButton.addEventListener('click', async () => {
 });
 socket.on('roomCodeConflict', () => { void requestCreateRoom(); });
 async function joinRoom(role: 'player' | 'spectator') {
+    if (lobbyActionPending) return;
+    if (role === 'player' && !await hfConnection.ensurePlayer()) return;
     if (lobbyActionPending) return;
     const username = usernameInput.value.trim();
     const code = roomCodeInput.value.trim().toUpperCase();
@@ -501,6 +506,13 @@ socket.on('errorMsg', (msg: string) => {
         uploadButton.innerText = 'KI-Video generieren';
         loadingSection.style.display = 'none';
     }
+});
+socket.on('hfRequired', () => {
+    setLobbyPending(false);
+    uploadButton.disabled = false;
+    uploadButton.innerText = 'KI-Video generieren';
+    loadingSection.style.display = 'none';
+    hfConnection.require();
 });
 
 startGameButton.addEventListener('click', () => {
@@ -872,9 +884,9 @@ restartButton.addEventListener('click', () => {
 
 socket.on('authExpired', () => { void refreshAccount(); showRoomNotice('Anmeldung wird erneuert. Bitte die Aktion erneut ausführen.'); });
 void initializeAccount({
-    signedIn: async name => {
+    signedIn: async (name, hfRequired) => {
         hfConnection.lock(false);
-        hfConnection.signedIn();
+        await hfConnection.signedIn(hfRequired);
         if (name) usernameInput.value = name.slice(0, 15);
         usernameInput.type = name ? 'hidden' : 'text';
         showScreen(screenLobby);

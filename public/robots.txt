@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /ws/
+Disallow: /socket.io/
+Disallow: /.well-known/
+
+Sitemap: https://slopurself.maki26.workers.dev/sitemap.xml

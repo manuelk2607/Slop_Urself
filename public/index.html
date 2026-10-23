@@ -4,15 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
-    <title>Slop Urself!</title>
+    <title>Slop Urself! – Das KI-Video-Partyspiel</title>
+    <meta name="description" content="Spiele Slop Urself mit Freunden: Verwandle Bilder und Prompts in KI-Videos, bewertet eure Clips und sammelt Punkte. Kostenlos mit persönlichem Hugging-Face-Konto.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#12141a">
+    <meta name="google-site-verification" content="9W8XeJ15-XfHaf0VmyCKn7QGze-upbYIM-X3Kk_LPwo">
+    <link rel="canonical" href="https://slopurself.maki26.workers.dev/">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="de_DE">
+    <meta property="og:site_name" content="Slop Urself!">
+    <meta property="og:title" content="Slop Urself! – Das KI-Video-Partyspiel">
+    <meta property="og:description" content="Bild hochladen, Prompt schreiben und mit Freunden KI-Videos bewerten. Jeder spielt mit seinem eigenen Hugging-Face-Kontingent.">
+    <meta property="og:url" content="https://slopurself.maki26.workers.dev/">
+    <meta property="og:image" content="https://slopurself.maki26.workers.dev/apple-touch-icon.png">
+    <meta property="og:image:width" content="180">
+    <meta property="og:image:height" content="180">
+    <meta property="og:image:alt" content="Slop Urself: rote Filmklappe">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Slop Urself! – Das KI-Video-Partyspiel">
+    <meta name="twitter:description" content="Erstelle KI-Videos aus Bildern und Prompts und bewertet eure Clips mit Freunden.">
+    <meta name="twitter:image" content="https://slopurself.maki26.workers.dev/apple-touch-icon.png">
+    <meta name="twitter:image:alt" content="Slop Urself: rote Filmklappe">
     <link rel="icon" type="image/png" href="/assets/slopurself-favicon-v4.png" sizes="32x32">
     <link rel="icon" type="image/x-icon" href="/assets/slopurself-favicon-v4.ico" sizes="16x16 32x32 48x48">
     <link rel="apple-touch-icon" href="/assets/slopurself-touch-v4.png" sizes="180x180">
     <link rel="apple-touch-icon-precomposed" href="/assets/slopurself-touch-v4.png" sizes="180x180">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        { "@type": "WebSite", "@id": "https://slopurself.maki26.workers.dev/#website", "url": "https://slopurself.maki26.workers.dev/", "name": "Slop Urself!", "inLanguage": "de" },
+        { "@type": "VideoGame", "@id": "https://slopurself.maki26.workers.dev/#game", "name": "Slop Urself!", "url": "https://slopurself.maki26.workers.dev/", "description": "Kostenloses KI-Video-Partyspiel: Bilder mit Prompts animieren, gemeinsam bewerten und Punkte sammeln.", "inLanguage": "de", "genre": "Partyspiel", "gamePlatform": "Webbrowser", "playMode": "https://schema.org/MultiPlayer", "numberOfPlayers": { "@type": "QuantitativeValue", "minValue": 1, "maxValue": 10 }, "isAccessibleForFree": true, "image": "https://slopurself.maki26.workers.dev/apple-touch-icon.png" }
+      ]
+    }
+    </script>
 </head>
 <body>
-<div class="game-container">
+<main class="game-container" id="game">
     <section id="screenStartup" class="game-screen" role="status">
         <h1>Slop Urself!</h1>
         <p id="startupStatus">Verbindung zum Spiel wird hergestellt...</p>
@@ -29,6 +58,7 @@
             <button id="hfCloseButton" class="icon-button" type="button" aria-label="Schließen" title="Schließen">Schließen</button>
         </div>
         <p id="hfStatus" role="status"></p>
+        <p class="hint-text">Jeder Spieler verbindet sein eigenes kostenloses Hugging-Face-Konto. Deine Videos nutzen ausschließlich dein persönliches ZeroGPU-Kontingent. Ist es aufgebraucht, musst du auf dessen Erneuerung warten.</p>
         <p id="hfError" class="error-msg" role="alert"></p>
         <div id="hfDevice" hidden>
             <div class="hf-device-code"><code id="hfDeviceCode"></code><button id="hfCopyCode" class="icon-button" type="button" title="Code kopieren" aria-label="Code kopieren"></button></div>
@@ -81,6 +111,7 @@
         <input type="text" id="usernameInput" placeholder="Dein Spielername" maxlength="15" aria-label="Spielername" autocomplete="nickname">
 
         <p>Erstelle einen Raum oder tritt mit einem Code bei:</p>
+        <p id="hfRequirement" class="hint-text" hidden>Zum Mitspielen ist dein persönliches Hugging-Face-Konto erforderlich. Verbinde es über „HF verbinden“.</p>
         <button id="createRoomButton" class="btn-primary">Neuen Raum erstellen</button>
         <button id="statsButton" class="btn-muted" type="button">Statistiken ansehen</button>
 
@@ -334,7 +365,13 @@
         <button id="restartButton" class="btn-primary">Neues Spiel starten</button>
     </section>
 
-</div>
+</main>
+
+<aside id="aboutGame" class="about-game" aria-labelledby="aboutGameTitle">
+    <h2 id="aboutGameTitle">KI-Videos mit Freunden</h2>
+    <p>Slop Urself ist ein kostenloses Partyspiel im Browser für bis zu zehn Spieler. Lade ein Bild hoch und beschreibe mit einem Prompt, was darin passieren soll. Aus Bild und Text entsteht ein kurzes KI-Video. Deine Freunde bewerten den Clip; wer nach den vereinbarten Runden die meisten Punkte hat, gewinnt.</p>
+    <p>Jeder Mitspieler benötigt ein kostenloses <a href="https://huggingface.co/join" target="_blank" rel="noopener noreferrer">Hugging-Face-Konto</a> mit verfügbarem ZeroGPU-Kontingent. Erstelle ein Spielerprofil, verbinde HF und teile den Raumcode mit deiner Gruppe. Zuschauer können mit Raumcode beitreten.</p>
+</aside>
 
 <dialog id="profilePasswordDialog" aria-labelledby="profilePasswordTitle">
     <form id="profilePasswordForm">
@@ -348,8 +385,8 @@
     </form>
 </dialog>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="startup.js"></script>
-<script src="script.js"></script>
+<script src="/socket.io/socket.io.js" defer></script>
+<script src="/startup.js" defer></script>
+<script src="/script.js" defer></script>
 </body>
 </html>

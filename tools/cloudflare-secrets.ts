@@ -1,9 +1,9 @@
-export const SECRET_NAMES = ['HF_TOKEN', 'DATABASE_URL', 'AUTH_COOKIE_SECRET', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+export const SECRET_NAMES = ['DATABASE_URL', 'AUTH_COOKIE_SECRET', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
 const OPTIONAL_SECRET_NAMES = ['ADMIN_ACCOUNT_ID', 'ADMIN_ACCESS_KEY', 'HF_OAUTH_CLIENT_ID', 'HF_OAUTH_ORIGIN', 'HF_OAUTH_ENCRYPTION_KEY'];
 
 export function prepareSecrets(env: Record<string, string | undefined>, selected: readonly string[] = []) {
     const names = selected.length ? [...new Set(selected)] : [...SECRET_NAMES, ...OPTIONAL_SECRET_NAMES.filter(name => env[name])];
-    const unknown = names.filter(name => ![...SECRET_NAMES, ...OPTIONAL_SECRET_NAMES].includes(name));
+    const unknown = names.filter(name => ![...SECRET_NAMES, ...OPTIONAL_SECRET_NAMES, 'HF_TOKEN'].includes(name));
     if (unknown.length) throw new Error(`Unbekannte Secrets: ${unknown.join(', ')}`);
     const missing = names.filter(name => !env[name]);
     if (missing.length) throw new Error(`Fehlende Werte in .env.local: ${missing.join(', ')}`);

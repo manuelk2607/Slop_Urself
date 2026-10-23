@@ -15,10 +15,12 @@ export function huggingFaceConnection() {
     const deviceLink = document.getElementById('hfDeviceLink') as HTMLAnchorElement;
     const copy = document.getElementById('hfCopyCode') as HTMLButtonElement;
     const cancel = document.getElementById('hfDeviceCancel') as HTMLButtonElement;
+    const requirement = document.getElementById('hfRequirement')!;
     open.prepend(createElement(Link2, { width: 16, height: 16, 'aria-hidden': 'true' }));
     close.replaceChildren(createElement(X, { width: 20, height: 20, 'aria-hidden': 'true' }));
     copy.replaceChildren(createElement(Copy, { width: 20, height: 20, 'aria-hidden': 'true' }));
-    let locked = false, pending = false;
+    let locked = false, pending = false, recovering = false;
+    let required = false;
     let clock: number | undefined, epoch = 0, expiresAt = 0;
     function stop() { epoch++; window.clearTimeout(clock); }
     async function requestDevice(method: string, path = '/api/hf/device') {
@@ -67,7 +69,9 @@ export function huggingFaceConnection() {
             if (!response.ok) throw new Error('HF-Verbindung ist gerade nicht erreichbar.');
             const data = await response.json() as Connection;
             status.textContent = data.connected ? `${data.username} · ${data.remainingSeconds} / ${data.totalSeconds} GPU-Sekunden`
-                : data.configured ? 'Gemeinsames KI-Kontingent' : 'Die HF-Anmeldung ist auf diesem Server noch nicht eingerichtet.';
+                : data.configured ? 'Verbinde dein persönliches HF-Konto, um mitzuspielen.' : 'Die HF-Anmeldung ist auf diesem Server noch nicht eingerichtet.';
+            requirement.hidden = !required || Boolean(data.connected);
+            open.lastChild!.textContent = data.connected ? ' KI-Konto' : ' HF verbinden';
             connect.textContent = data.connected ? 'HF-Verbindung erneuern' : 'Hugging Face verbinden';
             disconnect.hidden = !data.connected; disconnect.disabled = locked;
             if (data.error) error.textContent = data.error;
@@ -107,14 +111,33 @@ export function huggingFaceConnection() {
         catch (reason) { error.textContent = (reason as Error).message; pending = false; disconnect.disabled = locked; }
     });
     return {
-        lock(value: boolean) { locked = value; open.disabled = value; if (value && dialog.open) dialog.close(); },
-        signedIn() {
+        lock(value: boolean) { locked = value && !recovering; open.disabled = locked; if (locked && dialog.open) dialog.close(); },
+        async ensurePlayer() {
+            if (!required) return true;
+            try {
+                const response = await fetch('/api/hf', { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+                if (response.ok && (await response.json() as Connection).connected) return true;
+            } catch { /* The connection dialog offers recovery. */ }
+            recovering = true; locked = false; open.disabled = false;
+            if (!dialog.open) dialog.showModal();
+            await load();
+            return false;
+        },
+        require() {
+            recovering = true; locked = false; open.disabled = false;
+            if (!dialog.open) dialog.showModal();
+            void load();
+        },
+        async signedIn(hfRequired: boolean) {
+            recovering = false;
+            required = hfRequired;
+            requirement.hidden = !required;
             const url = new URL(location.href), result = url.searchParams.get('hf');
-            if (!result) return;
+            if (!result) { if (required) await load(); return; }
             url.searchParams.delete('hf'); history.replaceState(null, '', url);
             dialog.showModal();
             void load().then(() => { if (result !== 'connected') error.textContent = 'HF-Anmeldung wurde abgebrochen oder konnte nicht bestätigt werden. Bitte erneut verbinden.'; });
         },
-        async signedOut() { dialog.close(); try { await remove(); } catch { /* Logout also clears both HF cookies. */ } }
+        async signedOut() { required = true; recovering = false; requirement.hidden = true; dialog.close(); try { await remove(); } catch { /* Logout also clears both HF cookies. */ } }
     };
 }

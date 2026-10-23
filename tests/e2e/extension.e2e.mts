@@ -3,13 +3,19 @@ import { artifactPath } from '../support/artifacts';
 import { testImage } from '../support/images';
 import { spawn } from 'node:child_process';
 import { chromium, webkit, Page } from 'playwright';
+import { connectTestHf } from '../support/hf-browser';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const external = process.argv[2];
 const port = '3316';
 const base = external || `http://127.0.0.1:${port}`;
+const directory = await mkdtemp(join(tmpdir(), 'slop-extension-e2e-'));
 const server = external ? undefined : spawn(process.execPath, ['--import', 'tsx', 'tests/support/quota-server.ts'], {
     cwd: process.cwd(), env: { ...process.env, PORT: port, DATABASE_URL: '', AI_PROVIDER: 'wan22',
         AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded', AI_GPU_SECONDS_PER_ROUND: '0', HF_TOKEN: 'test',
+        HF_OAUTH_CLIENT_ID: 'test-public-client', HF_OAUTH_ORIGIN: '', HF_LOCAL_STORAGE_DIR: directory,
         AWS_ACCESS_KEY_ID: 'test-only', AWS_SECRET_ACCESS_KEY: 'test-only', AWS_ENDPOINT_URL_S3: 'https://storage.test',
         TEST_EXTRA_ROUNDS: 'true', AUTH_COOKIE_SECRET: 'extra-round-test-secret-at-least-32-characters' }, stdio: ['pipe', 'pipe', 'pipe']
 });
@@ -35,6 +41,7 @@ try {
             await page.locator('#authSubmit').click();
         } else await page.locator('#usernameInput').fill(i ? 'ExtraGuest' : 'ExtraHost');
         await page.locator('#screenLobby').waitFor({ state: 'visible' });
+        if (config.hfRequired) await connectTestHf(page, base);
     }
     const png = testImage(320, 240);
     const upload = async (page: Page) => {
@@ -89,7 +96,7 @@ try {
     if (!external) {
         await host.waitForFunction(() => (document.getElementById('extendGameButton') as HTMLButtonElement).disabled);
         assert.equal(await host.locator('#extensionQuotaHint').innerText(), 'Noch maximal 0 Zusatzrunden.');
-        const quota = await (await host.request.get(`${base}/api/config?players=2`)).json();
+        const quota = await (await host.request.get(`${base}/api/config`)).json();
         assert.equal(quota.reservedRounds, 0); assert.equal(quota.aiRoundLimit, 0);
     }
     await guest.reload(); await guest.locator('#screenGameOver').waitFor({ state: 'visible' });
@@ -101,4 +108,5 @@ try {
     throw error;
 } finally {
     await browser?.close(); server?.kill('SIGTERM'); if (exited) await exited;
+    await rm(directory, { recursive: true, force: true });
 }

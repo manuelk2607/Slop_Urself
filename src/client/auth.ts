@@ -1,6 +1,6 @@
 interface Account { id: string; name: string }
 interface AuthUI {
-    signedIn(name: string): Promise<void>;
+    signedIn(name: string, hfRequired: boolean): Promise<void>;
     signedOut(): Promise<void>;
     showAuth(): void;
     refreshToken(token: string): void;
@@ -22,6 +22,7 @@ export async function initializeAccount(ui: AuthUI) {
     const error = document.getElementById('authError')!;
     const bar = document.getElementById('accountBar')!;
     let ready = false;
+    let hfRequired = true;
     let pending: Promise<void> | undefined;
     async function session(mode: 'create' | 'login' | 'refresh') {
         const response = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode, ...(mode !== 'refresh' && password.value ? { password: password.value } : {}) }), signal: AbortSignal.timeout(15_000) });
@@ -35,7 +36,7 @@ export async function initializeAccount(ui: AuthUI) {
         ready = true; bar.hidden = false;
         document.getElementById('accountName')!.innerText = account.name;
         username.value = account.name;
-        await ui.signedIn(account.name);
+        await ui.signedIn(account.name, hfRequired);
     }
     async function enter(mode: 'create' | 'login') {
         if (!form.reportValidity() || submit.disabled) return;
@@ -79,8 +80,9 @@ export async function initializeAccount(ui: AuthUI) {
         if (location.protocol === 'file:') throw new Error('Bitte öffne das Spiel über den Server oder den Cloudflare-Link.');
         const response = await fetch('/api/config', { signal: AbortSignal.timeout(10_000) });
         if (!response.ok) throw new Error('Spielkonfiguration nicht erreichbar.');
-        const config = await response.json() as { authEnabled: boolean };
-        if (!config.authEnabled) { await ui.signedIn(''); return; }
+        const config = await response.json() as { authEnabled: boolean; hfRequired?: boolean; mockAi?: boolean };
+        hfRequired = config.hfRequired ?? config.mockAi !== true;
+        if (!config.authEnabled) { await ui.signedIn('', hfRequired); return; }
         const saved = await fetch('/api/session', { signal: AbortSignal.timeout(10_000) });
         if (saved.ok) {
             const { account } = await saved.json() as { account?: Account };

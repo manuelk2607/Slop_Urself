@@ -7,6 +7,7 @@ import { getDatabase } from '../../src/database/neon';
 import { DATABASE_SCHEMA } from '../../src/database/schema';
 import { testImageData } from '../support/images';
 import { gameOptions } from '../../src/game/options';
+import { testHfPlayers, heldHfVideos } from '../support/hf-fixture';
 
 class TestSocket {
     get readyState() { return this.closed ? 3 : 1; }
@@ -337,11 +338,12 @@ test('Worker applies actual lobby membership to the round limit and reserves all
     let current = 720;
     globalThis.fetch = async () => Response.json({ base: 720, current, resetsAt: null, runs: { remaining: 8 } });
     const budgetData = new Map<string, any>();
-    const state = { storage: { get: async (key: string) => structuredClone(budgetData.get(key)), put: async (key: string, value: unknown) => { budgetData.set(key, structuredClone(value)); } } };
-    const services = new ServiceDurableObject(state as any, { HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'ltx' } as any);
+    const personal = await testHfPlayers(budgetData, ['a', 'b', 'c']);
+    const state = { storage: personal.storage };
+    const services = new ServiceDurableObject(state as any, { ...personal.config, HF_TOKEN: 'must-never-be-used', AI_PROVIDER_CHAIN: 'ltx' } as any);
     const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: (request: Request) => services.fetch(request) }) } as any;
     try {
-        const f = await fixture('LOBBY', { SERVICES }, 5);
+        const f = await fixture('LOBBY', { SERVICES }, 5, { players: personal.players });
         await f.message(f.sockets[0], 'refreshQuota');
         let r = f.data.get('room') as Room;
         assert.equal(r.quota?.playerCount, 3); assert.equal(r.maxRounds, 2);
@@ -350,16 +352,16 @@ test('Worker applies actual lobby membership to the round limit and reserves all
         current = 185;
         await f.message(f.sockets[0], 'startGame');
         r = f.data.get('room') as Room;
-        assert.equal(r.maxRounds, 0); assert.equal(r.state, 'LOBBY'); assert.equal(budgetData.get('reservations'), undefined);
+        assert.equal(r.maxRounds, 0); assert.equal(r.state, 'LOBBY'); assert.equal(heldHfVideos(budgetData), 0);
         current = 720;
         await f.message(f.sockets[0], 'setRoundCount', { rounds: 999 });
         assert.equal((f.data.get('room') as Room).maxRounds, 2);
         await f.message(f.sockets[0], 'startGame');
         r = f.data.get('room') as Room;
         assert.equal(r.state, 'IDLE'); assert.deepEqual(r.pendingCreators, ['a', 'b', 'c']);
-        assert.equal(budgetData.get('reservations').TEST.rounds, 6);
+        assert.equal(heldHfVideos(budgetData), 6);
         await f.message(f.sockets[1], 'leaveRoom');
-        assert.equal(budgetData.get('reservations').TEST.rounds, 4);
+        assert.equal(heldHfVideos(budgetData), 4);
         assert.deepEqual((f.data.get('room') as Room).roundPlayers, ['a', 'c']);
     } finally { globalThis.fetch = original; }
 });
@@ -368,21 +370,22 @@ test('Worker includes cheap fallbacks and restores a two-player round when the t
     const original = globalThis.fetch;
     globalThis.fetch = async () => Response.json({ base: 300, current: 185, resetsAt: null, runs: { remaining: 7 } });
     const data = new Map<string, any>();
-    const state = { storage: { get: async (key: string) => structuredClone(data.get(key)), put: async (key: string, value: unknown) => { data.set(key, structuredClone(value)); } } };
-    const services = new ServiceDurableObject(state as any, { HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx' } as any);
+    const personal = await testHfPlayers(data, ['a', 'b', 'c']);
+    const state = { storage: personal.storage };
+    const services = new ServiceDurableObject(state as any, { ...personal.config, HF_TOKEN: 'must-never-be-used', AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx' } as any);
     const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: (request: Request) => services.fetch(request) }) } as any;
     try {
-        const f = await fixture('LOBBY', { SERVICES }, 2);
+        const f = await fixture('LOBBY', { SERVICES }, 2, { players: personal.players });
         await f.message(f.sockets[0], 'startGame');
         assert.equal((f.data.get('room') as Room).state, 'LOBBY');
         await f.message(f.sockets[2], 'leaveRoom');
         const r = f.data.get('room') as Room;
         assert.equal(r.quota?.playerCount, 2); assert.equal(r.quota?.aiRoundLimit, 1);
-        assert.equal(r.quota?.gpuSecondsPerRound, 184);
+        assert.equal(r.quota?.sharedQuota, false);
         await f.message(f.sockets[0], 'startGame');
         assert.equal((f.data.get('room') as Room).state, 'IDLE');
-        assert.equal(data.get('reservations').TEST.rounds, 2);
-        assert.equal(data.get('reservations').TEST.gpuSecondsPerVideo, 92);
+        assert.equal(heldHfVideos(data), 2);
+        assert.equal(data.get('hf-budget:shared-test:reservations')['TEST:a'].gpuSecondsPerVideo, 92);
     } finally { globalThis.fetch = original; }
 });
 
@@ -543,10 +546,11 @@ test('Worker checks real quota for additional rounds, restricts the host and ign
     let current = 185;
     globalThis.fetch = async () => Response.json({ base: 300, current, resetsAt: null, runs: { remaining: 7 } });
     const data = new Map<string, any>();
-    const services = new ServiceDurableObject({ storage: { get: async key => structuredClone(data.get(key)), put: async (key, value) => { data.set(key, structuredClone(value)); } } } as any, { HF_TOKEN: 'test' } as any);
+    const personal = await testHfPlayers(data, ['a', 'b', 'c']);
+    const services = new ServiceDurableObject({ storage: personal.storage } as any, { ...personal.config, HF_TOKEN: 'must-never-be-used' } as any);
     const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: (request: Request) => services.fetch(request) }) } as any;
     try {
-        const f = await fixture('VOTING', { SERVICES });
+        const f = await fixture('VOTING', { SERVICES }, 1, { players: personal.players });
         await f.message(f.sockets[1], 'submitVote', { points: 4 });
         await f.message(f.sockets[2], 'submitVote', { points: 5 });
         assert.equal((f.data.get('room') as Room).extensionQuota?.aiRoundLimit, 0);
@@ -559,7 +563,7 @@ test('Worker checks real quota for additional rounds, restricts the host and ign
         const r = f.data.get('room') as Room;
         assert.equal(r.state, 'IDLE'); assert.equal(r.maxRounds, 2); assert.equal(r.currentRound, 2);
         assert.equal(r.players[0].score, 9); assert.deepEqual(r.pendingCreators, ['a', 'b', 'c']);
-        assert.equal(data.get('reservations').TEST.rounds, 3);
+        assert.equal(heldHfVideos(data), 3);
         await f.message(f.sockets[0], 'extendGame', { completedVideo: 1 });
         assert.equal((f.data.get('room') as Room).maxRounds, 2);
     } finally { globalThis.fetch = original; }

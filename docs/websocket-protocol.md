@@ -3,6 +3,13 @@
 Native WebSocket clients connect to /ws/ABCD with a four-character room code.
 Messages are JSON objects with type and optional payload.
 
+Real-AI players must link their own HF account before createRoom, joinRoom or
+resumeRoom. Missing, expired or foreign connections produce `hfRequired` and
+open the connection dialog; the room session remains available for recovery.
+Spectators and explicit mock mode are exempt. Each generation, including any
+fallback and result polling, uses its creator's pinned credential. A central
+server token is never a generation fallback. `/api/config` reports `hfRequired`.
+
 ## Client messages
 
 createRoom, joinRoom and resumeRoom establish membership. Subsequent commands

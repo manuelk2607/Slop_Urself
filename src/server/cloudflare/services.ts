@@ -2,7 +2,7 @@ import { sqlProfiles, storedProfiles, type Profile, type ManagedProfileStore } f
 import { getSql, getDatabase } from '../../database/neon';
 import { purgeDeletedVideos, deleteStoredHistory, HistoryError, type HistoryDeletion } from '../statistics';
 import { PlayerQuotaBudget, type BudgetPlayer } from '../../ai/player-quota';
-import { HfConnections, HfOAuthError } from '../../auth/huggingface';
+import { HfConnections, HfOAuthError, HfRequiredError, requirePlayerHf } from '../../auth/huggingface';
 import { profileAuthConfig, type Account } from '../../auth/session';
 import { generationQuality } from '../../ai/providers';
 import { archiveVideo, deleteArchivedVideo } from '../../storage/archive';
@@ -44,6 +44,7 @@ export class ServiceDurableObject {
             if (path === '/hf/device/cancel') { await this.hf.cancelDevice(data.nonce, data.accountId, data.origin); return json({ ok: true }); }
             if (path === '/hf/finish') { const result = await this.hf.finish(data.state, data.code, data.nonce, data.origin); await this.scheduleCleanup(result.expiresAt); return json(result); }
             if (path === '/hf/status') return json(await this.hf.status(data.connection, data.accountId));
+            if (path === '/hf/require') { await requirePlayerHf(this.env, data.account, this.hf); return json({ ok: true }); }
             if (path === '/hf/disconnect') { await this.hf.disconnect(data.connection, data.accountId); return json({ ok: true }); }
             if (path === '/video-trash/schedule') {
                 await this.scheduleCleanup(data.time);
@@ -89,7 +90,7 @@ export class ServiceDurableObject {
         const independent = path.startsWith('/hf/') || ['/quota/display', '/quota/capacity', '/quota/token'].includes(path);
         const result = (independent ? Promise.resolve() : path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => {
             if (error instanceof HfOAuthError) console.info('[HF] OAuth callback failed', error.code);
-            return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.' }, { status: error instanceof HistoryError ? error.status : 503 });
+            return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.', ...(error instanceof HfRequiredError ? { code: 'hf_required' } : {}) }, { status: error instanceof HistoryError ? error.status : error instanceof HfRequiredError ? 403 : 503 });
         });
         if (independent) return result;
         if (path.startsWith('/security/')) this.securityOperations = result;

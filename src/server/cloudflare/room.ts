@@ -1,4 +1,5 @@
 import { authDisabled, requestAccount, verifyAccountToken, accountIsCurrent } from '../../auth/session';
+import { HfRequiredError } from '../../auth/huggingface';
 import { cloudflareAuth } from './profiles';
 import { getDatabase } from '../../database/neon';
 import { roundInput } from '../../game/persistence';
@@ -176,7 +177,7 @@ export class RoomDurableObject {
                     else if (message.type === 'rematchGame') await this.rematchGame(player);
                 }
             } catch (error) {
-                this.send(socket, 'errorMsg', error instanceof Error ? error.message : 'Nachricht konnte nicht verarbeitet werden.');
+                this.send(socket, error instanceof HfRequiredError ? 'hfRequired' : 'errorMsg', error instanceof Error ? error.message : 'Nachricht konnte nicht verarbeitet werden.');
             }
         });
     }
@@ -196,6 +197,7 @@ export class RoomDurableObject {
         if (meta.playerId) throw new Error('Du bist bereits in einem Raum.');
         const username = meta.account?.name || sanitizeUsername(payload.username);
         if (!username) throw new Error('Bitte gib einen Spielernamen ein.');
+        await service(this.env, '/hf/require', { account: meta.account });
         const database = getDatabase(this.env.DATABASE_URL);
         if (this.room || await database?.roomExists(this.roomCode)) {
             this.send(socket, 'roomCodeConflict');
@@ -226,6 +228,7 @@ export class RoomDurableObject {
         const name = meta.account?.name || sanitizeUsername(payload.username);
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
         checkJoin(room, name, meta.account?.id, spectator);
+        if (!spectator) await service(this.env, '/hf/require', { account: meta.account });
         const player: Player = { id: meta.socketId, accountId: meta.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || crypto.randomUUID(), name, score: 0, connected: true };
         if (participants(room).some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
         if (spectator) (room.spectators ??= []).push(player);
@@ -243,6 +246,7 @@ export class RoomDurableObject {
         const player = room && participants(room).find(p => p.sessionId === sanitizeSessionId(payload.sessionId));
         if (!room || !player || (!authDisabled(this.env) && player.accountId !== meta.account?.id)) { this.send(socket, 'resumeFailed'); return; }
         if (room.rematch?.initialized && room.rematch.transfers[player.id]) { this.send(socket, 'roomTransfer', room.rematch.transfers[player.id]); return; }
+        if (!isSpectator(room, player)) await service(this.env, '/hf/require', { account: meta.account });
         for (const [old, connection] of this.sockets) {
             if (old !== socket && connection.playerId === player.id) {
                 this.sockets.delete(old);
