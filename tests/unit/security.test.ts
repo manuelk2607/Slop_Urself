@@ -47,6 +47,30 @@ test('changing invalid URLs cannot bypass a client limit or block unrelated Work
     assert.ok([...services.keys()].every(name => /^rate:[a-f0-9]{64}$/.test(name)));
 });
 
+test('public SEO files bypass authentication, rate limiting and static asset failures', async () => {
+    let assetCalls = 0, serviceCalls = 0;
+    const env = {
+        AI_PROVIDER: 'wan22', AUTH_COOKIE_SECRET: 'test-only-cookie-secret-at-least-32-characters',
+        ASSETS: { fetch: async () => { assetCalls++; return new Response(null, { status: 503 }); } },
+        SERVICES: { idFromName: (name: string) => name, get: () => ({ fetch: async () => { serviceCalls++; return Response.json({ retryAfter: 60 }); } }) }
+    };
+    const robots = await worker.fetch(new Request('https://game.test/robots.txt', { headers: { 'CF-Connecting-IP': '192.0.2.1' } }), env as any);
+    assert.equal(robots.status, 200);
+    assert.equal(robots.headers.get('content-type'), 'text/plain');
+    assert.equal(robots.headers.has('location'), false);
+    assert.equal(robots.headers.has('x-robots-tag'), false);
+    const robotsBody = await robots.text();
+    assert.match(robotsBody, /^User-agent: \*$/m);
+    assert.match(robotsBody, /Sitemap: https:\/\/slopurself\.maki26\.workers\.dev\/sitemap\.xml/);
+    const sitemap = await worker.fetch(new Request('https://game.test/sitemap.xml'), env as any);
+    assert.equal(sitemap.status, 200);
+    assert.equal(sitemap.headers.get('content-type'), 'application/xml');
+    assert.match(await sitemap.text(), /<loc>https:\/\/slopurself\.maki26\.workers\.dev\/<\/loc>/);
+    const head = await worker.fetch(new Request('https://game.test/robots.txt', { method: 'HEAD' }), env as any);
+    assert.equal(head.status, 200); assert.equal(await head.text(), '');
+    assert.equal(assetCalls, 0); assert.equal(serviceCalls, 0);
+});
+
 test('global Worker request limits survive recreation and reject simultaneous bursts', async () => {
     const data = new Map<string, unknown>();
     const state = { storage: { get: async (key: string) => structuredClone(data.get(key)), put: async (key: string, value: unknown) => { data.set(key, structuredClone(value)); } } };

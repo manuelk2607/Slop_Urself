@@ -12,6 +12,7 @@ import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
 import { indexingResponse } from '../indexing';
+import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
@@ -25,6 +26,8 @@ export default {
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
+        const seoResponse = publicSeoResponse(url.pathname, request.method);
+        if (seoResponse) return seoResponse;
         const auth = cloudflareAuth(env);
         const rule = httpRateRule(url.pathname, request.method);
         if (rule) {

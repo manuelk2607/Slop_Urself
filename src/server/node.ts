@@ -11,6 +11,7 @@ import { HfConnections, HfRequiredError, requirePlayerHf, type HfConfig } from '
 import { nodeHfStorage } from '../auth/node-hf-storage';
 import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
+import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
 import { gameOptions } from '../game/options';
@@ -139,8 +140,8 @@ app.get('/api/rooms/:code/image', async (req, res) => {
 
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'index.html')));
 app.get(['/index.html', '/index'], (_req, res) => res.redirect(301, '/'));
-app.get('/robots.txt', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'robots.txt')));
-app.get('/sitemap.xml', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'sitemap.xml')));
+app.get('/robots.txt', (_req, res) => res.set({ 'Content-Type': 'text/plain', 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600', 'X-Content-Type-Options': 'nosniff' }).send(ROBOTS_TEXT));
+app.get('/sitemap.xml', (_req, res) => res.set({ 'Content-Type': 'application/xml', 'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600', 'X-Content-Type-Options': 'nosniff' }).send(SITEMAP_XML));
 app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'favicon.ico')));
 app.get('/apple-touch-icon.png', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'apple-touch-icon.png')));
 app.get('/apple-touch-icon-precomposed.png', (_req, res) => res.sendFile(path.join(PUBLIC_ROOT, 'apple-touch-icon.png')));

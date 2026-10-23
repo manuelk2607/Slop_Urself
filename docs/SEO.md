@@ -15,6 +15,9 @@ Die strukturierten Daten versprechen kein Google-Rich-Result.
 `public/robots.txt` verweist auf die Sitemap und sperrt API, WebSockets und
 OAuth-Metadaten fürs Crawling. Node und Worker versehen private HTTP-Antworten
 zusätzlich mit `X-Robots-Tag: noindex, nofollow, nosnippet` und `no-store`.
+Cloudflare führt `/robots.txt` und `/sitemap.xml` immer durch den Worker. Dieser
+liefert beide Dateien vor Anmeldung und Rate-Limit direkt mit HTTP 200 aus. Die
+Erreichbarkeit hängt damit nicht vom statischen Asset-Routing ab.
 Die eigentlichen Sitzungs- und Berechtigungsprüfungen schützen Konten, Räume,
 Statistiken, Bilder und Videos. robots.txt ist keine Zugriffskontrolle.
 Raum-Einladungen und OAuth-Rückkehrparameter erhalten durch den festen
