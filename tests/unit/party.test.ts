@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import { gameOptions } from '../../src/game/options';
 import { closePhase, syncPhase } from '../../src/game/phases';
 import { archiveCapacity, prepareArchive, playArchiveVideo } from '../../src/game/archive-play';
-import { startRounds, recordVote, finishVoting, judgeGuesses, roomSnapshot, advanceTurn, type Room } from '../../src/game/rules';
+import { startRounds, recordVote as rawRecordVote, finishVoting, judgeGuesses, roomSnapshot, advanceTurn, type Room } from '../../src/game/rules';
 import { roundInput } from '../../src/game/persistence';
+const recordVote: typeof rawRecordVote = (r, player, payload) => rawRecordVote(r, player, { ...roomSnapshot(r), ...payload });
 
 function room(mode = 'classic'): Room {
     return { code: 'TEST', hostId: 'a', players: ['a', 'b'].map(id => ({ id, name: id, sessionId: id, connected: true, score: 0 })),

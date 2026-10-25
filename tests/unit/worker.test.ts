@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RoomDurableObject, ServiceDurableObject, Env } from '../../src/server/cloudflare/worker';
 import { AI_JOB_MAX_AGE_MS, type AiJob } from '../../src/ai/generation';
-import { Room } from '../../src/game/rules';
+import { Room, roomSnapshot } from '../../src/game/rules';
 import { getDatabase } from '../../src/database/neon';
 import { DATABASE_SCHEMA } from '../../src/database/schema';
 import { testImageData } from '../support/images';
@@ -23,7 +23,7 @@ class TestSocket {
 async function fixture(stateName: Room['state'] = 'VOTING', overrides: Partial<Env> = {}, rounds = 1, initial: Partial<Room> = {}) {
     const players = ['a', 'b', 'c'].map(id => ({ id, sessionId: `session-${id}-1234567890`, name: id, score: 0, connected: true, connectionId: `conn-${id}` }));
     const room: Room = { code: 'TEST', hostId: 'a', players, state: stateName, activeCreatorIndex: 0,
-        currentVotes: {}, currentRound: 1, maxRounds: rounds, currentPrompt: 'wave', currentVideoUrl: '/assets/mock-video.mp4', ...initial };
+        currentVotes: {}, ballotId: crypto.randomUUID(), currentRound: 1, maxRounds: rounds, currentPrompt: 'wave', currentVideoUrl: '/assets/mock-video.mp4', ...initial };
     const sockets = players.map(p => new TestSocket({ socketId: p.connectionId, playerId: p.id, sessionId: p.sessionId }));
     const outsider = new TestSocket({ socketId: 'outsider' }); sockets.push(outsider);
     const data = new Map<string, unknown>([['room', room]]);
@@ -46,7 +46,11 @@ async function fixture(stateName: Room['state'] = 'VOTING', overrides: Partial<E
     };
     const worker = new RoomDurableObject(state as any, { AI_PROVIDER: 'mock', AUTH_MODE: 'disabled', ...overrides } as any);
     await ready;
-    const message = (socket: TestSocket, type: string, payload: unknown = {}) => worker.webSocketMessage(socket as any, JSON.stringify({ type, payload }));
+    const message = (socket: TestSocket, type: string, payload: Record<string, unknown> = {}) => {
+        const r = data.get('room') as Room;
+        return worker.webSocketMessage(socket as any, JSON.stringify({ type, payload: type === 'submitVote'
+            ? { ballotId: r.ballotId, currentRound: r.currentRound, videoNumber: r.videoNumber || r.currentRound, ...payload } : payload }));
+    };
     const recreate = async () => {
         const restored = new RoomDurableObject(state as any, { AI_PROVIDER: 'mock', AUTH_MODE: 'disabled', ...overrides } as any);
         await ready;
@@ -185,7 +189,10 @@ test('Worker archive games bypass HF, persist replay state and never rewrite cre
         await f.message(f.sockets[0], 'startGame'); let r = f.data.get('room') as Room;
         assert.equal(r.state, 'VOTING'); assert.equal(r.quota?.quotaMode, 'archive'); assert.equal(r.archiveClips?.length, 2);
         const worker = await f.recreate();
-        for (const socket of f.sockets.slice(0, 3)) await worker.webSocketMessage(socket as any, JSON.stringify({ type: 'submitVote', payload: { points: 4 } }));
+        for (const socket of f.sockets.slice(0, 3)) {
+            const r = f.data.get('room') as Room;
+            await worker.webSocketMessage(socket as any, JSON.stringify({ type: 'submitVote', payload: { ...roomSnapshot(r), points: 4 } }));
+        }
         r = f.data.get('room') as Room; assert.equal(r.state, 'RESULTS'); assert.equal(r.archiveResults?.[0].points, 12);
         assert.equal(r.players.every(player => player.score === 0), true); assert.deepEqual(f.data.get('pendingRounds'), []);
         await worker.webSocketMessage(f.sockets[0] as any, JSON.stringify({ type: 'startNextRound', payload: {} }));
@@ -214,7 +221,8 @@ test('Worker restores private tasks, chunked common images and creator-only gues
     room = f.data.get('room') as Room; assert.ok(room.sharedImage);
     room.state = 'VOTING'; room.tasks = { a: 'Auftrag a', b: 'Auftrag b', c: 'Auftrag c' }; room.currentPrompt = 'private prompt';
     f.data.set('room', room); worker = await f.recreate();
-    const send = (index: number, type: string, payload: unknown) => worker.webSocketMessage(f.sockets[index] as any, JSON.stringify({ type, payload }));
+    const send = (index: number, type: string, payload: Record<string, unknown>) => worker.webSocketMessage(f.sockets[index] as any,
+        JSON.stringify({ type, payload: type === 'submitVote' ? { ...roomSnapshot(f.data.get('room') as Room), ...payload } : payload }));
     await send(1, 'submitVote', { taskPoints: 5, funPoints: 3, guess: 'spin' });
     await send(2, 'submitVote', { taskPoints: 2, funPoints: 4, guess: 'run' });
     assert.equal((f.data.get('room') as Room).state, 'GUESS_REVIEW');

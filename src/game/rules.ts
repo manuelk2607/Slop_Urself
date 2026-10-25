@@ -32,6 +32,7 @@ export interface Room {
     state: GameState;
     activeCreatorIndex: number;
     currentVotes: Record<string, number>;
+    ballotId?: string;
     currentRound: number;
     maxRounds: number;
     roundPlayers?: string[];
@@ -64,6 +65,7 @@ export function activeCreator(room: Room) {
 }
 
 export function startRounds(room: Room) {
+    room.ballotId = crypto.randomUUID();
     room.roundPlayers = room.players.map(p => p.id);
     room.pendingCreators = [...room.roundPlayers];
     room.currentRound = 1;
@@ -84,6 +86,7 @@ export function extendRound(room: Room) {
     room.pendingCreators = [...room.roundPlayers];
     room.activeCreatorIndex = 0;
     room.currentVotes = {};
+    room.ballotId = crypto.randomUUID();
     room.currentPrompt = '';
     room.currentVideoUrl = '';
     room.lastResult = undefined;
@@ -127,6 +130,7 @@ export function advanceTurn(room: Room) {
     else { room.activeCreatorIndex = (room.activeCreatorIndex + 1) % room.players.length; room.currentRound++; room.state = 'IDLE'; }
     room.videoNumber = (room.videoNumber || room.currentRound - 1) + 1;
     room.currentVotes = {};
+    room.ballotId = crypto.randomUUID();
     room.currentPrompt = '';
     room.currentVideoUrl = '';
     room.lastResult = undefined;
@@ -145,6 +149,7 @@ export function publicPlayers(room: Room) {
 
 export function roomSnapshot(room: Room, viewerId?: string) {
     const creator = activeCreator(room);
+    room.ballotId ||= crypto.randomUUID();
     return {
         roomId: room.code, playerCount: room.players.filter(p => p.connected).length,
         spectators: (room.spectators || []).map(({ id, name, connected }) => ({ id, name, connected })),
@@ -154,6 +159,7 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         players: publicPlayers(room), hostId: room.hostId, gameState: room.state,
         currentRound: room.currentRound, maxRounds: room.maxRounds,
         videoNumber: room.videoNumber || room.currentRound,
+        ballotId: room.ballotId,
         turnNumber: room.roundPlayers ? Math.max(1, room.roundPlayers.indexOf(creator?.id || '') + 1) : undefined,
         turnCount: room.roundPlayers?.length,
         nextRound: nextRoundNumber(room), quota: room.quota, extensionQuota: room.extensionQuota,
@@ -193,9 +199,8 @@ export function removePlayer(room: Room, playerId: string) {
     if (room.pendingCreators) room.pendingCreators = room.pendingCreators.filter(id => id !== playerId);
     room.players.splice(index, 1);
     resetReady(room);
-    delete room.currentVotes[playerId];
-    if (room.guesses) delete room.guesses[playerId];
-    if (room.voteDetails) delete room.voteDetails[playerId];
+    // Accepted ballots remain immutable when their voter leaves. Only uncast
+    // votes cease to be due; retained details still belong in persistence.
     if (!room.players.length) return skippedGenerations;
     if (index < room.activeCreatorIndex) room.activeCreatorIndex--;
     room.activeCreatorIndex %= room.players.length;
@@ -205,6 +210,7 @@ export function removePlayer(room: Room, playerId: string) {
     }
     if (room.hostId === playerId) room.hostId = (room.players.find(p => p.connected) || room.players[0]).id;
     if (wasActive && ['IDLE', 'GENERATING', 'VOTING', 'GUESS_REVIEW'].includes(room.state)) {
+        room.ballotId = crypto.randomUUID();
         room.state = 'IDLE';
         room.currentVotes = {};
         room.currentPrompt = '';
@@ -250,6 +256,8 @@ export function guessList(room: Room) {
 
 export function recordVote(room: Room, player: Player, payload: Record<string, unknown>) {
     if (!room.players.some(p => p.id === player.id)) throw new Error('Zuschauer dürfen nicht bewerten.');
+    if (!room.ballotId || payload.ballotId !== room.ballotId || payload.videoNumber !== (room.videoNumber || room.currentRound)
+        || payload.currentRound !== room.currentRound) throw new Error('Diese Bewertung gehört zu einem anderen Video. Bitte warte auf den aktuellen Spielstand.');
     if (room.state !== 'VOTING' || (gameOptions(room.options).mode !== 'archive-vote' && activeCreator(room)?.id === player.id) || room.currentVotes[player.id] !== undefined) return;
     const options = gameOptions(room.options);
     let points = Number(payload.points);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startRounds, recordVote, finishVoting, judgeGuesses, roomSnapshot, removePlayer, advanceTurn, type Room } from '../../src/game/rules';
+import { startRounds, recordVote as rawRecordVote, finishVoting, judgeGuesses, roomSnapshot, removePlayer, advanceTurn, type Room } from '../../src/game/rules';
 import { gameOptions } from '../../src/game/options';
 import { roundInput } from '../../src/game/persistence';
 import { preparedImageSize } from '../../src/ai/images';
@@ -8,6 +8,7 @@ import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageRespon
 import { providerBudgets, qualityConfig, DEFAULT_PROVIDER_CHAIN } from '../../src/ai/providers';
 import { QuotaBudget } from '../../src/ai/quota';
 import { testImageData } from '../support/images';
+const recordVote: typeof rawRecordVote = (r, player, payload) => rawRecordVote(r, player, { ...roomSnapshot(r), ...payload });
 
 function room(): Room {
     const value: Room = { code: 'TEST', hostId: 'a', players: ['a', 'b', 'c'].map(id => ({ id, name: id, sessionId: `session-${id}`, connected: true, score: 0 })),
@@ -57,7 +58,10 @@ test('skipped guesses do not stall voting; leaving during review cannot duplicat
     const review = room();
     recordVote(review, review.players[1], { taskPoints: 3, funPoints: 3, guess: 'wave' });
     recordVote(review, review.players[2], { taskPoints: 3, funPoints: 3, guess: '' });
-    finishVoting(review); removePlayer(review, 'b'); assert.equal(finishVoting(review), true);
+    finishVoting(review); removePlayer(review, 'b');
+    assert.equal(finishVoting(review), false, 'Accepted guesses remain reviewable after their author leaves.');
+    judgeGuesses(review, review.players[0], { videoNumber: 1, correctPlayerIds: [] });
+    assert.equal(finishVoting(review), true); assert.equal(review.players[0].score, 6);
     const leavingCreator = room(); leavingCreator.state = 'GUESS_REVIEW';
     assert.equal(removePlayer(leavingCreator, 'a'), 1, 'Only the next cycle is still unconsumed.');
     assert.equal(leavingCreator.state, 'IDLE'); assert.equal(leavingCreator.players[leavingCreator.activeCreatorIndex].id, 'b');

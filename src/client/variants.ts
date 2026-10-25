@@ -4,7 +4,7 @@ import { prepareImage } from './images';
 
 interface Guess { playerId: string; name: string; text: string; correct?: boolean; points: number }
 export interface VariantSnapshot {
-    roomId?: string; hostId: string; activeCreatorId?: string; gameState: string; videoNumber?: number; role?: string;
+    roomId?: string; hostId: string; activeCreatorId?: string; gameState: string; videoNumber?: number; currentRound?: number; ballotId?: string; role?: string;
     options?: GameOptions; sharedImageUrl?: string; ownTask?: string; ownGuess?: string; task?: string;
     reviewPrompt?: string; reviewGuesses?: Guess[]; votedPlayerIds?: string[];
     reveal?: { prompt: string; task?: string; guesses: Guess[] };
@@ -43,8 +43,10 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         finally { uploading = false; imageButton.disabled = false; imageInput.value = ''; }
     });
     function vote(points?: number) {
+        if (!snapshot?.ballotId || snapshot.gameState !== 'VOTING') return;
         const options = gameOptions(snapshot?.options);
-        emit('submitVote', { points, ...(options.secretTasks ? { taskPoints: Number(element<HTMLInputElement>('taskRating').value), funPoints: Number(element<HTMLInputElement>('funRating').value) } : {}),
+        emit('submitVote', { points, ballotId: snapshot.ballotId, videoNumber: snapshot.videoNumber, currentRound: snapshot.currentRound,
+            ...(options.secretTasks ? { taskPoints: Number(element<HTMLInputElement>('taskRating').value), funPoints: Number(element<HTMLInputElement>('funRating').value) } : {}),
             ...(options.guessPrompt ? { guess: element<HTMLInputElement>('guessInput').value.trim() } : {}) });
         element<HTMLButtonElement>('submitTaskVote').disabled = true;
     }
