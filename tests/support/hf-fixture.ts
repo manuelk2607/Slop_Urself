@@ -17,7 +17,7 @@ export async function testHfPlayers(data: Map<string, unknown>, ids: string[]) {
             throw new Error('Unexpected HF fixture request');
         };
         for (const id of ids) {
-            const account = { id, name: id, expiresAt: Date.now() + 60_000 };
+            const account = { id, name: id, expiresAt: Date.now() + 60_000, identityProof: 'owner' as const };
             const start = await hf.start(account, 'https://test.invalid');
             const grant = await hf.finish(new URL(start.url).searchParams.get('state'), 'test-code', start.nonce, 'https://test.invalid');
             players.push({ id, accountId: id, hfConnectionId: grant.connection, sessionId: `session-${id}-1234567890`, connectionId: `conn-${id}`, name: id, connected: true, score: 0 });

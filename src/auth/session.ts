@@ -2,13 +2,16 @@ import { jwtVerify, SignJWT } from 'jose';
 import { profileName, type ProfileStore } from './profiles';
 import { hfCookie, HF_COOKIE, HF_STATE_COOKIE } from './huggingface';
 import { checkPassword, hashPassword, validPassword } from './passwords';
+import { boundedJson } from '../server/body';
 
 export interface AuthConfig {
     AUTH_MODE?: string; AI_PROVIDER?: string; AUTH_COOKIE_SECRET?: string;
     ADMIN_ACCOUNT_ID?: string; ADMIN_ACCESS_KEY?: string;
     validateAccount?: (account: Account) => Promise<boolean>;
+    allowPendingAuth?: boolean;
+    verifyHfIdentity?: (connection: string | undefined, accountId: string) => Promise<boolean>;
 }
-export interface Account { id: string; name: string; expiresAt: number; authVersion?: string; hfConnectionId?: string }
+export interface Account { id: string; name: string; expiresAt: number; authVersion?: string; hfConnectionId?: string; identityProof?: 'owner' | 'pending' }
 class ProfileUnavailableError extends Error {}
 export const authFailureStatus = (error: unknown) => error instanceof ProfileUnavailableError ? 503 : 401;
 export const authDisabled = (config: AuthConfig) => config.AUTH_MODE === 'disabled' && config.AI_PROVIDER === 'mock';
@@ -19,7 +22,7 @@ export function profileAuthConfig<T extends AuthConfig>(config: T, profiles: Pro
     } };
 }
 export async function accountIsCurrent(account: Account, config: AuthConfig) {
-    return !config.validateAccount || await config.validateAccount(account);
+    return (!config.validateAccount || await config.validateAccount(account)) && (config.allowPendingAuth || account.identityProof === 'owner');
 }
 const SESSION_SECONDS = 30 * 24 * 60 * 60;
 const signingKey = (config: AuthConfig) => {
@@ -31,7 +34,8 @@ export async function verifyAccountToken(token: unknown, config: AuthConfig): Pr
     if (typeof token !== 'string' || token.length > 4000) throw new Error('Bitte gib deinen Benutzernamen ein.');
     const { payload } = await jwtVerify(token, signingKey(config), { issuer: 'slopurself', audience: 'game', algorithms: ['HS256'] });
     if (!payload.sub || !payload.exp || payload.role !== 'player') throw new Error('Ungültige Browsersitzung.');
-    const account = { id: payload.sub, name: profileName(payload.name), expiresAt: payload.exp * 1000, authVersion: typeof payload.av === 'string' ? payload.av : '0' };
+    const account: Account = { id: payload.sub, name: profileName(payload.name), expiresAt: payload.exp * 1000,
+        authVersion: typeof payload.av === 'string' ? payload.av : '0', identityProof: payload.proof === 'owner' ? 'owner' : 'pending' };
     if (!await accountIsCurrent(account, config)) throw new Error('Dieses Benutzerkonto wurde gelöscht.');
     return account;
 }
@@ -43,13 +47,14 @@ export async function requestAccount(request: Request, config: AuthConfig) {
 }
 
 export async function sessionResponse(request: Request, config: AuthConfig, profiles: ProfileStore) {
-    config = profileAuthConfig(config, profiles);
+    // Pending sessions can only open the identity-connection shell, never private APIs.
+    config = { ...profileAuthConfig(config, profiles), allowPendingAuth: true };
     const headers = new Headers({ 'content-type': 'application/json', 'cache-control': 'no-store' });
     const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
     if (request.method === 'GET') {
         try {
             const account = await requestAccount(request, config);
-            return respond({ account: account && { id: account.id, name: account.name, expiresAt: account.expiresAt } });
+            return respond({ account: account && { id: account.id, name: account.name, expiresAt: account.expiresAt, identityVerified: account.identityProof === 'owner' } });
         }
         catch (error) { return respond({ error: authFailureStatus(error) === 503 ? (error as Error).message : 'Bitte gib deinen Benutzernamen ein.' }, authFailureStatus(error)); }
     }
@@ -65,16 +70,17 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
     try { signingKey(config); } catch { return respond({ error: 'Die Browsersitzung ist noch nicht eingerichtet.' }, 503); }
     let data: { username?: unknown; mode?: unknown; password?: unknown };
     try {
-        const body = await request.text();
-        if (body.length > 2000) return respond({}, 413);
-        data = JSON.parse(body);
+        data = await boundedJson(request, 2000) as typeof data;
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
-    } catch { return respond({ error: 'Ungültige Anfrage.' }, 400); }
+    } catch (error) { return respond({ error: error instanceof RangeError ? error.message : 'Ungültige Anfrage.' }, error instanceof RangeError ? 413 : 400); }
     let profile;
+    let identityProof: Account['identityProof'] = 'pending';
     if (data.mode === 'refresh') {
         try { profile = await requestAccount(request, config); }
         catch (error) { if (authFailureStatus(error) === 503) return respond({ error: (error as Error).message }, 503); }
         if (!profile) return respond({ error: 'Bitte gib deinen Benutzernamen erneut ein.' }, 401);
+        identityProof = profile.identityProof;
+        if (identityProof !== 'owner' && await config.verifyHfIdentity?.(profile.hfConnectionId, profile.id)) identityProof = 'owner';
     } else {
         let name: string;
         try { name = profileName(data.username); } catch (error) { return respond({ error: (error as Error).message }, 422); }
@@ -88,10 +94,17 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         if (data.mode === 'login' && profile.passwordHash) {
             if (!data.password) return respond({ error: 'Dieses Profil ist geschützt. Bitte gib dein Passwort ein.', code: 'password_required' }, 401);
             if (!await checkPassword(data.password, profile.passwordHash)) return respond({ error: 'Das Passwort stimmt nicht.', code: 'password_required' }, 401);
+            identityProof = 'owner';
+        }
+        if (data.mode === 'create') identityProof = 'owner';
+        if (identityProof !== 'owner') {
+            const current = await requestAccount(request, config).catch(() => undefined);
+            if (current?.id === profile.id && current.identityProof === 'owner') identityProof = 'owner';
+            else if (await config.verifyHfIdentity?.(hfCookie(request), profile.id)) identityProof = 'owner';
         }
     }
-    const token = await new SignJWT({ name: profile.name, role: 'player', av: profile.authVersion || '0' }).setSubject(profile.id).setProtectedHeader({ alg: 'HS256' }).setIssuer('slopurself').setAudience('game').setIssuedAt().setExpirationTime(`${SESSION_SECONDS}s`).sign(signingKey(config));
+    const token = await new SignJWT({ name: profile.name, role: 'player', av: profile.authVersion || '0', proof: identityProof }).setSubject(profile.id).setProtectedHeader({ alg: 'HS256' }).setIssuer('slopurself').setAudience('game').setIssuedAt().setExpirationTime(`${SESSION_SECONDS}s`).sign(signingKey(config));
     const account = await verifyAccountToken(token, { ...config, validateAccount: undefined });
     headers.set('set-cookie', `slop_auth=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_SECONDS}${secure}`);
-    return respond({ account, token });
+    return respond({ account, token, identityVerified: identityProof === 'owner' });
 }

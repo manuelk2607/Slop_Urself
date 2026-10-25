@@ -64,7 +64,10 @@ export async function downloadVideo(url: string) {
 }
 
 // Called under the global service queue, including deletion before the new upload.
-export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>) {
+export function archiveRoomHint(url: string) {
+    return /^\/api\/videos\/videos\/\d{13}-([a-z0-9]{4})-[a-f0-9-]{36}\.mp4$/.exec(url)?.[1].toUpperCase();
+}
+export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string) {
     if (url.startsWith('/assets/')) return url;
     if (!archiveEnabled(config)) throw new Error('Die Zugangsdaten für das dauerhafte Videoarchiv fehlen.');
     const bytes = await downloadVideo(url);
@@ -78,7 +81,8 @@ export async function archiveVideo(url: string, config: ArchiveConfig, protected
         remaining.delete(`/api/videos/${old.key}`);
         await reconcile?.([...remaining]);
     }
-    const key = `videos/${Date.now()}-${crypto.randomUUID()}.mp4`;
+    if (roomCode && !/^[A-Z0-9]{4}$/.test(roomCode)) throw new Error('Ungültige Archiv-Zuordnung.');
+    const key = `videos/${Date.now()}-${roomCode ? roomCode.toLowerCase() + '-' : ''}${crypto.randomUUID()}.mp4`;
     const response = await client(config).fetch(endpoint(config, key), { method: 'PUT', body: bytes, headers: { 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300' }, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error('Video konnte nicht dauerhaft gespeichert werden.');
     return `/api/videos/${key}`;
@@ -96,7 +100,7 @@ export async function serveVideo(request: Request, key: string, config: ArchiveC
     if (response.status === 416) return new Response(null, { status: 416,
         headers: response.headers.has('content-range') ? { 'content-range': response.headers.get('content-range')! } : {} });
     if (!response.ok) return new Response(null, { status: 503 });
-    const headers = new Headers({ 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300', 'accept-ranges': 'bytes' });
+    const headers = new Headers({ 'content-type': 'video/mp4', 'cache-control': 'no-store', 'accept-ranges': 'bytes' });
     if (new URL(request.url).searchParams.get('download') === '1') headers.set('content-disposition', `attachment; filename="slopurself-${key.slice('videos/'.length)}"`);
     for (const name of ['content-length', 'content-range', 'etag']) if (response.headers.has(name)) headers.set(name, response.headers.get(name)!);
     return new Response(request.method === 'HEAD' ? null : response.body, { status: response.status, headers });

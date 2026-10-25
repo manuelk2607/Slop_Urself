@@ -19,7 +19,7 @@ export async function requirePlayerHf(config: { AI_PROVIDER?: string }, account:
     if (config.AI_PROVIDER !== 'mock') await connections.credential(account?.hfConnectionId, account?.id);
 }
 export class HfOAuthError extends Error {
-    constructor(readonly code: 'state_invalid' | 'exchange_failed' | 'token_invalid' | 'identity_failed' | 'identity_invalid' | 'validation_failed' | 'quota_forbidden' | 'quota_unavailable', message: string) { super(message); }
+    constructor(readonly code: 'state_invalid' | 'exchange_failed' | 'token_invalid' | 'identity_failed' | 'identity_invalid' | 'identity_unclaimed' | 'validation_failed' | 'quota_forbidden' | 'quota_unavailable', message: string) { super(message); }
 }
 interface Pending { account: Account; verifier: string; nonce: string; origin: string; expiresAt: number }
 interface ReceivedGrant { access_token: string; expires_in: number; token_type: string; receivedAt: number; connection: string }
@@ -111,7 +111,7 @@ export class HfConnections {
     async start(account: Account, requestOrigin: string) {
         const origin = hfOrigin(requestOrigin, this.config), client = hfClient(origin, this.config);
         const state = random(), verifier = random(), nonce = random();
-        const pending: Pending = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt, authVersion: account.authVersion }, verifier, nonce, origin, expiresAt: Date.now() + 10 * 60_000 };
+        const pending: Pending = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt, authVersion: account.authVersion, identityProof: account.identityProof }, verifier, nonce, origin, expiresAt: Date.now() + 10 * 60_000 };
         await this.save(`hf-pending:${state}`, pending);
         const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
         const url = new URL('https://huggingface.co/oauth/authorize');
@@ -153,6 +153,15 @@ export class HfConnections {
         // A successful sign-in alone does not prove this token can read ZeroGPU quota.
         try { await fetchGpuQuota({ HF_TOKEN: result.access_token }); }
         catch (error) { throw new HfOAuthError(error instanceof GpuQuotaError && error.status === 403 ? 'quota_forbidden' : 'quota_unavailable', 'HF-Anmeldung erfolgreich, aber das ZeroGPU-Kontingent konnte nicht gelesen werden. Die Verbindung wurde nicht gespeichert.'); }
+        // Serialized permanent bindings are separate from expiring access tokens.
+        // An old name-only session cannot become the first claimant of an existing profile.
+        await this.serial('identity', async () => {
+            const bindings = await this.storage.get<Record<string, string>>('hf-profile-bindings') || {};
+            if (bindings[account.id] ? bindings[account.id] !== who.id : account.identityProof !== 'owner') {
+                throw new HfOAuthError('identity_unclaimed', 'Dieses Profil gehört zu einem anderen HF-Konto oder ist noch nicht sicher zugeordnet. Bitte nutze deinen bisherigen Browser oder lasse das bestehende Profil einmalig vom Besitzer mit einem Passwort sichern.');
+            }
+            if (!bindings[account.id]) { bindings[account.id] = who.id as string; await this.storage.put('hf-profile-bindings', bindings); }
+        });
         await this.save(`hf-connection:${connection}`, { token: result.access_token, subject: who.id, username: user.preferred_username, expiresAt, accountId: account.id });
         return { connection, expiresAt };
     }
@@ -169,7 +178,7 @@ export class HfConnections {
             || typeof result.user_code !== 'string' || !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(result.user_code)
             || !Number.isFinite(result.expires_in) || Number(result.expires_in) <= 0) throw new Error('Ungültige HF-Verbindungsantwort.');
         const nonce = random(), interval = Math.max(5, Number.isFinite(result.interval) ? Number(result.interval) : 5);
-        const pending: PendingDevice = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt, authVersion: account.authVersion }, origin, client,
+        const pending: PendingDevice = { account: { id: account.id, name: account.name, expiresAt: account.expiresAt, authVersion: account.authVersion, identityProof: account.identityProof }, origin, client,
             deviceCode: result.device_code, userCode: result.user_code, verificationUrl: verification.href, interval, nextPollAt: Date.now() + interval * 1000,
             expiresAt: Date.now() + Math.min(600, Number(result.expires_in)) * 1000 };
         await this.save(`hf-device:${nonce}`, pending);
@@ -232,7 +241,7 @@ export class HfConnections {
         try {
             pending.completed = await this.acceptToken(pending.grant, pending.account, pending.grant.receivedAt, pending.grant.connection);
         } catch (error) {
-            if (error instanceof HfOAuthError && ['token_invalid', 'identity_invalid', 'quota_forbidden'].includes(error.code)) {
+            if (error instanceof HfOAuthError && ['token_invalid', 'identity_invalid', 'identity_unclaimed', 'quota_forbidden'].includes(error.code)) {
                 await this.remove(`hf-device:${nonce}`);
                 return { error: error.message };
             }
@@ -245,16 +254,26 @@ export class HfConnections {
     async credential(connection: string | undefined, accountId: string | undefined) {
         if (!secretId(connection) || !accountId) throw new HfRequiredError();
         const value = await this.load<HfCredential>(`hf-connection:${connection}`);
-        if (!value || value.accountId !== accountId) throw new HfRequiredError();
+        if (!value || value.accountId !== accountId
+            || (await this.storage.get<Record<string, string>>('hf-profile-bindings'))?.[accountId] !== value.subject) throw new HfRequiredError();
         return value;
     }
     async status(connection: string | undefined, accountId: string) {
         if (!connection) return { connected: false };
+        let credential: HfCredential;
+        try { credential = await this.credential(connection, accountId); }
+        catch { return { connected: false, error: 'HF-Verbindung ist abgelaufen. Bitte erneut verbinden.' }; }
+        const { username, expiresAt, token } = credential;
         try {
-            const { username, expiresAt, token } = await this.credential(connection, accountId);
             const quota = await fetchGpuQuota({ HF_TOKEN: token });
             return { connected: true, username, expiresAt, remainingSeconds: Math.floor(quota.current), totalSeconds: quota.base };
-        } catch { return { connected: false, error: 'HF-Verbindung ist abgelaufen oder gerade nicht erreichbar. Bitte erneut verbinden.' }; }
+        } catch { return { connected: true, username, expiresAt, quotaUnavailable: true, error: 'Dein HF-Konto bleibt verbunden. Das Kontingent ist vorübergehend nicht erreichbar.' }; }
+    }
+    async identityMatches(connection: string | undefined, accountId: string) {
+        try {
+            const credential = await this.credential(connection, accountId);
+            return (await this.storage.get<Record<string, string>>('hf-profile-bindings'))?.[accountId] === credential.subject;
+        } catch { return false; }
     }
     async disconnect(connection: string | undefined, accountId: string) {
         if (!connection) return;

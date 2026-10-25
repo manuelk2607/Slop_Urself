@@ -14,7 +14,7 @@ import { logAiEvent } from '../../ai/telemetry';
 import { archiveEnabled } from '../../storage/archive';
 import { takeRateLimit, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
 import { type QuotaCapacity } from '../../ai/quota';
-import { type Room as RoomState, type Player, activeCreator, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses } from '../../game/rules';
+import { roomAccountIds, type Room as RoomState, type Player, activeCreator, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses } from '../../game/rules';
 import { service } from './runtime';
 import { deleteStoredHistory, historyVideo, HistoryError, historyJson, type HistoryDeletion } from '../statistics';
 import type { DurableObjectState, CloudflareWebSocket, ConnectionMeta, Env, PendingRoomWrite } from './types';
@@ -70,12 +70,17 @@ export class RoomDurableObject {
     }
 
     async fetch(request: Request): Promise<Response> {
+        if (request.url === 'https://internal/video/access' && request.method === 'POST') {
+            const { accountId, url } = await request.json() as { accountId?: string; url?: string };
+            return new Response(null, { status: this.room && accountId && participants(this.room).some(p => p.accountId === accountId)
+                && this.room.currentVideoUrl === url ? 200 : 403 });
+        }
         if (request.url === 'https://internal/rematch' && request.method === 'POST') return this.enqueue(async () => {
             const { requestId, room } = await request.json() as { requestId: string; room: RoomState };
             if (this.room?.rematchSource === requestId) return historyJson({ ok: true });
             if (this.room || await getDatabase(this.env.DATABASE_URL)?.roomExists(room.code)) return historyJson({ error: 'Raumcode belegt.' }, 409);
             if (!sanitizeRoomId(room.code) || !requestId || room.state !== 'LOBBY') return historyJson({}, 400);
-            room.quota = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive() || [], room.players.length)
+            room.quota = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || [], room.players.length)
                 : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
             room.maxRounds = room.quota.aiRoundLimit ? maxRounds(room.maxRounds || 1, room.quota.aiRoundLimit) : 0;
             this.room = room; this.roomCode = room.code;
@@ -292,7 +297,7 @@ export class RoomDurableObject {
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
         if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
-        if (isArchiveGame(room)) prepareArchive(room, await getDatabase(this.env.DATABASE_URL)?.playableArchive() || []);
+        if (isArchiveGame(room)) prepareArchive(room, await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || []);
         else await service(this.env, '/quota/reserve', { code: room.code, rounds: room.maxRounds, players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players });
         const disconnected = room.players.some(p => ![...this.sockets].some(([socket, meta]) => meta.playerId === p.id && socket.readyState === 1));
         if (startProblem(room) || disconnected) { await service(this.env, '/quota/release', { code: room.code }); throw new Error(startProblem(room) || 'Warte, bis alle Spieler verbunden sind.'); }
@@ -306,7 +311,7 @@ export class RoomDurableObject {
     private async refreshLobbyQuota() {
         const room = this.room;
         if (!room || (room.state !== 'LOBBY' && room.state !== 'GAME_OVER')) return;
-        const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive() || [], room.players.length)
+        const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || [], room.players.length)
             : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
         if (room.state === 'GAME_OVER') room.extensionQuota = capacity;
         else {
@@ -399,7 +404,7 @@ export class RoomDurableObject {
             if (this.room !== room || room.generationId !== generationId) return videoUrl;
             if (videoUrl === '/assets/mock-video.mp4') return videoUrl;
             progress('Video wird gespeichert...');
-            return (await service(this.env, '/archive', { url: videoUrl })).url as string;
+            return (await service(this.env, '/archive', { url: videoUrl, code: room.code })).url as string;
         }).then(videoUrl => this.enqueue(async () => {
             await this.releaseGenerationQuota(room.code, generationId);
             if (this.room !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;

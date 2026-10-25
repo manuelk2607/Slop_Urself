@@ -27,7 +27,7 @@ export async function huggingFaceResponse(request: Request, config: HfConfig, se
         return new Response(null, { status: 303, headers });
     }
     let account;
-    try { account = await requestAccount(request, config); if (!account) return json({ error: 'Bitte melde dich an.' }, 401); }
+    try { account = await requestAccount(request, { ...config, allowPendingAuth: true }); if (!account) return json({ error: 'Bitte melde dich an.' }, 401); }
     catch (error) { return json({ error: 'Bitte melde dich erneut an.' }, authFailureStatus(error)); }
     if (request.method !== 'GET' && request.headers.get('origin') !== url.origin) return json({}, 403);
     try {

@@ -41,7 +41,7 @@ function fixture() {
     async function connect(accountId: string, subject: string, name = subject) {
         nextToken = `private-access-${accountId}-${subject}`;
         tokens[nextToken] = { id: subject, name }; seconds[subject] ??= 300;
-        const account = { id: accountId, name: accountId, expiresAt: Date.now() + 60_000 };
+        const account = { id: accountId, name: accountId, identityProof: 'owner' as const, expiresAt: Date.now() + 60_000 };
         const start = await connections.start(account, 'https://game.test');
         const state = new URL(start.url).searchParams.get('state');
         const result = await connections.finish(state, 'test-code', start.nonce, 'https://game.test');
@@ -55,7 +55,7 @@ function fixture() {
 test('HF OAuth uses PKCE, minimal scopes and one-time browser-bound state; secrets stay encrypted', async () => {
     const f = fixture();
     try {
-        const account = { id: 'a', name: 'a', expiresAt: Date.now() + 60_000 };
+        const account = { id: 'a', name: 'a', identityProof: 'owner' as const, expiresAt: Date.now() + 60_000 };
         const start = await f.connections.start(account, 'https://game.test'), url = new URL(start.url);
         assert.equal(url.origin, 'https://huggingface.co');
         assert.match(start.url, /scope=openid%20profile%20read-billing/);
@@ -88,7 +88,7 @@ test('HF device approval survives reload, throttles provider polling, binds the 
     let now = originalNow(); Date.now = () => now;
     try {
         await f.connect('a', 'hf-a');
-        const account = { id: 'a', name: 'a', expiresAt: now + 60_000 }, origin = 'https://game.test';
+        const account = { id: 'a', name: 'a', identityProof: 'owner' as const, expiresAt: now + 60_000 }, origin = 'https://game.test';
         const start = await f.connections.startDevice(account, origin);
         assert.equal(start.userCode, 'ABCD-1234');
         assert.equal(JSON.stringify([...f.data.values()]).includes('secret-device-code'), false);
@@ -129,7 +129,7 @@ test('device grants survive a temporary quota outage and recreation without exch
     let now = originalNow(); Date.now = () => now;
     try {
         await f.connect('a', 'hf-a');
-        const account = { id: 'a', name: 'a', expiresAt: now + 60_000 }, origin = 'https://game.test';
+        const account = { id: 'a', name: 'a', identityProof: 'owner' as const, expiresAt: now + 60_000 }, origin = 'https://game.test';
         const start = await f.connections.startDevice(account, origin);
         f.deviceError(''); f.setQuotaStatus(503); now += 5000;
         const receivedAt = now, exchanges = f.exchanges();
@@ -149,7 +149,7 @@ test('device grants survive a temporary quota outage and recreation without exch
 test('concurrent vault writes preserve the expiry index and callback/device operations remain single-use', async () => {
     const f = fixture();
     try {
-        const account = { id: 'a', name: 'a', expiresAt: Date.now() + 60_000 }, origin = 'https://game.test';
+        const account = { id: 'a', name: 'a', identityProof: 'owner' as const, expiresAt: Date.now() + 60_000 }, origin = 'https://game.test';
         await Promise.all(Array.from({ length: 20 }, () => f.connections.start(account, origin)));
         assert.equal(Object.keys(f.data.get('hf-expiries')).length, 20);
         const start = await f.connections.start(account, origin), state = new URL(start.url).searchParams.get('state');
@@ -158,7 +158,7 @@ test('concurrent vault writes preserve the expiry index and callback/device oper
         const result = await Promise.allSettled([f.connections.finish(state, 'code', start.nonce, origin), f.connections.finish(state, 'code', start.nonce, origin)]);
         assert.equal(result.filter(r => r.status === 'fulfilled').length, 1);
         assert.equal(f.exchanges(), before + 1);
-        assert.deepEqual(Object.keys(f.data.get('hf-expiries')).sort(), [...f.data.keys()].filter(key => key !== 'hf-expiries').sort());
+        assert.deepEqual(Object.keys(f.data.get('hf-expiries')).sort(), [...f.data.keys()].filter(key => key !== 'hf-expiries' && key !== 'hf-profile-bindings').sort());
     } finally { f.restore(); }
 });
 

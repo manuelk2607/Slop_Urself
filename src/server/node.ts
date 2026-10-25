@@ -3,6 +3,9 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { emptyStats } from '../database/types';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
 import { accountsResponse } from './accounts';
 import { QuotaConfig, playerCount } from '../ai/quota';
@@ -20,7 +23,7 @@ import { closePhase, syncPhase } from '../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
 import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo } from '../storage/archive';
 import { archiveStatus } from './archive';
-import { historyResponse, historyListing, restoreHistoryResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError } from './statistics';
+import { historyResponse, historyListing, restoreHistoryResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError, historyViewer, authorizeHistory, authorizeRestore } from './statistics';
 import { Server, Socket } from 'socket.io';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
 import { takeRateLimit, rateKey, httpRateRule, httpRateScope, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
@@ -28,7 +31,7 @@ import { logAiEvent } from '../ai/telemetry';
 import {
     Room, Player, activeCreator, roomSnapshot, finishVoting, finalStandings,
     removePlayer, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, roundLimit, maxRounds,
-    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses
+    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses, roomAccountIds
 } from '../game/rules';
 import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
 import { roundInput } from '../game/persistence';
@@ -54,6 +57,7 @@ const messageBuckets: RateBuckets = {};
 const budgetData = new Map<string, unknown>();
 const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
+config.verifyHfIdentity = (connection, accountId) => hf.identityMatches(connection, accountId);
 const imageData = new Map<string, unknown>();
 const imageStorage: ImageStorage = { get: async <T>(key: string) => imageData.get(key) as T | undefined,
     put: async (key, value) => { imageData.set(key, value); }, delete: async key => { imageData.delete(key); } };
@@ -81,10 +85,11 @@ if (isDatabaseEnabled()) scheduleVideoCleanup(Date.now() + 1000);
 function withBudget<T>(action: () => Promise<T>): Promise<T> { const result = budgetWork.then(action); budgetWork = result.catch(() => {}); return result; }
 const hfCleanupClock = setInterval(() => { void hf.cleanup().catch(() => {}); }, 60_000);
 hfCleanupClock.unref();
-function archive(url: string) {
+function archive(url: string, code?: string) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();
-        return archiveVideo(url, config, await database?.protectedVideoUrls() || [], database ? urls => database.reconcileArchive(urls) : undefined);
+        const active = [...rooms.values()].map(r => r.currentVideoUrl).filter(Boolean);
+        return archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active], database ? urls => database.reconcileArchive(urls) : undefined, code);
     });
     archiveWork = result.catch(() => {}); return result;
 }
@@ -108,7 +113,8 @@ async function webResponse(response: Response, res: express.Response) {
     res.status(response.status);
     for (const [key, value] of response.headers) if (key !== 'set-cookie') res.setHeader(key, value);
     const cookies = response.headers.getSetCookie(); if (cookies.length) res.setHeader('set-cookie', cookies);
-    res.send(Buffer.from(await response.arrayBuffer()));
+    if (response.body) await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream<Uint8Array>), res);
+    else res.end();
 }
 app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, res) => webResponse(await huggingFaceResponse(webRequest(req), config, async (endpoint, data) => {
     if (endpoint === '/hf/start') return hf.start(data.account as any, data.origin as string);
@@ -125,8 +131,14 @@ app.use('/api/auth', (_req, res) => res.sendStatus(404));
 app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await sessionResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/videos', async (req, res) => {
-    try { await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
+    let account;
+    try { account = await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
     const request = webRequest(req);
+    if (!authDisabled(config) && account?.id !== config.ADMIN_ACCOUNT_ID) {
+        const url = new URL(request.url).pathname;
+        const live = account && [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id));
+        if (!live && (!account || !await getDatabase()?.canReadVideo(url, account.id))) { res.sendStatus(403); return; }
+    }
     await webResponse(await serveVideo(request, new URL(request.url).pathname.slice('/api/videos/'.length), config), res);
 });
 app.get('/api/rooms/:code/image', async (req, res) => {
@@ -162,12 +174,13 @@ app.get('/api/config', async (req, res) => {
     });
 });
 app.get('/api/stats', async (req, res) => {
-    try { await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
+    let account;
+    try { account = await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
     try {
         const status = archiveWork.then(() => archiveStatus(config, getDatabase()));
         archiveWork = status.catch(() => {});
         const archive = await status.catch(() => null);
-        res.json({ databaseEnabled: isDatabaseEnabled(), ...await getStats(typeof req.query.player === 'string' ? req.query.player.slice(0, 100) : undefined),
+        res.json({ databaseEnabled: isDatabaseEnabled(), ...(await getDatabase()?.getStats(typeof req.query.player === 'string' ? req.query.player.slice(0, 100) : undefined, historyViewer(account, config)) ?? emptyStats()),
             videoStorageMode: archiveEnabled(config) ? 'archive' : 'url', archive });
     }
     catch (error) {
@@ -185,7 +198,7 @@ app.all('/api/stats/videos/restore', express.text({ type: '*/*', limit: '8kb' })
         return database.restoreVideos(ids);
     });
     archiveWork = result.catch(() => {}); return result;
-}), res));
+}, (ids, account) => authorizeRestore(getDatabase(), ids, account, config)), res));
 
 app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) => webResponse(await historyResponse(webRequest(req), config, async command => {
     const database = getDatabase();
@@ -216,7 +229,7 @@ app.all(['/api/stats/rooms/*path', '/api/stats/videos/*path'], async (req, res) 
     const database = getDatabase();
     if (!database) throw new HistoryError('Die Statistik-Datenbank ist nicht eingerichtet.');
     return database.savedVideo(id);
-}), res));
+}, (command, account) => authorizeHistory(getDatabase(), command, account, config)), res));
 
 function broadcast(room: Room) {
     syncPhase(room);
@@ -264,7 +277,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
     void generation.then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId) return videoUrl;
         progress('Video wird gespeichert...');
-        return archive(videoUrl);
+        return archive(videoUrl, room.code);
     }).then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
         room.state = 'VOTING'; room.currentVideoUrl = videoUrl;
@@ -297,7 +310,7 @@ async function refreshLobbyQuota(room: Room) {
     const players = room.players.length;
     const quality = gameOptions(room.options).quality;
     const mode = gameOptions(room.options).mode;
-    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive() || [], players) : await budget.capacity(players, quality, room.players);
+    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(room)) || [], players) : await budget.capacity(players, quality, room.players);
     if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length || quality !== gameOptions(room.options).quality || mode !== gameOptions(room.options).mode) return;
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
@@ -557,7 +570,7 @@ io.on('connection', (socket: Socket) => {
             if (gameOptions(room.options).sharedImage) await readSharedImage(imageStorage, room.sharedImage);
             await refreshLobbyQuota(room);
             if (!room.maxRounds || roster !== room.players.map(p => p.id).join(',')) throw new Error('Das Kontingent oder die Spielerzahl hat sich geändert. Bitte prüfe die Rundenauswahl.');
-            if (isArchiveGame(room)) prepareArchive(room, await getDatabase()?.playableArchive() || []);
+            if (isArchiveGame(room)) prepareArchive(room, await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(room)) || []);
             else await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length, gameOptions(room.options).quality, room.players));
             if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== 'LOBBY' || roster !== room.players.map(p => p.id).join(',') || startProblem(room)) { await withBudget(() => budget.release(room.code)); throw new Error(startProblem(room) || 'Die Spielerzahl hat sich geändert.'); }
             startRounds(room);
@@ -661,7 +674,7 @@ io.on('connection', (socket: Socket) => {
             let code: string;
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
             const plan = prepareRematch(room, code), next = plan.room;
-            next.quota = isArchiveGame(next) ? archiveCapacity(await getDatabase()?.playableArchive() || [], next.players.length)
+            next.quota = isArchiveGame(next) ? archiveCapacity(await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(next)) || [], next.players.length)
                 : await budget.capacity(next.players.length, gameOptions(next.options).quality, next.players);
             next.maxRounds = next.quota.aiRoundLimit ? maxRounds(next.maxRounds || 1, next.quota.aiRoundLimit) : 0;
             if (room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== participants(room).filter(p => p.connected).map(p => p.id).join(',') || room.players.some(p => !p.connected)) throw new Error('Die Gruppe hat sich geändert. Bitte versuche es erneut.');

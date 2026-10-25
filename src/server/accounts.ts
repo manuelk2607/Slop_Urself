@@ -3,6 +3,7 @@ import { requestAccount, profileAuthConfig, authFailureStatus, type AuthConfig, 
 import type { ManagedProfileStore } from '../auth/profiles';
 import { historyJson } from './statistics';
 import { hashPassword, validPassword } from '../auth/passwords';
+import { boundedJson } from './body';
 
 const ADMIN_SECONDS = 24 * 60 * 60;
 const enabled = (config: AuthConfig) => Boolean(config.ADMIN_ACCOUNT_ID && config.ADMIN_ACCESS_KEY && config.ADMIN_ACCESS_KEY.length >= 32);
@@ -32,7 +33,8 @@ export async function accountsResponse(request: Request, config: AuthConfig, pro
     if (!listing && !(session && ['POST', 'DELETE'].includes(request.method)) && !(target && !target[2] && request.method === 'DELETE') && !passwordChange) return historyJson({}, 405);
     if (!listing && request.headers.get('origin') !== new URL(request.url).origin) return historyJson({ error: 'Ungültiger Ursprung.' }, 403);
     try {
-        const account = await requestAccount(request, profileAuthConfig(config, profiles)).catch(error => { if (authFailureStatus(error) === 503) throw error; return undefined; });
+        // Legacy owners may recover through the independently protected admin key.
+        const account = await requestAccount(request, { ...profileAuthConfig(config, profiles), allowPendingAuth: true }).catch(error => { if (authFailureStatus(error) === 503) throw error; return undefined; });
         if (!account) return historyJson({ error: 'Bitte melde dich an.' }, 401);
         const available = enabled(config) && account.id === config.ADMIN_ACCOUNT_ID;
         if (!available) return listing ? historyJson({ available: false, unlocked: false, accounts: [] }) : historyJson({ error: 'Nur der Besitzer darf Benutzer verwalten.' }, 403);
@@ -45,11 +47,9 @@ export async function accountsResponse(request: Request, config: AuthConfig, pro
             const access = await unlocked(request, config, account);
             return historyJson({ available: true, unlocked: access, accounts: access ? (await profiles.list()).map(profile => ({ id: profile.id, name: profile.name, passwordProtected: Boolean(profile.passwordHash), protected: profile.id === config.ADMIN_ACCOUNT_ID })) : [] });
         }
-        const body = await request.text();
-        if (body.length > 2000) return historyJson({}, 413);
         let data: { key?: unknown; confirmation?: unknown; password?: unknown };
-        try { data = JSON.parse(body); if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(); }
-        catch { return historyJson({ error: 'Ungültige Anfrage.' }, 400); }
+        try { data = await boundedJson(request, 2000) as typeof data; if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(); }
+        catch (error) { return historyJson({ error: error instanceof RangeError ? error.message : 'Ungültige Anfrage.' }, error instanceof RangeError ? 413 : 400); }
         if (session) {
             if (typeof data.key !== 'string' || data.key.length > 200 || !await matchesKey(data.key, config.ADMIN_ACCESS_KEY!)) return historyJson({ error: 'Der Verwaltungsschlüssel ist nicht gültig.' }, 403);
             const token = await new SignJWT({ role: 'admin', av: account.authVersion || '0' }).setSubject(account.id).setProtectedHeader({ alg: 'HS256' }).setIssuer('slopurself').setAudience('administration').setIssuedAt().setExpirationTime(`${ADMIN_SECONDS}s`).sign(adminKey(config));

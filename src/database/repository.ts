@@ -2,6 +2,7 @@ import { DATABASE_SCHEMA } from './schema';
 import { OVERVIEW_SQL, PLAYERS_SQL, VIDEOS_SQL, VIDEO_CREATORS_SQL, ROOMS_SQL } from './statistics';
 import { COPY_VIDEO_HISTORY_SQL, VIDEO_PROJECTION } from './video-history';
 import { historyPage, VIDEO_PAGE_SIZE, ROOM_PAGE_SIZE, type HistoryCursor } from './pagination';
+import { scopeHistoryQuery } from './access';
 import type { DatabaseDriver, SqlStatement, PersistPlayerInput, PersistRoundInput, FinalStandingInput, GameStats, StatsOverview, PlayerStats, VideoStats, RoomStats, VideoCreator, SavedVideo } from './types';
 
 const scoresSql = `insert into players (room_code, socket_id, name, score, is_host, account_id)
@@ -28,13 +29,29 @@ export class GameRepository {
         await this.ensureSchema();
         await this.driver.transaction(queries);
     }
+    private async read<T>(text: string, values: unknown[] = [], viewerId?: string) {
+        const query = scopeHistoryQuery(text, values, viewerId);
+        return this.query<T>(query.text, query.values);
+    }
+    async canManageRoom(code: string, accountId: string) {
+        return (await this.query(`select 1 from players where room_code = $1 and account_id = $2 and is_host = true limit 1`, [code, accountId])).length > 0;
+    }
+    async ownedVideoIds(ids: string[], accountId: string) {
+        return (await this.query<{ id: string }>('select id::text as id from video_history where id = any($1::bigint[]) and creator_id = $2', [ids, accountId])).map(v => v.id);
+    }
+    async canReadVideo(url: string, accountId: string) {
+        return (await this.read('select 1 from video_history where video_url = $1 and evicted_at is null limit 1', [url], accountId)).length > 0;
+    }
     async roomExists(code: string) {
         return (await this.query('select code from rooms where code = $1', [code])).length > 0;
     }
-    async playableArchive() {
+    async playableArchive(accountIds?: string[]) {
         return this.query<import('../game/archive-play').ArchiveClip>(`select id::text as id, creator_id as "creatorId", creator_name as "creatorName", prompt, video_url as "videoUrl"
-            from video_history where video_url like '/api/videos/videos/%' and delete_after is null and evicted_at is null
-            order by created_at desc, id desc limit 200`);
+            from video_history h where video_url like '/api/videos/videos/%' and delete_after is null and evicted_at is null
+            and ($1::text[] is null or (cardinality($1::text[]) > 0 and not exists (select 1 from unnest($1::text[]) as viewer(id)
+                where h.creator_id <> viewer.id and not exists
+                (select 1 from players p where p.room_code = h.room_code and p.account_id = viewer.id))))
+            order by created_at desc, id desc limit 200`, [accountIds ?? null]);
     }
     async saveRoom(code: string, hostId: string, rounds: number) {
         await this.query(`insert into rooms (code, host_socket_id, max_rounds, status)
@@ -169,18 +186,18 @@ export class GameRepository {
             where video_url like '/api/videos/videos/%' and evicted_at is null
               and not (video_url = any($1::text[]))`, [availableUrls]);
     }
-    async videoPage(creatorId?: string, cursor?: HistoryCursor) {
-        return historyPage(await this.query<VideoStats>(VIDEOS_SQL, [creatorId || null, cursor?.at ?? null, cursor?.id ?? null]), VIDEO_PAGE_SIZE);
+    async videoPage(creatorId?: string, cursor?: HistoryCursor, viewerId?: string) {
+        return historyPage(await this.read<VideoStats>(VIDEOS_SQL, [creatorId || null, cursor?.at ?? null, cursor?.id ?? null], viewerId), VIDEO_PAGE_SIZE);
     }
-    async roomPage(cursor?: HistoryCursor) {
-        return historyPage(await this.query<RoomStats>(ROOMS_SQL, [cursor?.at ?? null, cursor?.id ?? null]), ROOM_PAGE_SIZE);
+    async roomPage(cursor?: HistoryCursor, viewerId?: string) {
+        return historyPage(await this.read<RoomStats>(ROOMS_SQL, [cursor?.at ?? null, cursor?.id ?? null], viewerId), ROOM_PAGE_SIZE);
     }
-    async getStats(creatorId?: string): Promise<GameStats> {
-        const overview = await this.query<StatsOverview>(OVERVIEW_SQL);
-        const players = await this.query<PlayerStats>(PLAYERS_SQL);
-        const videos = await this.videoPage(creatorId);
-        const videoCreators = await this.query<VideoCreator>(VIDEO_CREATORS_SQL);
-        const rooms = await this.roomPage();
+    async getStats(creatorId?: string, viewerId?: string): Promise<GameStats> {
+        await this.ensureSchema();
+        const [overview, players, videos, videoCreators, rooms] = await Promise.all([
+            this.read<StatsOverview>(OVERVIEW_SQL, [], viewerId), this.read<PlayerStats>(PLAYERS_SQL, [], viewerId),
+            this.videoPage(creatorId, undefined, viewerId), this.read<VideoCreator>(VIDEO_CREATORS_SQL, [], viewerId), this.roomPage(undefined, viewerId)
+        ]);
         return { overview: overview[0], players, recentVideos: videos.items, videoCreators, rooms: rooms.items,
             videoCursor: videos.nextCursor, roomCursor: rooms.nextCursor };
     }

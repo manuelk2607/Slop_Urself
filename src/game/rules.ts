@@ -63,6 +63,7 @@ export interface Room {
 export function activeCreator(room: Room) {
     return room.players[room.activeCreatorIndex];
 }
+export const roomAccountIds = (room: Room) => [...new Set(room.players.map(p => p.accountId).filter((id): id is string => Boolean(id)))];
 
 export function startRounds(room: Room) {
     room.ballotId = crypto.randomUUID();

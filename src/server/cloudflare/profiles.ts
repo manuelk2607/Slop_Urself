@@ -12,4 +12,5 @@ export function serviceProfiles(env: Env): ManagedProfileStore {
         setPassword: async (id, passwordHash) => (await service(env, '/profiles/password', { id, passwordHash })).profile || undefined
     };
 }
-export const cloudflareAuth = (env: Env) => profileAuthConfig(env, serviceProfiles(env));
+export const cloudflareAuth = (env: Env) => ({ ...profileAuthConfig(env, serviceProfiles(env)),
+    verifyHfIdentity: async (connection: string | undefined, accountId: string) => Boolean((await service(env, '/hf/identity', { connection, accountId })).verified) });

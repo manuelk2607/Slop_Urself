@@ -138,7 +138,7 @@ test('Worker withholds new private snapshots from a revoked idle WebSocket sessi
         return Response.json({ aiRoundLimit: 5, quotaMode: 'mock' });
     } }) };
     const f = await fixture('IDLE', { AUTH_MODE: '', SERVICES: services as any });
-    for (const socket of f.sockets.slice(0, 3)) socket.attachment.account = { id: socket.attachment.playerId, name: socket.attachment.playerId, expiresAt: Date.now() + 60_000, authVersion: '0' };
+    for (const socket of f.sockets.slice(0, 3)) socket.attachment.account = { id: socket.attachment.playerId, name: socket.attachment.playerId, expiresAt: Date.now() + 60_000, authVersion: '0', identityProof: 'owner' };
     (f.worker as any).broadcastRoomUpdate(); await Promise.all(f.pending);
     const previous = f.sockets[0].messages.filter(m => m.type === 'roomDataUpdate').length;
     assert.equal(previous, 1); rotated = true;

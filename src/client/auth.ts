@@ -86,7 +86,7 @@ export async function initializeAccount(ui: AuthUI) {
         const saved = await fetch('/api/session', { signal: AbortSignal.timeout(10_000) });
         if (saved.ok) {
             const { account } = await saved.json() as { account?: Account };
-            if (account) { await signedIn(account); return; }
+            if (account) { await signedIn(await session('refresh')); return; }
         } else if (saved.status !== 401) throw new Error('Deine Browsersitzung ist gerade nicht erreichbar.');
         ui.showAuth();
     } catch (reason) { ui.showAuth(); error.innerText = reason instanceof Error ? reason.message : 'Der Einstieg ist gerade nicht erreichbar.'; }

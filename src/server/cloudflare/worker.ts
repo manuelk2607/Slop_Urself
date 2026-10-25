@@ -3,11 +3,11 @@ import { getDatabase } from '../../database/neon';
 import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
 import { DEFAULT_PROVIDER_CHAIN } from '../../ai/generation';
-import { serveVideo, archiveEnabled } from '../../storage/archive';
+import { serveVideo, archiveEnabled, archiveRoomHint } from '../../storage/archive';
 import { httpRateRule, httpRateScope, rateKey, RATE_MESSAGE } from '../../security/rate-limit';
 import { sanitizeRoomId } from '../../game/rules';
 import { service, json } from './runtime';
-import { historyResponse, historyListing, restoreHistoryResponse, HistoryError } from '../statistics';
+import { historyResponse, historyListing, restoreHistoryResponse, HistoryError, historyViewer, authorizeHistory, authorizeRestore } from '../statistics';
 import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
@@ -61,10 +61,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         }
 
         if (url.pathname === '/api/stats') {
-            try { await requestAccount(request, auth); } catch (error) { return json({ error: authFailureStatus(error) === 503 ? 'Deine Browsersitzung ist gerade nicht erreichbar.' : 'Bitte melde dich an.' }, { status: authFailureStatus(error) }); }
+            let account;
+            try { account = await requestAccount(request, auth); } catch (error) { return json({ error: authFailureStatus(error) === 503 ? 'Deine Browsersitzung ist gerade nicht erreichbar.' : 'Bitte melde dich an.' }, { status: authFailureStatus(error) }); }
             try {
                 const archive = await service(env, '/archive/status').catch(() => null);
-                const stats = await getDatabase(env.DATABASE_URL)?.getStats(url.searchParams.get('player')?.slice(0, 100)) ?? emptyStats();
+                const stats = await getDatabase(env.DATABASE_URL)?.getStats(url.searchParams.get('player')?.slice(0, 100), historyViewer(account, auth)) ?? emptyStats();
                 return json({
                     databaseEnabled: Boolean(env.DATABASE_URL),
                     ...stats,
@@ -79,7 +80,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
         if (url.pathname === '/api/stats/videos' || url.pathname === '/api/stats/rooms') return historyListing(request, auth, getDatabase(env.DATABASE_URL));
 
-        if (url.pathname === '/api/stats/videos/restore') return restoreHistoryResponse(request, auth, async ids => (await service(env, '/video-trash/restore', { ids })).results);
+        if (url.pathname === '/api/stats/videos/restore') return restoreHistoryResponse(request, auth, async ids => (await service(env, '/video-trash/restore', { ids })).results,
+            (ids, account) => authorizeRestore(getDatabase(env.DATABASE_URL), ids, account, auth));
 
         if (url.pathname.startsWith('/api/stats/rooms/') || url.pathname.startsWith('/api/stats/videos/')) return historyResponse(request, auth, async command => {
             const room = env.ROOMS.get(env.ROOMS.idFromName(command.code));
@@ -90,10 +92,17 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             const database = getDatabase(env.DATABASE_URL);
             if (!database) throw new HistoryError('Die Statistik-Datenbank ist nicht eingerichtet.');
             return database.savedVideo(id);
-        });
+        }, (command, account) => authorizeHistory(getDatabase(env.DATABASE_URL), command, account, auth));
 
         if (url.pathname.startsWith('/api/videos/')) {
-            try { await requestAccount(request, auth); } catch (error) { return new Response(null, { status: authFailureStatus(error) }); }
+            let account;
+            try { account = await requestAccount(request, auth); } catch (error) { return new Response(null, { status: authFailureStatus(error) }); }
+            if (!authDisabled(env) && account?.id !== env.ADMIN_ACCOUNT_ID) {
+                const code = archiveRoomHint(url.pathname);
+                const live = code && account && (await env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(new Request('https://internal/video/access', {
+                    method: 'POST', body: JSON.stringify({ accountId: account.id, url: url.pathname }) }))).ok;
+                if (!live && (!account || !await getDatabase(env.DATABASE_URL)?.canReadVideo(url.pathname, account.id))) return new Response(null, { status: 403 });
+            }
             return serveVideo(request, url.pathname.slice('/api/videos/'.length), env);
         }
 

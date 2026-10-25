@@ -44,6 +44,7 @@ export class ServiceDurableObject {
             if (path === '/hf/device/cancel') { await this.hf.cancelDevice(data.nonce, data.accountId, data.origin); return json({ ok: true }); }
             if (path === '/hf/finish') { const result = await this.hf.finish(data.state, data.code, data.nonce, data.origin); await this.scheduleCleanup(result.expiresAt); return json(result); }
             if (path === '/hf/status') return json(await this.hf.status(data.connection, data.accountId));
+            if (path === '/hf/identity') return json({ verified: await this.hf.identityMatches(data.connection, data.accountId) });
             if (path === '/hf/require') { await requirePlayerHf(this.env, data.account, this.hf); return json({ ok: true }); }
             if (path === '/hf/disconnect') { await this.hf.disconnect(data.connection, data.accountId); return json({ ok: true }); }
             if (path === '/video-trash/schedule') {
@@ -75,7 +76,7 @@ export class ServiceDurableObject {
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
                 return json({ url: await archiveVideo(data.url, this.env, await database?.protectedVideoUrls() || [],
-                    database ? urls => database.reconcileArchive(urls) : undefined) });
+                    database ? urls => database.reconcileArchive(urls) : undefined, data.code) });
             }
             else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
             else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));

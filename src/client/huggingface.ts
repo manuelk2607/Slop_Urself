@@ -1,6 +1,6 @@
 import { createElement, Link2, X, Copy } from 'lucide';
 
-interface Connection { configured?: boolean; connected?: boolean; username?: string; remainingSeconds?: number; totalSeconds?: number; error?: string }
+interface Connection { configured?: boolean; connected?: boolean; username?: string; remainingSeconds?: number; totalSeconds?: number; quotaUnavailable?: boolean; error?: string }
 interface Device { pending?: boolean; userCode?: string; verificationUrl?: string; expiresAt?: number; retryAfter?: number; connected?: boolean; error?: string }
 export function huggingFaceConnection() {
     const open = document.getElementById('hfAccountButton') as HTMLButtonElement;
@@ -68,7 +68,7 @@ export function huggingFaceConnection() {
             const response = await fetch('/api/hf', { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
             if (!response.ok) throw new Error('HF-Verbindung ist gerade nicht erreichbar.');
             const data = await response.json() as Connection;
-            status.textContent = data.connected ? `${data.username} · ${data.remainingSeconds} / ${data.totalSeconds} GPU-Sekunden`
+            status.textContent = data.connected ? data.quotaUnavailable ? `${data.username} · Kontingent vorübergehend nicht erreichbar` : `${data.username} · ${data.remainingSeconds} / ${data.totalSeconds} GPU-Sekunden`
                 : data.configured ? 'Verbinde dein persönliches HF-Konto, um mitzuspielen.' : 'Die HF-Anmeldung ist auf diesem Server noch nicht eingerichtet.';
             requirement.hidden = !required || Boolean(data.connected);
             open.lastChild!.textContent = data.connected ? ' KI-Konto' : ' HF verbinden';
