@@ -1,5 +1,6 @@
 import type { PlayerStats, StatsOverview, VideoStats, RoomStats, VideoCreator } from '../database/types';
 import { videoPlayback } from './video';
+import { reportVideoButton } from './content-reports';
 import { historySelection, type HistoryKind } from './history-selection';
 import { createElement, Download, VideoOff } from 'lucide';
 
@@ -159,6 +160,7 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
 
             const selection = videoSelection.checkbox(videoUrl(video), `Video ${video.roundNumber} von ${video.creatorName} in Raum ${video.roomCode} auswählen`);
             meta.append(title, prompt, points, selection);
+            if (video.videoUrl.startsWith('/api/videos/')) meta.append(reportVideoButton(video.videoUrl));
             if (video.taskText) { const task = document.createElement('small'); task.textContent = `Auftrag: ${video.taskText}`; meta.append(task); }
             if (!video.evictedAt && /^(\/api\/videos\/videos\/\d{13}-[a-z0-9-]+\.mp4|\/assets\/[a-z0-9-]+\.mp4)$/.test(video.videoUrl)) {
                 const download = document.createElement('a');

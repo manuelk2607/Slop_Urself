@@ -36,7 +36,7 @@ try {
     const victim = '/api/admin/accounts/admin-friend-id';
     const postOptions = { headers: { origin: base }, data: { key: 'ci-private-admin-key-not-used-in-production' } };
     assert.equal((await friend.request.post(`${base}/api/admin/session`, postOptions)).status(), 403);
-    assert.equal((await clone.request.delete(`${base}${victim}`, { headers: { origin: base }, data: { confirmation: 'Friend' } })).status(), 403);
+    assert.equal((await clone.request.delete(`${base}${victim}`, { headers: { origin: base }, data: { confirmation: 'Friend' } })).status(), 401);
     assert.equal((await clone.request.get(`${base}/api/stats`)).status(), 401);
     await friendPage.locator('#statsButton').click();
     assert.equal(await friendPage.locator('#accountManagement').isVisible(), false);
@@ -51,16 +51,16 @@ try {
     await page.locator('#accountManagementList .account-management-item').first().waitFor();
     assert.equal(await page.locator('#accountManagementList .account-management-item').count(), 2);
     const ownerRow = page.locator('#accountManagementList li').filter({ hasText: 'Manuel' });
-    assert.equal(await ownerRow.getByRole('button', { name: 'Passwort setzen' }).count(), 1);
+    assert.equal(await ownerRow.getByRole('button', { name: 'Passwort erneuern' }).count(), 1);
     assert.equal(await ownerRow.getByRole('button', { name: 'Benutzer löschen' }).count(), 0);
-    await ownerRow.getByRole('button', { name: 'Passwort setzen' }).click();
+    await ownerRow.getByRole('button', { name: 'Passwort erneuern' }).click();
     await page.locator('#profilePasswordValue').fill('never-submit-this-password');
     assert.equal(await page.locator('#profilePasswordDialog').evaluate(el => el.scrollWidth <= el.clientWidth && el.getBoundingClientRect().right <= innerWidth), true);
     await page.screenshot({ path: artifactPath('slopurself-profile-password-mobile.png'), fullPage: true });
     await page.locator('#profilePasswordCancel').click();
     assert.equal(await page.locator('#profilePasswordValue').inputValue(), '');
     const oldRoom = await friendPage.locator('#displayRoomCode').innerText();
-    await page.locator('#accountManagementList li').filter({ hasText: 'Friend' }).getByRole('button', { name: 'Passwort setzen' }).click();
+    await page.locator('#accountManagementList li').filter({ hasText: 'Friend' }).getByRole('button', { name: 'Passwort erneuern' }).click();
     await page.locator('#profilePasswordConfirmation').fill('Friend');
     await page.locator('#profilePasswordValue').fill('friend-new-password');
     await page.locator('#profilePasswordForm button[type=submit]').click();

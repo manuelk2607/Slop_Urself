@@ -23,8 +23,16 @@ fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter erse
   Produktionsabhängigkeiten nach gezieltem Lock-Update: npm audit meldet 0 Befunde.
   Erster Gesamt-E2E-Lauf stoppte an veraltetem Namenslogin im Admin-Test. Fixture
   mit echten Passwortnachweisen korrigiert; erneuter Chromium/WebKit-Gesamtlauf läuft.
-- Nächster Schritt: M04 Melde-/Sperrworkflow, danach M15/M16 und weitere Recovery-
-  Absicherung. Keine Modellgewichte geladen, keine Klassifikationsqualität zugesichert.
+- Nächstes Paket implementiert: M04 Melden/Sperren mit unabhängiger Adminfreigabe und
+  persistenten Sperren auf allen Archivdownloads; M15 CSP/Frame-/Berechtigungsheader;
+  M13/M16 Byte-/Aktionsbudgets und Join-Timeout; M12 stabiler Archivschlüssel bei
+  verlorener PUT-Antwort. Root-Build und 164 Unit-Tests bestanden, einschließlich
+  Worker-Sperrtest. Verwaltung im Chromium bestanden; Gesamt-E2E läuft.
+- CPU-Dienst: indirektes verwundbares sharp gezielt auf 0.35.5 aktualisiert,
+  Transformers-Decode/Resize mit nativer Bibliothek geprüft. Service-Build und 4 Tests
+  bestanden, npm audit für dessen Produktionsabhängigkeiten jetzt ebenfalls 0.
+- Nächster Schritt: Gesamt-E2E auswerten, nächste Sicherheits-/Recoverymaßnahmen.
+  Keine Modellgewichte geladen, keine Klassifikationsqualität zugesichert.
 - Keine produktive Schemaänderung, kein Push oder Deployment.
 
 ## Vorheriger Auditstand

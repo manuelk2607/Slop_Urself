@@ -12,7 +12,7 @@ import { closePhase, syncPhase } from '../../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse } from '../../game/images';
 import { logAiEvent } from '../../ai/telemetry';
 import { archiveEnabled } from '../../storage/archive';
-import { takeRateLimit, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
+import { takeRateLimit, rateKey, MESSAGE_RATE, MESSAGE_BYTES, expensiveMessageRule, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
 import { type QuotaCapacity } from '../../ai/quota';
 import { roomAccountIds, type Room as RoomState, type Player, activeCreator, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses } from '../../game/rules';
 import { service } from './runtime';
@@ -132,11 +132,12 @@ export class RoomDurableObject {
         this.roomCode = sanitizeRoomId(new URL(request.url).pathname.replace('/ws/', ''));
         const pair = new WebSocketPair();
         const socketId = crypto.randomUUID();
-        const meta: ConnectionMeta = { socketId, account: await requestAccount(request, cloudflareAuth(this.env)) };
+        const meta: ConnectionMeta = { socketId, acceptedAt: Date.now(), account: await requestAccount(request, cloudflareAuth(this.env)) };
         this.state.acceptWebSocket(pair[1]);
         pair[1].serializeAttachment(meta);
         this.sockets.set(pair[1], meta);
         this.send(pair[1], 'connect', { socketId });
+        await this.scheduleAlarm();
         return new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: CloudflareWebSocket });
     }
 
@@ -144,12 +145,20 @@ export class RoomDurableObject {
         await this.enqueue(async () => {
             try {
                 if (typeof data !== 'string' || data.length > 12 * 1024 * 1024) throw new Error('Ungültige Nachricht oder Bild zu groß.');
+                const meta = this.sockets.get(socket);
+                if (!meta) return;
+                const bytes = new TextEncoder().encode(data).length;
+                if (bytes > 12 * 1024 * 1024) throw new Error('Die Nachricht ist zu groß.');
+                const actor = meta.account?.id || meta.playerId || meta.socketId;
+                if (takeRateLimit(this.messageBuckets, actor, MESSAGE_RATE) || takeRateLimit(this.messageBuckets, `bytes:${actor}`, MESSAGE_BYTES, Date.now(), bytes)) throw new Error(RATE_MESSAGE);
                 const message = JSON.parse(data) as { type?: string; payload?: Record<string, unknown> };
                 if (!message || typeof message.type !== 'string' || (message.payload && (typeof message.payload !== 'object' || Array.isArray(message.payload)))) throw new Error('Ungültige Nachricht.');
                 const payload = message.payload || {};
-                const meta = this.sockets.get(socket);
-                if (!meta) return;
-                if (takeRateLimit(this.messageBuckets, meta.account?.id || meta.playerId || meta.socketId, MESSAGE_RATE)) throw new Error(RATE_MESSAGE);
+                const rule = expensiveMessageRule(message.type);
+                if (rule) {
+                    const key = await rateKey(actor, `command:${message.type}`, this.env.AUTH_COOKIE_SECRET);
+                    if ((await service(this.env, '/security/rate', { key, rule })).retryAfter) throw new Error(RATE_MESSAGE);
+                }
                 if (message.type === 'refreshAuth') {
                     const account = await verifyAccountToken(payload.token, cloudflareAuth(this.env));
                     if (meta.account?.id !== account.id) throw new Error('Bitte verbinde dich erneut.');
@@ -412,7 +421,7 @@ export class RoomDurableObject {
             if (this.room !== room || room.generationId !== generationId) return videoUrl;
             if (this.env.AI_PROVIDER === 'mock' && videoUrl === '/assets/mock-video.mp4') return videoUrl;
             progress('Video wird geprüft und gespeichert …');
-            try { return (await service(this.env, '/archive', { url: videoUrl, code: room.code })).url as string; }
+            try { return (await service(this.env, '/archive', { url: videoUrl, code: room.code, artifact: room.generationJob ? { generationId, submittedAt: room.generationJob.submittedAt } : undefined })).url as string; }
             catch (error) { throw archiveRecovery(error, room.generationJob); }
         }).then(videoUrl => this.enqueue(async () => {
             await this.releaseGenerationQuota(room.code, generationId);
@@ -655,6 +664,11 @@ export class RoomDurableObject {
 
     async alarm() {
         await this.enqueue(async () => {
+            for (const [socket, meta] of this.sockets) {
+                if (!meta.playerId && meta.acceptedAt && Date.now() >= meta.acceptedAt + 60_000) {
+                    this.sockets.delete(socket); socket.close(4008, 'Join timeout');
+                }
+            }
             const room = this.room;
             if (room) {
                 if (room.phaseDeadline && room.phaseDeadline <= Date.now()) await this.endPhase();
@@ -691,6 +705,7 @@ export class RoomDurableObject {
 
     private async scheduleAlarm() {
         const deadlines = this.room ? participants(this.room).filter(p => !p.connected && p.disconnectedAt).map(p => p.disconnectedAt! + DISCONNECT_GRACE_MS) : [];
+        for (const meta of this.sockets.values()) if (!meta.playerId && meta.acceptedAt) deadlines.push(meta.acceptedAt + 60_000);
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);

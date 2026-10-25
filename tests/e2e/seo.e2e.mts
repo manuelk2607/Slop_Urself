@@ -27,6 +27,11 @@ try {
     assert.equal(sitemap.status(), 200); assert.match(sitemap.headers()['content-type'], /xml/);
     assert.equal(new XMLParser().parse(await sitemap.text()).urlset.url.loc, canonical);
     const robots = await page.request.get(base + '/robots.txt');
+    const rootHeaders = (await page.request.get(base + '/')).headers();
+    assert.equal(rootHeaders['x-frame-options'], 'DENY');
+    assert.match(rootHeaders['content-security-policy'], /frame-ancestors 'none'/);
+    assert.match(rootHeaders['content-security-policy'], /script-src 'self'/);
+    assert.match(rootHeaders['content-security-policy'], new RegExp(new URL(base).host.replaceAll('.', '\\.') + ';'));
     assert.equal(robots.status(), 200); assert.match(robots.headers()['content-type'], /text\/plain/);
     assert.match(await robots.text(), /Disallow: \/api\//); assert.match(await robots.text(), /Sitemap: https:\/\/slopurself\.maki26\.workers\.dev\/sitemap.xml/);
     for (const path of ['/api/config', '/api/not-found']) {

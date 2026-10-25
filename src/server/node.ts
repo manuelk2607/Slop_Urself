@@ -8,12 +8,16 @@ import { pipeline } from 'node:stream/promises';
 import { emptyStats } from '../database/types';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
 import { accountsResponse } from './accounts';
+import { contentReportResponse } from './content-reports';
+import { ContentReports } from '../security/reports';
+import type { Account } from '../auth/session';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
 import { HfConnections, HfRequiredError, requirePlayerHf, type HfConfig } from '../auth/huggingface';
 import { nodeHfStorage } from '../auth/node-hf-storage';
 import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
+import { securityHeaders } from '../security/headers';
 import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
@@ -25,12 +29,12 @@ import { gameOptions } from '../game/options';
 import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from '../game/archive-play';
 import { closePhase, syncPhase } from '../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
-import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo } from '../storage/archive';
+import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo, type ArchiveArtifact } from '../storage/archive';
 import { archiveStatus } from './archive';
 import { historyResponse, historyListing, restoreHistoryResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError, historyViewer, authorizeHistory, authorizeRestore } from './statistics';
 import { Server, Socket } from 'socket.io';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, buildVideoPrompt, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
-import { takeRateLimit, rateKey, httpRateRule, httpRateScope, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
+import { takeRateLimit, rateKey, httpRateRule, httpRateScope, MESSAGE_RATE, MESSAGE_BYTES, expensiveMessageRule, payloadBytes, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
 import { logAiEvent } from '../ai/telemetry';
 import {
     Room, Player, activeCreator, roomSnapshot, finishVoting, finalStandings,
@@ -61,6 +65,11 @@ const messageBuckets: RateBuckets = {};
 const budgetData = new Map<string, unknown>();
 const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
+const reports = new ContentReports(nodeHfStorage(path.join(process.cwd(), '.local/moderation')));
+async function canReadVideo(url: string, account: Account) {
+    return account.id === config.ADMIN_ACCOUNT_ID || [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id))
+        || Boolean(await getDatabase()?.canReadVideo(url, account.id));
+}
 config.verifyHfIdentity = (connection, accountId) => hf.identityMatches(connection, accountId);
 const imageData = new Map<string, unknown>();
 const imageStorage: ImageStorage = { get: async <T>(key: string) => imageData.get(key) as T | undefined,
@@ -89,16 +98,16 @@ if (isDatabaseEnabled()) scheduleVideoCleanup(Date.now() + 1000);
 function withBudget<T>(action: () => Promise<T>): Promise<T> { const result = budgetWork.then(action); budgetWork = result.catch(() => {}); return result; }
 const hfCleanupClock = setInterval(() => { void hf.cleanup().catch(() => {}); }, 60_000);
 hfCleanupClock.unref();
-function archive(url: string, code?: string) {
+function archive(url: string, code?: string, artifact?: ArchiveArtifact) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();
         const active = [...rooms.values()].map(r => r.currentVideoUrl).filter(Boolean);
-        return archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active], database ? urls => database.reconcileArchive(urls) : undefined, code);
+        return archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active], database ? urls => database.reconcileArchive(urls) : undefined, code, artifact);
     });
     archiveWork = result.catch(() => {}); return result;
 }
 app.use(async (req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
+    for (const [name, value] of Object.entries(securityHeaders(`${req.protocol}://${req.get('host')}`))) res.setHeader(name, value);
     if (privatePath(req.path)) { res.setHeader('X-Robots-Tag', 'noindex, nofollow, nosnippet'); res.setHeader('Cache-Control', 'no-store'); }
     const rule = httpRateRule(req.path, req.method);
     if (rule) {
@@ -133,6 +142,7 @@ app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, r
 }), res));
 app.use('/api/auth', (_req, res) => res.sendStatus(404));
 app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await sessionResponse(webRequest(req), config, getProfiles()), res));
+app.use(['/api/moderation', '/api/admin/moderation'], express.text({ type: '*/*', limit: '1kb' }), async (req, res) => webResponse(await contentReportResponse(webRequest(req), config, reports, canReadVideo), res));
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/videos', async (req, res) => {
     let account;
@@ -140,9 +150,10 @@ app.use('/api/videos', async (req, res) => {
     const request = webRequest(req);
     if (!authDisabled(config) && account?.id !== config.ADMIN_ACCOUNT_ID) {
         const url = new URL(request.url).pathname;
-        const live = account && [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id));
-        if (!live && (!account || !await getDatabase()?.canReadVideo(url, account.id))) { res.sendStatus(403); return; }
+        if (!account || !await canReadVideo(url, account)) { res.sendStatus(403); return; }
     }
+    try { if (await reports.blocked(new URL(request.url).pathname)) { res.sendStatus(410); return; } }
+    catch { res.sendStatus(503); return; }
     await webResponse(await serveVideo(request, new URL(request.url).pathname.slice('/api/videos/'.length), config), res);
 });
 app.get('/api/rooms/:code/image', async (req, res) => {
@@ -282,7 +293,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
     void generation.then(async videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId) return videoUrl;
         progress('Video wird geprüft und gespeichert …');
-        try { return await archive(videoUrl, room.code); }
+        try { return await archive(videoUrl, room.code, room.generationJob ? { generationId, submittedAt: room.generationJob.submittedAt } : undefined); }
         catch (error) { throw archiveRecovery(error, room.generationJob); }
     }).then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
@@ -434,9 +445,20 @@ function enter(socket: Socket, room: Room, player: Player, event: string) {
 }
 
 io.on('connection', (socket: Socket) => {
+    const unjoinedTimer = setTimeout(() => { if (!socket.data.roomId) socket.disconnect(true); }, 60_000);
+    unjoinedTimer.unref(); socket.once('disconnect', () => clearTimeout(unjoinedTimer));
+    function charge(event: string, payload: unknown) {
+        try {
+            const actor = socket.data.account?.id || socket.id;
+            if (takeRateLimit(messageBuckets, actor, MESSAGE_RATE) || takeRateLimit(messageBuckets, `bytes:${actor}`, MESSAGE_BYTES, Date.now(), payloadBytes(payload))) throw new Error(RATE_MESSAGE);
+            const rule = expensiveMessageRule(event);
+            if (rule && takeRateLimit(messageBuckets, `${event}:${actor}`, rule)) throw new Error(RATE_MESSAGE);
+            return true;
+        } catch (error) { socket.emit('errorMsg', error instanceof Error ? error.message : RATE_MESSAGE); return false; }
+    }
     function on(event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>) {
         socket.on(event, (payload: unknown) => {
-            if (takeRateLimit(messageBuckets, socket.data.account?.id || socket.id, MESSAGE_RATE)) { socket.emit('errorMsg', RATE_MESSAGE); return; }
+            if (!charge(event, payload)) return;
             const data = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
             void Promise.resolve().then(async () => {
                 if (!authDisabled(config) && (!socket.data.account || socket.data.account.expiresAt < Date.now())) { socket.emit('authExpired'); return; }
@@ -451,7 +473,7 @@ io.on('connection', (socket: Socket) => {
         });
     }
     socket.on('refreshAuth', (payload: { token: unknown }) => {
-        if (takeRateLimit(messageBuckets, socket.data.account?.id || socket.id, MESSAGE_RATE)) { socket.emit('errorMsg', RATE_MESSAGE); return; }
+        if (!charge('refreshAuth', payload)) return;
         void verifyAccountToken(payload?.token, config).then(account => { if (account.id === socket.data.account?.id) socket.data.account = { ...account, hfConnectionId: socket.data.account?.hfConnectionId }; }).catch(() => socket.emit('authExpired'));
     });
 

@@ -8,6 +8,27 @@ const config = { AI_PROVIDER: 'mock', AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCE
 const oldKey = 'videos/1234567890123-old.mp4';
 const listing = `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${oldKey}</Key><Size>${20 * 1024 * 1024}</Size><LastModified>2026-10-01T00:00:00Z</LastModified></Contents></ListBucketResult>`;
 
+test('a lost PUT response retries the same artifact without duplicate objects or repeated eviction', async () => {
+    const original = globalThis.fetch;
+    const bytes = Uint8Array.from([0,0,0,16,102,116,121,112,109,112,52,50,0,0,0,0]);
+    const artifact = { generationId: 'a'.repeat(8) + '-aaaa-aaaa-aaaa-' + 'a'.repeat(12), submittedAt: 1792000000000 };
+    const key = `videos/${artifact.submittedAt}-abcd-${artifact.generationId}.mp4`;
+    let stored = false, puts = 0, deletes = 0;
+    globalThis.fetch = async (input, init) => {
+        const r = input instanceof Request ? input : new Request(input, init);
+        if (r.url.includes('.hf.space')) return new Response(bytes);
+        if (r.url.includes('list-type')) return new Response(`<ListBucketResult><IsTruncated>false</IsTruncated>${stored ? `<Contents><Key>${key}</Key><Size>${bytes.length}</Size><LastModified>2026-10-25</LastModified></Contents>` : ''}</ListBucketResult>`);
+        if (r.method === 'PUT') { stored = true; puts++; throw new Error('Reply lost after successful storage'); }
+        if (r.method === 'DELETE') deletes++;
+        throw new Error('Unexpected storage call');
+    };
+    try {
+        await assert.rejects(archiveVideo('https://demo.hf.space/video.mp4', config, [], undefined, 'ABCD', artifact));
+        assert.equal(await archiveVideo('https://demo.hf.space/video.mp4', config, [], undefined, 'ABCD', artifact), `/api/videos/${key}`);
+        assert.equal(puts, 1); assert.equal(deletes, 0);
+    } finally { globalThis.fetch = original; }
+});
+
 test('eviction synchronizes missing files and removes each successfully evicted file from availability', async () => {
     const original = globalThis.fetch, calls: string[] = [], snapshots: string[][] = [];
     globalThis.fetch = async (input, init) => {

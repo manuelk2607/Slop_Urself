@@ -1,6 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { takeRateLimit, rateKey, httpRateRule, httpRateScope, type RateBuckets } from '../../src/security/rate-limit';
+import { takeRateLimit, rateKey, httpRateRule, httpRateScope, payloadBytes, type RateBuckets } from '../../src/security/rate-limit';
+import { securityHeaders } from '../../src/security/headers';
+
+test('weighted limits charge actual bytes and reject invalid costs, excessive nesting and binary expansion', () => {
+    const buckets: RateBuckets = {}, rule = { limit: 10, windowMs: 1000 };
+    assert.equal(takeRateLimit(buckets, 'bytes', rule, 100, 8), 0);
+    assert.equal(takeRateLimit(buckets, 'bytes', rule, 101, 3), 1);
+    for (const cost of [0, -1, 0.5, NaN, Infinity]) assert.equal(takeRateLimit(buckets, 'bytes', rule, 102, cost), 1);
+    assert.equal(takeRateLimit(buckets, 'bytes', rule, 103, 2), 0);
+    assert.ok(payloadBytes({ prompt: 'ü😀' }) > payloadBytes({ prompt: 'aa' }));
+    assert.throws(() => payloadBytes({ image: 'a'.repeat(12 * 1024 * 1024 + 1) }));
+    assert.throws(() => payloadBytes(new Uint8Array(4096)));
+    let nested: unknown = {}; for (let i = 0; i < 20; i++) nested = { nested };
+    assert.throws(() => payloadBytes(nested));
+});
+test('CSP permits only this origin and its exact websocket, denies scripts in objects and embedding', () => {
+    const headers = securityHeaders('https://game.test');
+    assert.match(headers['Content-Security-Policy'], /connect-src 'self' wss:\/\/game.test;/);
+    assert.match(headers['Content-Security-Policy'], /frame-ancestors 'none'/);
+    assert.match(headers['Content-Security-Policy'], /script-src 'self';/);
+    assert.equal(headers['X-Frame-Options'], 'DENY');
+    assert.match(securityHeaders('http://127.0.0.1:3310')['Content-Security-Policy'], /ws:\/\/127.0.0.1:3310/);
+});
 import worker, { ServiceDurableObject } from '../../src/server/cloudflare/worker';
 
 test('request limits reset, isolate clients and stay bounded under changing identities', async () => {

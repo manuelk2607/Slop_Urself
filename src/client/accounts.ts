@@ -1,4 +1,5 @@
 import { createElement, KeyRound } from 'lucide';
+import { loadContentReports } from './content-reports';
 interface ManagedAccount { id: string; name: string; protected: boolean; passwordProtected?: boolean }
 interface AccountAccess { available: boolean; unlocked: boolean; accounts: ManagedAccount[] }
 
@@ -7,6 +8,7 @@ export function accountManagement() {
     const form = document.getElementById('adminUnlockForm') as HTMLFormElement;
     const key = document.getElementById('adminKey') as HTMLInputElement;
     const list = document.getElementById('accountManagementList')!;
+    const contentReports = document.getElementById('contentReports')!;
     const notice = document.getElementById('accountManagementNotice')!;
     const lock = document.getElementById('lockAccountsButton') as HTMLButtonElement;
     const dialog = document.getElementById('profilePasswordDialog') as HTMLDialogElement;
@@ -39,7 +41,7 @@ export function accountManagement() {
     }
     function reset() {
         if (dialog.open) closePassword();
-        ++revision; section.hidden = true; key.value = ''; list.replaceChildren(); notice.hidden = true;
+        ++revision; section.hidden = true; key.value = ''; list.replaceChildren(); contentReports.replaceChildren(); notice.hidden = true;
     }
     async function load() {
         const current = ++revision;
@@ -50,6 +52,7 @@ export function accountManagement() {
             form.hidden = !access.available || access.unlocked;
             lock.hidden = !access.available || !access.unlocked;
             list.replaceChildren();
+            contentReports.replaceChildren();
             if (!access.unlocked) return;
             for (const account of access.accounts) {
                 const li = document.createElement('li'); li.className = 'score-item account-management-item';
@@ -77,6 +80,7 @@ export function accountManagement() {
                 }
                 list.append(li);
             }
+            await loadContentReports(contentReports);
         } catch (error) { if (current === revision && !section.hidden) showError(error); }
     }
     form.addEventListener('submit', async event => {

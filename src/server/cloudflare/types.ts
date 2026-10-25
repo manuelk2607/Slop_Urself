@@ -37,5 +37,5 @@ export interface Env extends AuthConfig, HfConfig, QuotaConfig, ArchiveConfig, A
     SERVICES?: DurableObjectNamespace<ServiceDurableObject>;
     DATABASE_URL?: string;
 }
-export interface ConnectionMeta { socketId: string; sessionId?: string; playerId?: string; account?: Account }
+export interface ConnectionMeta { socketId: string; acceptedAt?: number; sessionId?: string; playerId?: string; account?: Account }
 export type PendingRoomWrite = Room & { writeAction?: 'continue' };

@@ -174,7 +174,24 @@
             </form>
             <p id="accountManagementNotice" class="error-msg" role="alert" hidden></p>
             <ul id="accountManagementList" class="scoreboard-list"></ul>
+            <div id="contentReports" aria-live="polite"></div>
         </section>
+        <dialog id="contentReportDialog" aria-labelledby="contentReportTitle">
+            <h2 id="contentReportTitle">Inhalt melden</h2>
+            <form id="contentReportForm">
+                <label for="contentReportReason">Was ist das Problem?</label>
+                <select id="contentReportReason" required>
+                    <option value="sexual_exploitation">Sexuelle Ausbeutung</option>
+                    <option value="nonconsensual">Intime Darstellung ohne Einwilligung</option>
+                    <option value="graphic_abuse">Grafische Gewalt oder Missbrauch</option>
+                    <option value="other">Anderer Regelverstoß</option>
+                </select>
+                <p>Der Betreiber prüft die Meldung. Es erfolgt keine automatische Sperre allein durch Meldungen.</p>
+                <p id="contentReportNotice" role="status"></p>
+                <button type="submit">Meldung senden</button>
+                <button id="contentReportCancel" type="button" class="btn-muted">Schließen</button>
+            </form>
+        </dialog>
         <div id="videoUndoNotice" class="history-undo" role="status" hidden>
             <span id="videoUndoLabel"></span>
             <button id="undoVideoDeletion" class="btn-secondary" type="button">Rückgängig</button>

@@ -96,6 +96,8 @@ Nach [ZeroGPU-Dokumentation](https://huggingface.co/docs/hub/spaces-zerogpu) unt
 
 ## 6. Abnahme und verbleibende Unsicherheit
 
+Umsetzungsnachtrag vom 25.10.: [Implementierungsstand und Freigabevoraussetzungen](../IMPLEMENTATION-2026-10-25.md). Die Gates und der eigene CPU-Dienst sind vorbereitet; dessen Klassifikationsqualität ist nicht freigegeben. Der Bericht unten bleibt die historische Auditbewertung.
+
 Vor Freigabe M42 um folgende Prüfungen ergänzen: direkte API-Umgehungsversuche gegen die Gates, gemeinsames Ausgangsbild und alle Varianten, geänderte Datei nach Freigabe, nicht verfügbarer Prüfdienst, gesperrte Ausgabe über bekannte URL, Restore-/Archivspiel-Umgehung sowie identischer Auftrag nach Neustart. Nur harmlose, lizenzierte/synthetische Prüfmittel verwenden; keine realen Missbrauchsdateien beschaffen oder herstellen.
 
 Fehlklassifizierungen getrennt messen: fälschlich blockierte harmlose Inhalte und übersehene kritische Fälle. Deutsch/Englisch, Fotografie/Illustration, unterschiedliche Hauttöne, unklare Altersdarstellung und nicht sexuelle Alltagskontexte berücksichtigen. Schwellenwerte anhand eines dokumentierten zulässigen Testkorpus festlegen, nicht aus dem Sicherheitsnamen eines Modells ableiten. Ein Widerspruchspfad darf klare Hochrisikosperren nicht automatisch überstimmen.

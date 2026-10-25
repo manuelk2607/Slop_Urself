@@ -12,6 +12,8 @@ import { accountsResponse } from '../accounts';
 import { cloudflareAuth, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
 import { indexingResponse } from '../indexing';
+import { contentReportResponse } from '../content-reports';
+import type { Account } from '../../auth/session';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
@@ -29,6 +31,13 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         const seoResponse = publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
         const auth = cloudflareAuth(env);
+        const canReadVideo = async (path: string, account: Account) => {
+            if (account.id === env.ADMIN_ACCOUNT_ID) return true;
+            const code = archiveRoomHint(path);
+            const live = code && (await env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(new Request('https://internal/video/access', {
+                method: 'POST', body: JSON.stringify({ accountId: account.id, url: path }) }))).ok;
+            return Boolean(live || await getDatabase(env.DATABASE_URL)?.canReadVideo(path, account.id));
+        };
         const rule = httpRateRule(url.pathname, request.method);
         if (rule) {
             try {
@@ -41,6 +50,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
         if (url.pathname === '/api/session') return sessionResponse(request, auth, serviceProfiles(env));
+        if (url.pathname === '/api/moderation/reports' || url.pathname.startsWith('/api/admin/moderation')) return contentReportResponse(request, auth, {
+            list: async () => (await service(env, '/security/content/list')).reports,
+            report: async (path, accountId, reason) => { await service(env, '/security/content/report', { url: path, accountId, reason }); },
+            block: async (path, accountId) => { await service(env, '/security/content/block', { url: path, accountId }); }
+        }, canReadVideo);
         if (url.pathname.startsWith('/api/admin/')) return accountsResponse(request, auth, serviceProfiles(env));
         const imageRoom = /^\/api\/rooms\/([A-Z0-9]{4})\/image$/.exec(url.pathname);
         if (imageRoom) return env.ROOMS.get(env.ROOMS.idFromName(imageRoom[1])).fetch(request);
@@ -98,11 +112,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             let account;
             try { account = await requestAccount(request, auth); } catch (error) { return new Response(null, { status: authFailureStatus(error) }); }
             if (!authDisabled(env) && account?.id !== env.ADMIN_ACCOUNT_ID) {
-                const code = archiveRoomHint(url.pathname);
-                const live = code && account && (await env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(new Request('https://internal/video/access', {
-                    method: 'POST', body: JSON.stringify({ accountId: account.id, url: url.pathname }) }))).ok;
-                if (!live && (!account || !await getDatabase(env.DATABASE_URL)?.canReadVideo(url.pathname, account.id))) return new Response(null, { status: 403 });
+                if (!account || !await canReadVideo(url.pathname, account)) return new Response(null, { status: 403 });
             }
+            try { if ((await service(env, '/security/content/blocked', { url: url.pathname })).blocked) return new Response(null, { status: 410 }); }
+            catch { return new Response(null, { status: 503 }); }
             return serveVideo(request, url.pathname.slice('/api/videos/'.length), env);
         }
 

@@ -5,13 +5,14 @@ import { PlayerQuotaBudget, type BudgetPlayer } from '../../ai/player-quota';
 import { HfConnections, HfOAuthError, HfRequiredError, requirePlayerHf } from '../../auth/huggingface';
 import { profileAuthConfig, type Account } from '../../auth/session';
 import { generationQuality } from '../../ai/providers';
-import { archiveVideo, deleteArchivedVideo } from '../../storage/archive';
+import { archiveVideo, deleteArchivedVideo, type ArchiveArtifact } from '../../storage/archive';
 import { archiveStatus } from '../archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
 import { restoreIds } from '../../shared/history';
 import { ModerationError } from '../../security/moderation';
+import { ContentReports, type ReportReason } from '../../security/reports';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -22,9 +23,11 @@ export class ServiceDurableObject {
     private profiles: ManagedProfileStore;
     private budget: PlayerQuotaBudget;
     private hf: HfConnections;
+    private reports: ContentReports;
     constructor(private state: DurableObjectState, private env: Env) {
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
         this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
+        this.reports = new ContentReports(state.storage);
         this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {
@@ -32,8 +35,12 @@ export class ServiceDurableObject {
         const action = async () => {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
                 participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number;
-                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown };
+                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact };
             const quality = generationQuality(data.quality);
+            if (path === '/security/content/blocked') return json({ blocked: await this.reports.blocked(data.url) });
+            if (path === '/security/content/list') return json({ reports: await this.reports.list() });
+            if (path === '/security/content/report') { await this.reports.report(data.url, data.accountId, data.reason); return json({ ok: true }); }
+            if (path === '/security/content/block') { await this.reports.block(data.url, data.accountId); return json({ ok: true }); }
             if (path === '/hf/start') { const result = await this.hf.start(data.account, data.origin); await this.scheduleCleanup(Date.now() + 600_000); return json(result); }
             if (path === '/hf/device/start') { const result = await this.hf.startDevice(data.account, data.origin, data.nonce); await this.scheduleCleanup(result.expiresAt); return json(result); }
             if (path === '/hf/device/status') return json(await this.hf.deviceStatus(data.nonce, data.accountId, data.origin));
@@ -60,7 +67,7 @@ export class ServiceDurableObject {
             }
             if (path === '/security/rate') {
                 const buckets = await this.state.storage.get<RateBuckets>('rateBuckets') || {};
-                const retryAfter = takeRateLimit(buckets, data.key, data.rule);
+                const retryAfter = takeRateLimit(buckets, data.key, data.rule, Date.now(), data.cost);
                 await this.state.storage.put('rateBuckets', buckets);
                 return json({ retryAfter });
             }
@@ -77,7 +84,7 @@ export class ServiceDurableObject {
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
                 return json({ url: await archiveVideo(data.url, this.env, await database?.protectedVideoUrls() || [],
-                    database ? urls => database.reconcileArchive(urls) : undefined, data.code) });
+                    database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact) });
             }
             else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
             else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));

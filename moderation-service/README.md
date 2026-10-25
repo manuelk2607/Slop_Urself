@@ -29,6 +29,8 @@ angelegt oder veröffentlicht und kein Schutzversprechen für die Modelle abgege
 ## Vorbereitung und Prüfung
 
 1. In diesem Ordner `npm ci`, `npm run build`, `npm test` ausführen.
+   Die indirekte sharp-Auflösung ist gezielt auf die gepatchte 0.35.5-Version
+   vereinheitlicht; der native Transformers-Decode/Resize-Pfad wird mitgeprüft.
 2. `npm run models:resolve` liest öffentliche Modellmetadaten und legt einmalig
    model-lock.json an. Modellkarten/ONNX-Kompatibilität/Lizenzen einschließlich
    Basismodellen prüfen. Änderungen erfolgen durch einen neuen geprüften Lock.

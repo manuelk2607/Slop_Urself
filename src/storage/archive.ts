@@ -7,6 +7,7 @@ export interface ArchiveConfig extends ModerationConfig {
     VIDEO_BUCKET?: string; VIDEO_ARCHIVE_MB?: string;
 }
 export interface ArchivedObject { key: string; size: number; modified: string }
+export interface ArchiveArtifact { generationId: string; submittedAt: number }
 export const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
 export const archiveLimit = (config: ArchiveConfig) => Math.max(20, Math.min(1024, Number(config.VIDEO_ARCHIVE_MB) || 512)) * 1024 * 1024;
 export const archiveEnabled = (config: ArchiveConfig) => Boolean(config.AWS_ACCESS_KEY_ID && config.AWS_SECRET_ACCESS_KEY && config.AWS_ENDPOINT_URL_S3);
@@ -68,15 +69,23 @@ export async function downloadVideo(url: string) {
 export function archiveRoomHint(url: string) {
     return /^\/api\/videos\/videos\/\d{13}-([a-z0-9]{4})-[a-f0-9-]{36}\.mp4$/.exec(url)?.[1].toUpperCase();
 }
-export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string) {
+export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string, artifact?: ArchiveArtifact) {
     if (config.AI_PROVIDER === 'mock' && url === '/assets/mock-video.mp4') return url;
     if (!archiveEnabled(config)) throw new Error('Die Zugangsdaten für das dauerhafte Videoarchiv fehlen.');
     const bytes = await downloadVideo(url);
     // Nothing is uploaded, evicted or advertised until the complete output passes.
     await moderateOutput(bytes, config);
+    if (roomCode && !/^[A-Z0-9]{4}$/.test(roomCode)) throw new Error('Ungültige Archiv-Zuordnung.');
+    if (artifact && (!/^[a-f0-9-]{36}$/.test(artifact.generationId) || !Number.isSafeInteger(artifact.submittedAt) || !/^\d{13}$/.test(String(artifact.submittedAt)))) throw new Error('Ungültiger Speicherauftrag.');
+    const key = `videos/${artifact?.submittedAt ?? Date.now()}-${roomCode ? roomCode.toLowerCase() + '-' : ''}${artifact?.generationId || crypto.randomUUID()}.mp4`;
     const objects = await listArchive(config);
     const remaining = new Set(objects.map(object => `/api/videos/${object.key}`));
     await reconcile?.([...remaining]);
+    const existing = objects.find(object => object.key === key);
+    if (existing) {
+        if (existing.size !== bytes.length) throw new Error('Widersprüchlicher Speicherauftrag.');
+        return `/api/videos/${key}`;
+    }
     const protectedKeys = new Set(protectedUrls.filter(url => url.startsWith('/api/videos/')).map(url => url.slice('/api/videos/'.length)));
     for (const old of evictionPlan(objects, bytes.length, archiveLimit(config), protectedKeys)) {
         const response = await client(config).fetch(endpoint(config, old.key), { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
@@ -84,8 +93,6 @@ export async function archiveVideo(url: string, config: ArchiveConfig, protected
         remaining.delete(`/api/videos/${old.key}`);
         await reconcile?.([...remaining]);
     }
-    if (roomCode && !/^[A-Z0-9]{4}$/.test(roomCode)) throw new Error('Ungültige Archiv-Zuordnung.');
-    const key = `videos/${Date.now()}-${roomCode ? roomCode.toLowerCase() + '-' : ''}${crypto.randomUUID()}.mp4`;
     const response = await client(config).fetch(endpoint(config, key), { method: 'PUT', body: bytes, headers: { 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300' }, signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error('Video konnte nicht dauerhaft gespeichert werden.');
     return `/api/videos/${key}`;

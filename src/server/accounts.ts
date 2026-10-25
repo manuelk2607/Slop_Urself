@@ -8,7 +8,8 @@ import { boundedJson } from './body';
 const ADMIN_SECONDS = 24 * 60 * 60;
 const enabled = (config: AuthConfig) => Boolean(config.ADMIN_ACCOUNT_ID && config.ADMIN_ACCESS_KEY && config.ADMIN_ACCESS_KEY.length >= 32);
 const adminKey = (config: AuthConfig) => new TextEncoder().encode(config.ADMIN_ACCESS_KEY);
-async function unlocked(request: Request, config: AuthConfig, account: Account) {
+export async function unlocked(request: Request, config: AuthConfig, account: Account) {
+    if (!enabled(config) || account.id !== config.ADMIN_ACCOUNT_ID) return false;
     const token = request.headers.get('cookie')?.split(';').map(part => part.trim()).find(part => part.startsWith('slop_admin='))?.slice(11);
     if (!token || token.length > 4000) return false;
     try {
