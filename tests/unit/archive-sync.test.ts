@@ -4,7 +4,7 @@ import { archiveVideo } from '../../src/storage/archive';
 import { archiveStatus } from '../../src/server/archive';
 import type { GameRepository } from '../../src/database/repository';
 
-const config = { AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_ENDPOINT_URL_S3: 'https://storage.test', VIDEO_ARCHIVE_MB: '20' };
+const config = { AI_PROVIDER: 'mock', AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_ENDPOINT_URL_S3: 'https://storage.test', VIDEO_ARCHIVE_MB: '20' };
 const oldKey = 'videos/1234567890123-old.mp4';
 const listing = `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${oldKey}</Key><Size>${20 * 1024 * 1024}</Size><LastModified>2026-10-01T00:00:00Z</LastModified></Contents></ListBucketResult>`;
 

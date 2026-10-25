@@ -115,6 +115,8 @@ try {
         await another.locator('#existingNameButton').click();
         await another.locator('#screenLobby').waitFor({ state: 'visible' });
         assert.equal((await (await second.request.get(`${base}/api/session`)).json()).account.id, profileId);
+        assert.equal((await second.request.get(`${base}/api/stats`)).status(), 401, 'Knowing a profile name is not proof of ownership.');
+        assert.equal((await second.request.post(`${base}/api/session`, { headers: { origin: base }, data: { mode: 'refresh' } })).status(), 200, 'A pending shell can reconnect its bound HF identity.');
     } finally { await second.close(); }
 
     if (process.env.TEST_PROFILE_DB !== 'true') {

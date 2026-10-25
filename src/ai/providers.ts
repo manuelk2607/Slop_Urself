@@ -1,6 +1,7 @@
 export type Provider = 'wan' | 'wan22' | 'wan22-fast' | 'ltx';
 export type GenerationQuality = 'auto' | 'quality' | 'economy';
 export interface ProviderConfig {
+    WAN_SPACE_ID?: string; WAN_SPACE_REVISION?: string; WAN_MODEL_ID?: string; WAN_MODEL_REVISION?: string;
     AI_PROVIDER?: string;
     AI_PROVIDER_CHAIN?: string;
     AI_GPU_SECONDS_PER_ROUND?: string;
@@ -32,7 +33,7 @@ export function parseProviderChain(value = DEFAULT_PROVIDER_CHAIN): Provider[] {
 export const videoDuration = (config: ProviderConfig) => Math.max(5, Math.min(Number(config.LTX_DURATION) || 5, 8.5));
 export const providerName = (provider: Provider) => provider === 'wan22-fast' ? 'Wan 2.2 Sparmodus (4 Schritte)' : provider === 'wan22' ? 'Wan 2.2 (8 Schritte)' : provider === 'ltx' ? 'LTX Video' : 'Wan 2.1';
 export const providerSpace = (provider: Provider, config: ProviderConfig) => provider === 'ltx' ? config.HF_SPACE_ID || 'Lightricks/ltx-video-distilled'
-    : provider === 'wan' ? 'multimodalart/wan2-1-fast' : 'Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom';
+    : provider === 'wan' ? 'multimodalart/wan2-1-fast' : config.WAN_SPACE_ID || 'Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom';
 export const providerEndpoint = (provider: Provider, config: ProviderConfig) => provider === 'ltx' ? config.HF_PREDICT_ENDPOINT || '/image_to_video' : '/generate_video';
 export const providerSteps = (provider: Provider) => provider === 'wan22-fast' ? 4 : provider === 'wan22' ? 8 : 6;
 

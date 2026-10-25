@@ -11,6 +11,7 @@ const contexts = await Promise.all([false, true].map(mobile => browser.newContex
 const pages = await Promise.all(contexts.map(context => context.newPage()));
 const [host, guest] = pages;
 const names = [`cH_${randomUUID().slice(0, 8)}`, `cG_${randomUUID().slice(0, 8)}`];
+const password = 'classic-fixture-profile-password';
 const errors: string[] = [];
 const visible = (page: Page, id: string) => page.locator(`#${id}`).waitFor({ state: 'visible' });
 for (const page of pages) {
@@ -38,20 +39,24 @@ try {
         await page.goto(base); await visible(page, 'screenAuth');
         assert.equal(await page.locator('#authForm input[type=text]').count(), 1);
         assert.equal(await page.locator('#authPassword').isVisible(), false);
-        await page.locator('#authUsername').fill(names[index]); await page.locator('#authSubmit').click();
+        await page.locator('#authUsername').fill(names[index]);
+        await page.locator('#authPasswordSection summary').click(); await page.locator('#authPassword').fill(password);
+        await page.locator('#authSubmit').click();
         await visible(page, 'screenLobby');
         assert.equal(await page.locator('#usernameInput').isVisible(), false, 'The normal profile replaces the legacy lobby-name field.');
         assert.equal(await page.locator('#accountName').innerText(), names[index]);
     }
     const account = (await (await host.request.get(`${base}/api/session`)).json()).account;
     await host.locator('#signOutButton').click(); await visible(host, 'screenAuth');
-    await host.locator('#existingNameButton').click(); await visible(host, 'screenLobby');
+    await host.locator('#existingNameButton').click(); await visible(host, 'authPassword');
+    await host.locator('#authPassword').fill(password); await host.locator('#existingNameButton').click(); await visible(host, 'screenLobby');
     assert.equal((await (await host.request.get(`${base}/api/session`)).json()).account.id, account.id);
     await host.locator('#createRoomButton').click(); await visible(host, 'screenRoomLobby');
     const code = await host.locator('#displayRoomCode').innerText();
     await guest.locator('#signOutButton').click(); await visible(guest, 'screenAuth');
     await guest.goto(`${base}/?room=${code}`); await visible(guest, 'screenAuth');
-    await guest.locator('#authUsername').fill(names[1]); await guest.locator('#existingNameButton').click(); await visible(guest, 'screenLobby');
+    await guest.locator('#authUsername').fill(names[1]); await guest.locator('#existingNameButton').click(); await visible(guest, 'authPassword');
+    await guest.locator('#authPassword').fill(password); await guest.locator('#existingNameButton').click(); await visible(guest, 'screenLobby');
     assert.equal(await guest.locator('#roomCodeInput').inputValue(), code, 'An invitation survives normal login.');
     await guest.locator('#joinRoomButton').click(); await visible(guest, 'screenRoomLobby');
     assert.equal(new URL(guest.url()).searchParams.has('room'), false, 'Consumed invitations cannot rejoin an old room after leaving.');

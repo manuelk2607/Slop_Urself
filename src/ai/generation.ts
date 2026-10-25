@@ -1,11 +1,15 @@
 import { fetchGpuQuota } from './quota';
 import { preparedImageSize } from './images';
+import { validateImage } from './image-input';
+import { normalizeImage } from '../security/images';
+import { moderateInput, validatePrompt, type ModerationConfig } from '../security/moderation';
+import { approvedProvider, verifyProviderIdentity, ProviderTrustError, type ProviderIdentity } from './provider-trust';
 import { GradioProviderError as AiProviderError, readQueueResult } from './gradio';
 import { logAiEvent, type AiTelemetry } from './telemetry';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
 
-export interface AiConfig extends ProviderConfig {
+export interface AiConfig extends ProviderConfig, ModerationConfig {
     AI_PROVIDER?: string;
     AI_PROVIDER_CHAIN?: string;
     HF_TOKEN?: string;
@@ -19,10 +23,11 @@ export interface AiConfig extends ProviderConfig {
     LTX_ENHANCE_PROMPT?: string;
 }
 
-export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+export { MAX_IMAGE_BYTES, validateImage } from './image-input';
 export const AI_JOB_MAX_AGE_MS = 15 * 60_000;
 export const AI_RETRY_MS = 15_000;
 export interface AiJob {
+    providerIdentity?: ProviderIdentity;
     provider: Provider;
     root: string;
     endpoint: string;
@@ -59,24 +64,9 @@ interface ApiParameter {
     type: { description?: string; enum?: unknown[] };
 }
 
-export function validateImage(value: unknown): { mime: string; base64: string } {
-    if (typeof value !== 'string' || value.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 100) {
-        throw new Error('Bitte nutze ein Bild bis maximal 8 MB.');
-    }
-    const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
-    if (!match || match[2].length % 4 !== 0) {
-        throw new Error('Bitte lade ein gültiges PNG-, JPEG- oder WebP-Bild hoch.');
-    }
-    const bytes = atob(match[2]);
-    const valid = match[1] === 'image/png' ? bytes.startsWith('\x89PNG\r\n\x1a\n')
-        : match[1] === 'image/jpeg' ? bytes.startsWith('\xff\xd8\xff')
-        : bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP';
-    if (!valid || bytes.length > MAX_IMAGE_BYTES) throw new Error('Die Bilddatei ist ungültig oder zu groß.');
-    return { mime: match[1], base64: match[2] };
-}
 
 export function buildVideoPrompt(prompt: string) {
-    return `${prompt.trim()}. The action happens visibly in the scene. Preserve the subject's appearance and the original setting. Continuous natural movement, one shot.`;
+    return `${prompt.trim()}. Animate the requested action clearly. Maintain the subject's identity. Continuous natural movement, one shot.`;
 }
 
 const NEGATIVE_PROMPT = 'blurry, distorted, frozen subject, still image, flickering, extra limbs, deformed face, watermark';
@@ -191,12 +181,16 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (ste
 }
 
 export async function generateAiVideo(imageBase64: string, prompt: string, config: AiConfig, progress: (step: string) => void = () => {}, allowAttempt?: (seconds: number) => Promise<void>, lifecycle: AiLifecycle = {}) {
+    prompt = validatePrompt(prompt);
+    imageBase64 = await normalizeImage(imageBase64);
+    await moderateInput(imageBase64, buildVideoPrompt(prompt), config);
     const image = validateImage(imageBase64);
     const size = config.AI_IMAGE_PROFILE === 'bounded' ? preparedImageSize(image.base64) : undefined;
     if (config.AI_PROVIDER === 'mock') {
         await new Promise(resolve => setTimeout(resolve, 200));
         return '/assets/mock-video.mp4';
     }
+    approvedProvider(config);
     if (config.HF_TOKEN) {
         const response = await fetch('https://huggingface.co/api/whoami-v2', {
             headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(15_000)
@@ -220,8 +214,6 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             if (!Number.isFinite(needed)) throw new Error('Dieser Space unterstützt keine Videos mit mindestens 5 Sekunden.');
             const quota = await fetchGpuQuota(config);
             if (quota.current < needed || quota.runs?.remaining === 0) throw new Error('Das kostenlose GPU-Kontingent ist aufgebraucht.');
-            await allowAttempt?.(needed);
-            progress(`${providerName(provider)} erstellt das Video...`);
             const space = providerSpace(provider, config);
             const headers: Record<string, string> = config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {};
             const get = async (url: string, init?: RequestInit) => {
@@ -244,13 +236,18 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             if (!parameters) throw new Error('Space bietet den erwarteten Video-Endpunkt nicht an.');
             const queue = provider === 'wan22' || provider === 'wan22-fast';
             let fnIndex: number | undefined;
+            let providerIdentity: ProviderIdentity | undefined;
             if (queue) {
                 const settings = await (await get(`${root}/config`)).json() as { dependencies?: { id?: number; api_name?: string }[] };
                 fnIndex = settings.dependencies?.find(dependency => dependency.api_name === endpoint.slice(1))?.id;
                 if (typeof fnIndex !== 'number' || !Number.isInteger(fnIndex) || fnIndex < 0) throw new Error('Space bietet die erwartete Video-Queue nicht an.');
+                providerIdentity = verifyProviderIdentity(config, metadata, settings);
             }
+            else throw new ProviderTrustError();
             // Validate before uploading, including the requested minimum duration.
             orderProviderValues(parameters, buildProviderValues(provider, prompt, null, config));
+            await allowAttempt?.(needed);
+            progress(`${providerName(provider)} erstellt das Video...`);
             const bytes = Uint8Array.from(atob(image.base64), char => char.charCodeAt(0));
             const form = new FormData();
             const filename = `input.${image.mime.split('/')[1]}`;
@@ -260,9 +257,9 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             if (!uploaded[0]) throw new Error('Hugging Face hat keinen Upload-Pfad geliefert.');
             const file = { path: uploaded[0], orig_name: filename, mime_type: image.mime, meta: { _type: 'gradio.FileData' } };
             const data = orderProviderValues(parameters, buildProviderValues(provider, prompt, file, config));
-            job = { provider, root, endpoint, submittedAt: Date.now(), status: 'submitting',
+            job = { provider, providerIdentity, root, endpoint, submittedAt: Date.now(), status: 'submitting',
                 ...(queue ? { sessionHash: crypto.randomUUID() } : {}),
-                seed: Number(data[parameters.findIndex(p => p.parameter_name === (provider === 'ltx' ? 'seed_ui' : 'seed'))]) || 0,
+                seed: Number(data[parameters.findIndex(p => p.parameter_name === 'seed')]) || 0,
                 steps: providerSteps(provider), durationSeconds: videoDuration(config) };
             await lifecycle.saveJob?.(job);
             stage = 'submit';
@@ -276,6 +273,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             stage = 'result';
             return await resumeAiVideo(job, config, progress, lifecycle);
         } catch (error) {
+            if (error instanceof ProviderTrustError) throw error;
             if (error instanceof AiPendingError || error instanceof AiExpiredError) throw error;
             if (job?.status === 'submitting' && !(error instanceof AiHttpError && error.status >= 400 && error.status < 500)) throw new AiPendingError(job);
             if (job?.status === 'running' && !(error instanceof AiProviderError)) throw new AiPendingError(job);

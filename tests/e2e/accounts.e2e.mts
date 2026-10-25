@@ -20,17 +20,24 @@ try {
     const friend = await browser.newContext();
     const clone = await browser.newContext();
     const errors: string[] = [];
-    async function login(page: Page, name: string) {
+    async function login(page: Page, name: string, password = 'ci-initial-profile-password') {
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(base); await page.locator('#authUsername').fill(name);
-        await page.locator('#existingNameButton').click(); await page.locator('#screenLobby').waitFor({ state: 'visible' });
+        await page.locator('#existingNameButton').click();
+        await page.locator('#authPassword').waitFor({ state: 'visible' });
+        await page.locator('#authPassword').fill(password); await page.locator('#existingNameButton').click();
+        await page.locator('#screenLobby').waitFor({ state: 'visible' });
     }
     const page = await owner.newPage(), friendPage = await friend.newPage(), clonePage = await clone.newPage();
-    await login(page, 'Manuel'); await login(friendPage, 'Friend'); await login(clonePage, 'Manuel');
+    await login(page, 'Manuel'); await login(friendPage, 'Friend');
+    await clonePage.goto(base); await clonePage.locator('#authUsername').fill('Manuel');
+    await clonePage.locator('#existingNameButton').click();
+    await clonePage.locator('#authPassword').waitFor({ state: 'visible' });
     const victim = '/api/admin/accounts/admin-friend-id';
     const postOptions = { headers: { origin: base }, data: { key: 'ci-private-admin-key-not-used-in-production' } };
     assert.equal((await friend.request.post(`${base}/api/admin/session`, postOptions)).status(), 403);
     assert.equal((await clone.request.delete(`${base}${victim}`, { headers: { origin: base }, data: { confirmation: 'Friend' } })).status(), 403);
+    assert.equal((await clone.request.get(`${base}/api/stats`)).status(), 401);
     await friendPage.locator('#statsButton').click();
     assert.equal(await friendPage.locator('#accountManagement').isVisible(), false);
     await friendPage.locator('#backToLobbyButton').click();
@@ -61,6 +68,8 @@ try {
     assert.equal(await page.locator('#profilePasswordValue').inputValue(), '');
     assert.equal((await friend.request.get(`${base}/api/session`)).status(), 401);
     // Another player's arrival triggers a snapshot. The revoked, idle socket must not receive it.
+    await clonePage.locator('#authPassword').fill('ci-initial-profile-password');
+    await clonePage.locator('#existingNameButton').click(); await clonePage.locator('#screenLobby').waitFor({ state: 'visible' });
     await clonePage.locator('#roomCodeInput').fill(oldRoom); await clonePage.locator('#joinRoomButton').click();
     await friendPage.locator('#screenAuth').waitFor({ state: 'visible' });
     await friendPage.locator('#existingNameButton').click(); await friendPage.locator('#authPassword').waitFor({ state: 'visible' });

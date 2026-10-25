@@ -8,6 +8,7 @@ import { DATABASE_SCHEMA } from '../../src/database/schema';
 import { testImageData } from '../support/images';
 import { gameOptions } from '../../src/game/options';
 import { testHfPlayers, heldHfVideos } from '../support/hf-fixture';
+import { normalizeImage } from '../../src/security/images';
 
 class TestSocket {
     get readyState() { return this.closed ? 3 : 1; }
@@ -212,7 +213,7 @@ test('Worker restores private tasks, chunked common images and creator-only gues
     const path = `https://game.test/api/rooms/TEST/image?id=${room.sharedImage!.id}`;
     const response = await worker.fetch(new Request(path));
     assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'private, no-store');
-    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from(image.split(',')[1], 'base64'));
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from((await normalizeImage(image)).split(',')[1], 'base64'));
     room.state = 'IDLE'; room.sharedImage!.expiresAt = Date.now() - 1;
     f.data.set('room', room); worker = await f.recreate(); await worker.alarm();
     assert.equal((f.data.get('room') as Room).sharedImage, undefined);
@@ -410,7 +411,7 @@ test('Worker resume retains the player ID, scores and votes while replacing the 
 
 test('Worker discards a generation completed after its creator leaves', async () => {
     const f = await fixture('IDLE');
-    const imageBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=';
+    const imageBase64 = testImageData(1, 1);
     await f.message(f.sockets[0], 'sendImage', { imageBase64, prompt: 'wave' });
     await f.message(f.sockets[0], 'leaveRoom');
     await Promise.all(f.pending);
@@ -450,17 +451,27 @@ test('Worker solo preview survives alarms and recreation until its player confir
     assert.equal((f.data.get('room') as Room).players[0].score, 0);
 });
 
-test('Worker never publishes an external video when archival fails', async () => {
-    const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: async (request: Request) => request.url.endsWith('/archive')
-        ? Response.json({ error: 'Videoarchiv nicht erreichbar.' }, { status: 503 }) : Response.json({}) }) } as any;
+test('Worker retains completed output after archive failure and recovers without a token or another GPU job', async () => {
+    let offline = true; const paths: string[] = [];
+    const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: async (request: Request) => {
+        paths.push(new URL(request.url).pathname);
+        return request.url.endsWith('/archive') ? offline ? Response.json({ error: 'Videoarchiv nicht erreichbar.' }, { status: 503 })
+            : Response.json({ url: '/api/videos/videos/1234567890123-test.mp4' }) : Response.json({});
+    } }) } as any;
     const f = await fixture('GENERATING', { SERVICES }, 1, { generationId: 'generation-1',
         generationJob: fakeJob({ status: 'complete', videoUrl: 'https://test.hf.space/video.mp4' }), currentVideoUrl: '' });
     await new Promise(resolve => setTimeout(resolve, 110));
     await f.worker.alarm(); await Promise.all(f.pending);
     const room = f.data.get('room') as Room;
-    assert.equal(room.state, 'IDLE'); assert.equal(room.currentVideoUrl, '');
-    assert.ok(f.sockets[0].messages.some(message => message.type === 'errorMsg' && message.payload.includes('Videoarchiv')));
+    assert.equal(room.state, 'GENERATING'); assert.equal(room.currentVideoUrl, '');
+    assert.equal(room.generationJob?.status, 'complete'); assert.ok(room.generationRetryAt! > Date.now());
     assert.equal(f.sockets[0].messages.some(message => message.type === 'roomDataUpdate' && message.payload.gameState === 'VOTING'), false);
+    offline = false;
+    const restored = await f.recreate(); await new Promise(resolve => setTimeout(resolve, 110));
+    await restored.alarm(); await Promise.all(f.pending);
+    assert.equal((f.data.get('room') as Room).state, 'VOTING');
+    assert.equal(paths.filter(p => p === '/archive').length, 2);
+    assert.equal(paths.includes('/quota/token'), false); assert.equal(paths.includes('/quota/attempt'), false);
 });
 
 test('Worker restart resumes a persisted job once without another upload or quota reservation', async () => {

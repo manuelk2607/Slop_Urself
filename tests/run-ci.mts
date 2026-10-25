@@ -6,6 +6,8 @@ let cloudflare: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 let cloudflareProfiles: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 const env = { ...process.env, DATABASE_URL: '', HF_TOKEN: '', AI_PROVIDER: 'mock', ADMIN_ACCOUNT_ID: '', ADMIN_ACCESS_KEY: '',
     HF_OAUTH_CLIENT_ID: '', HF_OAUTH_ORIGIN: '', HF_OAUTH_ENCRYPTION_KEY: '',
+    MODERATION_URL: '', MODERATION_SECRET: '', MODERATION_POLICY_VERSION: '', MODERATION_MODEL_VERSION: '',
+    WAN_SPACE_ID: '', WAN_SPACE_REVISION: '', WAN_MODEL_ID: '', WAN_MODEL_REVISION: '',
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '', TEST_PROFILE_DB: 'false',
     AUTH_COOKIE_SECRET: 'ci-only-cookie-secret-at-least-32-characters' };
 async function run(args: string[], extra: Record<string, string> = {}) {

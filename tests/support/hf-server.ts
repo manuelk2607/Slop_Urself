@@ -1,9 +1,13 @@
 export {};
 
+import { testModerationConfig, moderationFixture } from './moderation-fixture';
+import { testProviderConfig } from './provider-fixture';
+Object.assign(process.env, testModerationConfig, testProviderConfig);
 const seconds: Record<string, number> = { central: 75, 'hf-a': 300, 'hf-b': 300 };
 const original = globalThis.fetch;
 let devices = 0;
 globalThis.fetch = async (input, options) => {
+    const moderated = moderationFixture(input, options); if (moderated) return moderated;
     const url = String(input), token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '') || '';
     if (url === 'https://huggingface.co/oauth/device') {
         const code = devices++ === 0 ? 'hf-a' : 'hf-b';
@@ -32,4 +36,6 @@ require('../../dist/ai/generation.js').generateAiVideo = async (_image: string, 
     await new Promise(resolve => setTimeout(resolve, 50));
     return '/assets/mock-video.mp4';
 };
+// This suite checks personal identity/quota, not real inference or archival.
+require('../../dist/storage/archive.js').archiveVideo = async () => '/assets/mock-video.mp4';
 require('../../dist/server/node.js');

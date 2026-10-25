@@ -1,4 +1,5 @@
 import { storedProfiles } from '../../src/auth/profiles';
+import { hashPassword } from '../../src/auth/passwords';
 
 process.env.PORT = process.env.PORT || '3340';
 process.env.AUTH_MODE = '';
@@ -14,5 +15,11 @@ const data = new Map<string, unknown>([
 ]);
 const profiles = storedProfiles({ get: async <T>(key: string) => structuredClone(data.get(key)) as T | undefined,
     put: async (key, value) => { data.set(key, structuredClone(value)); } });
-require('../../dist/database/node.js').getProfiles = () => profiles;
-require('../../dist/server/node.js');
+void (async () => {
+    for (const name of ['Manuel', 'Friend']) {
+        const profile = await profiles.find(name);
+        await profiles.setPassword(profile!.id, await hashPassword('ci-initial-profile-password'));
+    }
+    require('../../dist/database/node.js').getProfiles = () => profiles;
+    require('../../dist/server/node.js');
+})();

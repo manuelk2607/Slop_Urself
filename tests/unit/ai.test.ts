@@ -5,6 +5,8 @@ import { logAiEvent } from '../../src/ai/telemetry';
 import { QuotaBudget } from '../../src/ai/quota';
 import { qualityConfig } from '../../src/ai/providers';
 import { testImageData } from '../support/images';
+import { testModerationConfig, moderationFixture } from '../support/moderation-fixture';
+import { testProviderConfig, testProviderMetadata, testProviderSettings } from '../support/provider-fixture';
 
 const queueResult = (eventId: string, data: unknown[], error?: string) => new Response(`data: ${JSON.stringify({ msg: 'process_completed', event_id: eventId, success: !error, output: error ? { error } : { data } })}\n\n`);
 
@@ -58,12 +60,13 @@ async function generateWithFakeSpace(seconds: number, fail = false, size?: { wid
     const root = 'https://test.hf.space' + (replica && /^[a-z0-9][a-z0-9-]{0,79}$/.test(replica) ? `/--replicas/${replica}` : '');
     let uploads = 0, sessionHash = '';
     globalThis.fetch = async (input, init) => {
+        const moderated = moderationFixture(input, init); if (moderated) return moderated;
         const url = String(input instanceof Request ? input.url : input);
         if (url.endsWith('/whoami-v2')) return Response.json({ name: 'test' });
         if (url.endsWith('/zero-gpu/quota')) return Response.json({ base: 300, current: seconds, resetsAt: null, runs: { remaining: 7 } });
-        if (url.startsWith('https://huggingface.co/api/spaces/Saravutw/')) return Response.json({ host: 'https://test.hf.space' });
+        if (url.startsWith('https://huggingface.co/api/spaces/Saravutw/')) return Response.json({ ...testProviderMetadata, host: 'https://test.hf.space' });
         if (url === 'https://test.hf.space/gradio_api/info') return Response.json({ named_endpoints: { '/generate_video': { parameters } } }, { headers: replica ? { 'x-proxied-replica': replica } : {} });
-        if (url === `${root}/config`) return Response.json({ dependencies: [{ id: 17, api_name: 'generate_video' }] });
+        if (url === `${root}/config`) return Response.json({ ...testProviderSettings, dependencies: [{ id: 17, api_name: 'generate_video' }] });
         if (url.endsWith('/gradio_api/upload')) { assert.equal(url, `${root}/gradio_api/upload`); uploads++; return Response.json(['/tmp/input.png']); }
         if (url.endsWith('/queue/join')) {
             assert.equal(url, `${root}/gradio_api/queue/join`);
@@ -80,11 +83,11 @@ async function generateWithFakeSpace(seconds: number, fail = false, size?: { wid
         throw new Error(`Unexpected request: ${url}`);
     };
     const data = new Map<string, any>();
-    const config = qualityConfig({ HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx', AI_IMAGE_PROFILE: size ? 'bounded' : undefined });
+    const config = qualityConfig({ ...testModerationConfig, ...testProviderConfig, HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx', AI_IMAGE_PROFILE: size ? 'bounded' : undefined });
     const budget = new QuotaBudget({ get: async key => structuredClone(data.get(key)), put: async (key, value) => { data.set(key, structuredClone(value)); } }, config);
     try {
         await budget.reserve('TEST', rounds, 2); await budget.begin('TEST', rounds * 2);
-        const input = size ? testImageData(size.width, size.height) : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=';
+        const input = size ? testImageData(size.width, size.height) : testImageData(1, 1);
         const costs: number[] = [];
         const video = generateAiVideo(input, 'Make this person jump off a boat', config, step => progress.push(step), cost => { costs.push(cost); return budget.allowAttempt('TEST', cost); }, { saveJob: async job => { jobs.push(structuredClone(job)); } });
         if (fail) await assert.rejects(video, /Alle kostenlosen/);
@@ -149,12 +152,13 @@ test('connection failure resumes the saved result instead of uploading or genera
     const checkpoints: AiJob[] = [];
     const parameters = ['input_image', 'prompt', 'steps', 'duration_seconds', 'seed'].map(parameter_name => ({ parameter_name, parameter_has_default: false, parameter_default: null, type: {} }));
     globalThis.fetch = async (input, init) => {
+        const moderated = moderationFixture(input, init); if (moderated) return moderated;
         const url = String(input);
         if (url.endsWith('/whoami-v2')) return Response.json({ name: 'test' });
         if (url.endsWith('/zero-gpu/quota')) return Response.json({ base: 720, current: 720, resetsAt: null, runs: { remaining: 8 } });
-        if (url.includes('/api/spaces/')) return Response.json({ host: 'https://test.hf.space' });
+        if (url.includes('/api/spaces/')) return Response.json({ ...testProviderMetadata, host: 'https://test.hf.space' });
         if (url.endsWith('/info')) return Response.json({ named_endpoints: { '/generate_video': { parameters } } });
-        if (url.endsWith('/config')) return Response.json({ dependencies: [{ id: 0, api_name: 'generate_video' }] });
+        if (url.endsWith('/config')) return Response.json({ ...testProviderSettings, dependencies: [{ id: 0, api_name: 'generate_video' }] });
         if (url.endsWith('/upload')) { uploads++; return Response.json(['/tmp/input.png']); }
         if (init?.method === 'POST') { posts++; return Response.json({ event_id: 'saved-event' }); }
         results++;
@@ -163,7 +167,7 @@ test('connection failure resumes the saved result instead of uploading or genera
     };
     const lifecycle = { saveJob: async (job: AiJob) => { checkpoints.push(structuredClone(job)); } };
     try {
-        await assert.rejects(generateAiVideo('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=', 'Private prompt', { HF_TOKEN: 'secret-token', AI_PROVIDER_CHAIN: 'wan22,wan22-fast' }, undefined, async () => { approvals++; }, lifecycle), AiPendingError);
+        await assert.rejects(generateAiVideo(testImageData(1, 1), 'Private prompt', { ...testModerationConfig, ...testProviderConfig, HF_TOKEN: 'secret-token', AI_PROVIDER_CHAIN: 'wan22,wan22-fast' }, undefined, async () => { approvals++; }, lifecycle), AiPendingError);
         const saved = checkpoints.at(-1)!;
         assert.equal(saved.status, 'running'); assert.equal(saved.eventId, 'saved-event');
         assert.ok(saved.sessionHash);
@@ -183,18 +187,19 @@ test('ambiguous submissions and expired jobs never blindly start a fallback', as
     let saved!: AiJob;
     const parameters = ['input_image', 'prompt', 'steps', 'duration_seconds', 'seed'].map(parameter_name => ({ parameter_name, parameter_has_default: false, parameter_default: null, type: {} }));
     globalThis.fetch = async (input, init) => {
+        const moderated = moderationFixture(input, init); if (moderated) return moderated;
         const url = String(input);
         if (url.endsWith('/whoami-v2')) return Response.json({ name: 'test' });
         if (url.endsWith('/zero-gpu/quota')) return Response.json({ base: 720, current: 720, resetsAt: null });
-        if (url.includes('/api/spaces/')) return Response.json({ host: 'https://test.hf.space' });
+        if (url.includes('/api/spaces/')) return Response.json({ ...testProviderMetadata, host: 'https://test.hf.space' });
         if (url.endsWith('/info')) return Response.json({ named_endpoints: { '/generate_video': { parameters } } });
-        if (url.endsWith('/config')) return Response.json({ dependencies: [{ id: 0, api_name: 'generate_video' }] });
+        if (url.endsWith('/config')) return Response.json({ ...testProviderSettings, dependencies: [{ id: 0, api_name: 'generate_video' }] });
         if (url.endsWith('/upload')) return Response.json(['/tmp/input.png']);
         if (init?.method === 'POST') { posts++; throw new Error('POST response lost'); }
         throw new Error('Unexpected request');
     };
     try {
-        await assert.rejects(generateAiVideo('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7VQAAAAASUVORK5CYII=', 'wave', { HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx' }, undefined, undefined, { saveJob: async job => { saved = structuredClone(job); } }), AiPendingError);
+        await assert.rejects(generateAiVideo(testImageData(1, 1), 'wave', { ...testModerationConfig, ...testProviderConfig, HF_TOKEN: 'test', AI_PROVIDER_CHAIN: 'wan22,wan22-fast,ltx' }, undefined, undefined, { saveJob: async job => { saved = structuredClone(job); } }), AiPendingError);
         assert.equal(saved.status, 'submitting'); assert.equal(saved.eventId, undefined);
         await assert.rejects(resumeAiVideo(saved, {}), AiPendingError);
         await assert.rejects(resumeAiVideo({ ...saved, submittedAt: Date.now() - AI_JOB_MAX_AGE_MS }, {}), AiExpiredError);

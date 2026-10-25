@@ -10,6 +10,8 @@ public/assets/slopurself-favicon-v4.ico
 public/assets/slopurself-favicon-v4.png
 public/assets/slopurself-touch-v4.png
 node_modules/
+moderation-service/dist/
+moderation-service/qualification.json
 cloudflare/.wrangler/
 cloudflare/.dev.vars
 cloudflare/public/*

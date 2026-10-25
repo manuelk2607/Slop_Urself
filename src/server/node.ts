@@ -17,6 +17,10 @@ import { privatePath } from './indexing';
 import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
+import { normalizeImage } from '../security/images';
+import { generationSafetyReady, moderateInput, validatePrompt } from '../security/moderation';
+import { archiveRecovery } from '../ai/recovery';
+import { approvedProvider } from '../ai/provider-trust';
 import { gameOptions } from '../game/options';
 import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from '../game/archive-play';
 import { closePhase, syncPhase } from '../game/phases';
@@ -25,7 +29,7 @@ import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchived
 import { archiveStatus } from './archive';
 import { historyResponse, historyListing, restoreHistoryResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError, historyViewer, authorizeHistory, authorizeRestore } from './statistics';
 import { Server, Socket } from 'socket.io';
-import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
+import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, buildVideoPrompt, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
 import { takeRateLimit, rateKey, httpRateRule, httpRateScope, MESSAGE_RATE, RATE_MESSAGE, type RateBuckets } from '../security/rate-limit';
 import { logAiEvent } from '../ai/telemetry';
 import {
@@ -262,7 +266,8 @@ function runGeneration(room: Room, generationId: string, image?: string) {
             if (rooms.get(room.code) === room && room.generationId === generationId) room.generationJob = job;
         }
     };
-    const generation = budget.tokenForJob(room.code, generationId).catch(error => {
+    const generation = room.generationJob?.status === 'complete' && room.generationJob.videoUrl ? Promise.resolve(room.generationJob.videoUrl)
+        : budget.tokenForJob(room.code, generationId).catch(error => {
         if (room.generationJob) {
             if (Date.now() - room.generationJob.submittedAt >= AI_JOB_MAX_AGE_MS) throw new AiExpiredError();
             throw new AiPendingError(room.generationJob);
@@ -274,10 +279,11 @@ function runGeneration(room: Room, generationId: string, image?: string) {
             seconds => withBudget(() => budget.allowAttempt(room.code, seconds, generationId)), lifecycle)
             : resumeAiVideo(room.generationJob!, generationConfig, progress, lifecycle);
     });
-    void generation.then(videoUrl => {
+    void generation.then(async videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId) return videoUrl;
-        progress('Video wird gespeichert...');
-        return archive(videoUrl, room.code);
+        progress('Video wird geprüft und gespeichert …');
+        try { return await archive(videoUrl, room.code); }
+        catch (error) { throw archiveRecovery(error, room.generationJob); }
     }).then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
         room.state = 'VOTING'; room.currentVideoUrl = videoUrl;
@@ -288,7 +294,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
         if (pending) {
             room.generationJob = (error as AiPendingError).job;
-            progress('Videoerstellung läuft weiter...');
+            progress(room.generationJob.status === 'complete' ? 'Video ist fertig. Inhaltsprüfung und Speicherung werden erneut versucht …' : 'Videoerstellung läuft weiter...');
             setTimeout(() => {
                 if (rooms.get(room.code) === room && room.generationId === generationId && room.state === 'GENERATING') runGeneration(room, generationId);
             }, AI_RETRY_MS);
@@ -537,7 +543,7 @@ io.on('connection', (socket: Socket) => {
         const state = room.state;
         pendingStarts.add(room.code);
         try {
-            const image = await writeSharedImage(imageStorage, payload.imageBase64), old = room.sharedImage;
+            const image = await writeSharedImage(imageStorage, payload.imageBase64, config), old = room.sharedImage;
             if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== state) { await deleteSharedImage(imageStorage, image); return; }
             room.sharedImage = image; resetReady(room); await deleteSharedImage(imageStorage, old); broadcast(room);
             setTimeout(() => {
@@ -584,12 +590,14 @@ io.on('connection', (socket: Socket) => {
     on('sendImage', async payload => {
         const { room, player } = member(socket, payload);
         if (isArchiveGame(room) || room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
-        const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim().slice(0, 150) : '';
-        if (!prompt) throw new Error('Bitte gib einen Prompt ein.');
-        const imageBase64 = gameOptions(room.options).sharedImage ? await readSharedImage(imageStorage, room.sharedImage) : payload.imageBase64;
+        const prompt = validatePrompt(payload.prompt);
+        generationSafetyReady(config);
+        if (AI_PROVIDER !== 'mock') approvedProvider(config);
+        const imageBase64 = await normalizeImage(gameOptions(room.options).sharedImage ? await readSharedImage(imageStorage, room.sharedImage) : payload.imageBase64);
+        await moderateInput(imageBase64, buildVideoPrompt(prompt), config);
         const image = validateImage(imageBase64);
         if (room.imageProfile === 'bounded') preparedImageSize(image.base64);
-        if (room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
+        if (rooms.get(room.code) !== room || room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
         if (AI_PROVIDER !== 'mock' && !archiveEnabled(config)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
         const generationId = randomUUID();
         room.generationId = generationId;

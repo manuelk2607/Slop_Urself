@@ -1,7 +1,8 @@
 import { AwsClient } from 'aws4fetch';
 import { XMLParser } from 'fast-xml-parser';
+import { moderateOutput, type ModerationConfig } from '../security/moderation';
 
-export interface ArchiveConfig {
+export interface ArchiveConfig extends ModerationConfig {
     AWS_ACCESS_KEY_ID?: string; AWS_SECRET_ACCESS_KEY?: string; AWS_ENDPOINT_URL_S3?: string; AWS_REGION?: string;
     VIDEO_BUCKET?: string; VIDEO_ARCHIVE_MB?: string;
 }
@@ -68,9 +69,11 @@ export function archiveRoomHint(url: string) {
     return /^\/api\/videos\/videos\/\d{13}-([a-z0-9]{4})-[a-f0-9-]{36}\.mp4$/.exec(url)?.[1].toUpperCase();
 }
 export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string) {
-    if (url.startsWith('/assets/')) return url;
+    if (config.AI_PROVIDER === 'mock' && url === '/assets/mock-video.mp4') return url;
     if (!archiveEnabled(config)) throw new Error('Die Zugangsdaten für das dauerhafte Videoarchiv fehlen.');
     const bytes = await downloadVideo(url);
+    // Nothing is uploaded, evicted or advertised until the complete output passes.
+    await moderateOutput(bytes, config);
     const objects = await listArchive(config);
     const remaining = new Set(objects.map(object => `/api/videos/${object.key}`));
     await reconcile?.([...remaining]);

@@ -19,6 +19,11 @@ import { service } from './runtime';
 import { deleteStoredHistory, historyVideo, HistoryError, historyJson, type HistoryDeletion } from '../statistics';
 import type { DurableObjectState, CloudflareWebSocket, ConnectionMeta, Env, PendingRoomWrite } from './types';
 import { participants, participantForConnection, isSpectator, resetReady, startProblem, checkJoin, prepareRematch } from '../../game/participants';
+import { normalizeImage } from '../../security/images';
+import { generationSafetyReady, moderateInput, validatePrompt } from '../../security/moderation';
+import { buildVideoPrompt } from '../../ai/generation';
+import { archiveRecovery } from '../../ai/recovery';
+import { approvedProvider } from '../../ai/provider-trust';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
 
@@ -346,7 +351,7 @@ export class RoomDurableObject {
         const room = this.room!;
         const recovering = room.state === 'IDLE' && gameOptions(room.options).sharedImage && (!room.sharedImage || room.sharedImage.expiresAt <= Date.now());
         if ((!['LOBBY', 'GAME_OVER'].includes(room.state) && !recovering) || room.hostId !== player.id) return;
-        const image = await writeSharedImage(this.state.storage, payload.imageBase64), old = room.sharedImage;
+        const image = await writeSharedImage(this.state.storage, payload.imageBase64, this.env), old = room.sharedImage;
         room.sharedImage = image; resetReady(room);
         try { await this.saveRoom(); }
         catch (error) { room.sharedImage = old; await deleteSharedImage(this.state.storage, image); throw error; }
@@ -357,9 +362,11 @@ export class RoomDurableObject {
     private async sendImage(player: Player, payload: Record<string, unknown>) {
         const room = this.room!;
         if (isArchiveGame(room) || room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
-        const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim().slice(0, 150) : '';
-        if (!prompt) throw new Error('Bitte gib einen Prompt ein.');
-        const imageBase64 = gameOptions(room.options).sharedImage ? await readSharedImage(this.state.storage, room.sharedImage) : payload.imageBase64;
+        const prompt = validatePrompt(payload.prompt);
+        generationSafetyReady(this.env);
+        if (this.env.AI_PROVIDER !== 'mock') approvedProvider(this.env);
+        const imageBase64 = await normalizeImage(gameOptions(room.options).sharedImage ? await readSharedImage(this.state.storage, room.sharedImage) : payload.imageBase64);
+        await moderateInput(imageBase64, buildVideoPrompt(prompt), this.env);
         const image = validateImage(imageBase64);
         if (room.imageProfile === 'bounded') preparedImageSize(image.base64);
         if (this.env.AI_PROVIDER !== 'mock' && !archiveEnabled(this.env)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
@@ -395,16 +402,18 @@ export class RoomDurableObject {
                 await this.saveRoom();
             })
         };
-        const generation = this.generationConfig(room.code, generationId, room.generationJob).then(config => image
+        const generation = room.generationJob?.status === 'complete' && room.generationJob.videoUrl ? Promise.resolve(room.generationJob.videoUrl)
+            : this.generationConfig(room.code, generationId, room.generationJob).then(config => image
             ? generateAiVideo(image, room.currentPrompt, qualityConfig(config, gameOptions(room.options).quality), progress,
                 seconds => service(this.env, '/quota/attempt', { code: room.code, seconds, jobId: generationId }).then(() => {}), lifecycle)
             : resumeAiVideo(room.generationJob!, config, progress, lifecycle));
         const work = generation
         .then(async videoUrl => {
             if (this.room !== room || room.generationId !== generationId) return videoUrl;
-            if (videoUrl === '/assets/mock-video.mp4') return videoUrl;
-            progress('Video wird gespeichert...');
-            return (await service(this.env, '/archive', { url: videoUrl, code: room.code })).url as string;
+            if (this.env.AI_PROVIDER === 'mock' && videoUrl === '/assets/mock-video.mp4') return videoUrl;
+            progress('Video wird geprüft und gespeichert …');
+            try { return (await service(this.env, '/archive', { url: videoUrl, code: room.code })).url as string; }
+            catch (error) { throw archiveRecovery(error, room.generationJob); }
         }).then(videoUrl => this.enqueue(async () => {
             await this.releaseGenerationQuota(room.code, generationId);
             if (this.room !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
@@ -428,7 +437,7 @@ export class RoomDurableObject {
                 room.generationJob = error.job;
                 room.generationRetryAt = Date.now() + AI_RETRY_MS;
                 await this.saveRoom();
-                this.broadcast('generationProgress', { step: 'Videoerstellung läuft weiter...' });
+                this.broadcast('generationProgress', { step: error.job.status === 'complete' ? 'Video ist fertig. Inhaltsprüfung und Speicherung werden erneut versucht …' : 'Videoerstellung läuft weiter...' });
                 return;
             }
             room.state = 'IDLE';

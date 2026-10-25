@@ -11,6 +11,7 @@ import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/r
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
 import { restoreIds } from '../../shared/history';
+import { ModerationError } from '../../security/moderation';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -91,7 +92,7 @@ export class ServiceDurableObject {
         const independent = path.startsWith('/hf/') || ['/quota/display', '/quota/capacity', '/quota/token'].includes(path);
         const result = (independent ? Promise.resolve() : path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => {
             if (error instanceof HfOAuthError) console.info('[HF] OAuth callback failed', error.code);
-            return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.', ...(error instanceof HfRequiredError ? { code: 'hf_required' } : {}) }, { status: error instanceof HistoryError ? error.status : error instanceof HfRequiredError ? 403 : 503 });
+            return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.', ...(error instanceof HfRequiredError ? { code: 'hf_required' } : error instanceof ModerationError ? { code: error.code } : {}) }, { status: error instanceof HistoryError ? error.status : error instanceof HfRequiredError ? 403 : 503 });
         });
         if (independent) return result;
         if (path.startsWith('/security/')) this.securityOperations = result;

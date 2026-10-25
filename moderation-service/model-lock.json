@@ -1,0 +1,10 @@
+{
+  "nsfw": {
+    "id": "onnx-community/nsfw_image_detection-ONNX",
+    "revision": "1ceb3c7fe1e9f3f2507e6df577437f23a9149fd5"
+  },
+  "vlm": {
+    "id": "HuggingFaceTB/SmolVLM-500M-Instruct",
+    "revision": "a7da5b986cb59b408707209984f360a5f4ad7e47"
+  }
+}

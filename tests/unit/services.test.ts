@@ -259,7 +259,7 @@ test('archive reads real MP4 bytes and serves byte ranges through signed private
         if (request.method === 'PUT') return new Response(null, { status: 200 });
         return new Response(bytes.slice(0, 4), { status: 206, headers: { 'content-range': 'bytes 0-3/16', 'content-length': '4' } });
     };
-    const config = { AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_ENDPOINT_URL_S3: 'https://storage.test', AWS_REGION: 'eu-central-1' };
+    const config = { AI_PROVIDER: 'mock', AWS_ACCESS_KEY_ID: 'test', AWS_SECRET_ACCESS_KEY: 'test', AWS_ENDPOINT_URL_S3: 'https://storage.test', AWS_REGION: 'eu-central-1' };
     try {
         const url = await archiveVideo('https://demo.hf.space/video.mp4', config);
         assert.ok(url.startsWith('/api/videos/videos/'));

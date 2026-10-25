@@ -2,6 +2,7 @@ import type { Env } from './types';
 import { roundLimit } from '../../game/rules';
 import { HistoryError } from '../statistics';
 import { HfRequiredError } from '../../auth/huggingface';
+import { ModerationError } from '../../security/moderation';
 
 export async function service(env: Env, path: string, payload?: unknown) {
     if (!env.SERVICES && env.AI_PROVIDER === 'mock') return { aiRoundLimit: getAiRoundLimit(env), playerCount: (payload as { players?: number })?.players || 1, quotaMode: 'mock' };
@@ -13,6 +14,7 @@ export async function service(env: Env, path: string, payload?: unknown) {
     const result = await response.json() as Record<string, any>;
     if (!response.ok) {
         if (result.code === 'hf_required') throw new HfRequiredError();
+        if (['moderation_unavailable', 'content_blocked', 'content_review'].includes(result.code)) throw new ModerationError(result.code, result.error);
         throw new HistoryError(result.error || 'KI- oder Videospeicher nicht erreichbar.', response.status);
     }
     return result;

@@ -1,4 +1,4 @@
-export async function boundedJson(request: Request, limit: number): Promise<unknown> {
+export async function boundedJson(request: Pick<Request, 'body' | 'headers'>, limit: number): Promise<unknown> {
     if (Number(request.headers.get('content-length')) > limit) {
         await request.body?.cancel(); throw new RangeError('Die Anfrage ist zu groß.');
     }

@@ -1,5 +1,20 @@
 # Technische Prüfung
 
+## Umfassendes Website- und Inhaltssicherheits-Audit vom 24. Oktober 2026
+
+Reine Analyse, ohne Anwendungsänderungen, Deployment oder neue GPU-Aufträge:
+
+- [Website-Audit mit 54 priorisierten Maßnahmen, Belegen, Prüfgrenzen und Roadmap](</Users/manuelkienmoser/Documents/4 Studium/Sonstiges/SlopUrself/docs/audits/2026-10-24-website.md>).
+- [Tatsächliche HF-/Wan-Schutzmechanismen und mehrstufiges Moderationskonzept](</Users/manuelkienmoser/Documents/4 Studium/Sonstiges/SlopUrself/docs/audits/2026-10-24-content-safety.md>).
+
+robots.txt lieferte auch beim tatsächlichen Google-Prüfabruf am 24. Oktober
+um 13:16:53 UTC HTTP 200 und text/plain. Der frühere Fehler ist aktuell nicht
+reproduzierbar; seine historische Ursache bleibt unbewiesen. Build und 145
+Unit-Tests bestanden. Der isolierte Browserlauf lieferte PASS-Ausgaben für
+Chromium/WebKit; sein abschließender Exitcode war nach Sitzungsverlust nicht
+mehr abrufbar. Persönliche Live-Abrechnung, produktive DB-/Storage-Einstellungen
+und vollständige WAF-Regeln bleiben ausdrücklich unbestätigt.
+
 ## Erneute robots.txt-Ursachenanalyse vom 23. Oktober 2026
 
 Google hat die produktive Startseite, robots.txt und Sitemap zwischen 13:10 und

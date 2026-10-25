@@ -48,6 +48,7 @@
     "fast-xml-parser": "^5.11.2",
     "image-size": "^2.0.4",
     "jose": "^6.2.12",
+    "jpeg-js": "^0.4.4",
     "lucide": "^1.57.0",
     "pg": "^8.23.0",
     "socket.io": "^4.8.3"

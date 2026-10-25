@@ -8,6 +8,7 @@ import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageRespon
 import { providerBudgets, qualityConfig, DEFAULT_PROVIDER_CHAIN } from '../../src/ai/providers';
 import { QuotaBudget } from '../../src/ai/quota';
 import { testImageData } from '../support/images';
+import { normalizeImage } from '../../src/security/images';
 const recordVote: typeof rawRecordVote = (r, player, payload) => rawRecordVote(r, player, { ...roomSnapshot(r), ...payload });
 
 function room(): Room {
@@ -95,7 +96,7 @@ test('prepared image validation and chunked ephemeral room images survive reload
     assert.deepEqual(preparedImageSize(data.split(',')[1]), { width: 832, height: 624 });
     assert.throws(() => preparedImageSize(testImageData(832, 832).split(',')[1]));
     const image = await writeSharedImage(storage, data); assert.ok(image.chunks > 1);
-    assert.equal(await readSharedImage(storage, structuredClone(image)), data);
+    assert.equal(await readSharedImage(storage, structuredClone(image)), await normalizeImage(data));
     const url = `https://game.test/api/rooms/TEST/image?id=${image.id}`;
     assert.equal((await sharedImageResponse(new Request(url), storage, image)).status, 200);
     assert.equal((await sharedImageResponse(new Request(url + 'wrong'), storage, image)).status, 404);

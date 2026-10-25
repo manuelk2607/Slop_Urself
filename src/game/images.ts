@@ -1,14 +1,17 @@
 import { preparedImageSize } from '../ai/images';
-import { validateImage } from '../ai/generation';
+import { validateImage } from '../ai/image-input';
+import { normalizeImage } from '../security/images';
+import { moderateInput, type ModerationConfig } from '../security/moderation';
 
 export interface SharedImage { id: string; chunks: number; expiresAt: number }
 export interface ImageStorage { get<T>(key: string): Promise<T | undefined>; put<T>(key: string, value: T): Promise<void>; delete(key: string): Promise<unknown> }
 const CHUNK_SIZE = 64 * 1024;
 export const IMAGE_TTL = 2 * 60 * 60_000;
 const key = (image: SharedImage, part: number) => `image:${image.id}:${part}`;
-export async function writeSharedImage(storage: ImageStorage, data: unknown): Promise<SharedImage> {
-    const image = validateImage(data); preparedImageSize(image.base64);
-    const text = data as string;
+export async function writeSharedImage(storage: ImageStorage, data: unknown, config?: ModerationConfig): Promise<SharedImage> {
+    const text = await normalizeImage(data);
+    const image = validateImage(text); preparedImageSize(image.base64);
+    if (config) await moderateInput(text, '', config);
     const meta = { id: crypto.randomUUID(), chunks: Math.ceil(text.length / CHUNK_SIZE), expiresAt: Date.now() + IMAGE_TTL };
     try { for (let part = 0; part < meta.chunks; part++) await storage.put(key(meta, part), text.slice(part * CHUNK_SIZE, (part + 1) * CHUNK_SIZE)); }
     catch (error) { await deleteSharedImage(storage, meta); throw error; }
