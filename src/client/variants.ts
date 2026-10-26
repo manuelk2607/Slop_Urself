@@ -7,11 +7,13 @@ export interface VariantSnapshot {
     roomId?: string; hostId: string; activeCreatorId?: string; gameState: string; videoNumber?: number; currentRound?: number; ballotId?: string; role?: string;
     options?: GameOptions; sharedImageUrl?: string; ownTask?: string; ownGuess?: string; task?: string;
     reviewPrompt?: string; reviewGuesses?: Guess[]; votedPlayerIds?: string[];
+    playerCount?: number; players?: { id: string }[]; previewDeadline?: number; previewConfirmed?: boolean; hasAbstained?: boolean;
     reveal?: { prompt: string; task?: string; guesses: Guess[] };
 }
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 export function gameVariants(roomId: () => string, playerId: () => string, emit: (event: string, payload: Record<string, unknown>) => void) {
     let snapshot: VariantSnapshot | undefined, pendingOptions: GameOptions | undefined, turn = '', reviewKey = '', sharedUrl = '', uploading = false, settingsRoom = '';
+    let previewSent = '';
     const controls = element<HTMLFieldSetElement>('gameOptions');
     const settings = element<HTMLDetailsElement>('variantSettings'), classic = element<HTMLButtonElement>('classicModeButton');
     const shared = element<HTMLInputElement>('sharedImageOption'), tasks = element<HTMLInputElement>('secretTasksOption'), guessing = element<HTMLInputElement>('guessPromptOption');
@@ -42,13 +44,27 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         } catch (error) { imageStatus.textContent = (error as Error).message; }
         finally { uploading = false; imageButton.disabled = false; imageInput.value = ''; }
     });
-    function vote(points?: number) {
+    function vote(points?: number, abstain = false) {
         if (!snapshot?.ballotId || snapshot.gameState !== 'VOTING') return;
         const options = gameOptions(snapshot?.options);
-        emit('submitVote', { points, ballotId: snapshot.ballotId, videoNumber: snapshot.videoNumber, currentRound: snapshot.currentRound,
+        emit('submitVote', { ballotId: snapshot.ballotId, videoNumber: snapshot.videoNumber, currentRound: snapshot.currentRound,
+            ...abstain ? { abstain: true } : { points,
             ...(options.secretTasks ? { taskPoints: Number(element<HTMLInputElement>('taskRating').value), funPoints: Number(element<HTMLInputElement>('funRating').value) } : {}),
-            ...(options.guessPrompt ? { guess: element<HTMLInputElement>('guessInput').value.trim() } : {}) });
+            ...(options.guessPrompt ? { guess: element<HTMLInputElement>('guessInput').value.trim() } : {}) } });
         element<HTMLButtonElement>('submitTaskVote').disabled = true;
+        element<HTMLButtonElement>('abstainVoteButton').disabled = true;
+    }
+    element('abstainVoteButton').addEventListener('click', () => vote(undefined, true));
+    function preview(manual = true) {
+        if (!snapshot?.ballotId || snapshot.gameState !== 'VOTING' || snapshot.activeCreatorId !== playerId() || snapshot.role === 'spectator') return;
+        if (!manual && previewSent === snapshot.ballotId) return;
+        previewSent = snapshot.ballotId;
+        emit('finishPreview', { ballotId: snapshot.ballotId, currentRound: snapshot.currentRound, videoNumber: snapshot.videoNumber });
+    }
+    function previewPlayed(video: HTMLVideoElement) {
+        if (!snapshot?.previewDeadline || snapshot.previewConfirmed || (snapshot.players?.length || 0) < 2 || !Number.isFinite(video.duration) || video.duration <= 0) return;
+        let played = 0; for (let i = 0; i < video.played.length; i++) played += video.played.end(i) - video.played.start(i);
+        if (played >= Math.min(9, video.duration) - 0.2) preview(false);
     }
     element('submitTaskVote').addEventListener('click', () => vote());
     function rating() {
@@ -116,6 +132,7 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         element('taskVoteControls').hidden = !options.secretTasks;
         document.querySelector<HTMLElement>('.vote-buttons')!.hidden = options.secretTasks;
         element<HTMLButtonElement>('submitTaskVote').disabled = Boolean(data.votedPlayerIds?.includes(playerId()));
+        element<HTMLButtonElement>('abstainVoteButton').disabled = Boolean(data.votedPlayerIds?.includes(playerId()));
         const reviewing = data.gameState === 'GUESS_REVIEW';
         element('guessReview').hidden = !reviewing || !creator;
         if (reviewing) {
@@ -136,5 +153,5 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         reveal('roundReveal', data.reveal); reveal('finalReveal', data.reveal);
         if (data.role === 'spectator') { element('votingActionBox').style.display = 'none'; element('guessReview').hidden = true; }
     }
-    return { render, vote, shared: () => gameOptions(snapshot?.options).sharedImage };
+    return { render, vote, preview, previewPlayed, shared: () => gameOptions(snapshot?.options).sharedImage };
 }

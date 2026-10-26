@@ -133,6 +133,33 @@ Fortsetzung am **26. Oktober 2026**:
 
 ## Priorisierte Restarbeit
 
+### Weitere Pakete am 26.10.: M09, M20 und M27
+
+- **M09/M22:** Neue klassische Mehrspieler-Videos bleiben trotz schneller Stimmen
+  in der Vorschau, bis der Ersteller tatsächlich abgespielte Bereiche bestätigt,
+  ausdrücklich freigibt oder 45 Sekunden verstrichen sind. Das ist ein UX-Signal,
+  kein manipulationssicherer Wiedergabenachweis. Solo bleibt manuell. Explizite
+  Enthaltung bindet dieselbe Wertungskennung/Runde/Video wie eine Stimme, zählt
+  nicht als Null-Sterne-Bewertung und ist nach Abgabe unveränderbar. Zählung steht
+  im aktuellen Ergebnis; dauerhafte historische Zählung braucht eine DB-Erweiterung.
+- **M20 teilweise:** `redact_query_string` in Wrangler aktiviert; automatisches
+  CF-Versionsbinding, überprüfte UUID/Git-SHA als `X-Slop-Release` und in AI-Logs.
+  Keine beliebigen Umgebungswerte/Queryinhalte protokollieren. Dies ist lokal
+  getestet; produktive Observability-/WAF-Einstellungen bleiben unverifiziert.
+- **M27 teilweise:** Inventaranzeige cached/bündelt erfolgreiche vollständige
+  Abrufe fünf Sekunden. Archivierung und physische Löschung invalidieren auch bei
+  Fehlern/verlorenen Antworten. Kapazitätsprüfung/FIFO nutzen weiter frische Listen.
+  Kein DB-Abgleich aus gecachter, während Abruf invalidierter oder defekter Liste.
+  Spielerfilter-Requestoptimierung und reale DB-Querymessung bleiben offen.
+- **M25/M45 Revanchekorrektur:** Neue Raumkennung setzt alte Teilnehmer-/Bereit-
+  schaftsanzeige und Hostaktionen zurück, bis der neue Snapshot eintrifft. Der
+  Gesamtlauf deckte die Race beim WebKit/workerd-Revanchetest auf. Korrigierter
+  Teilnehmerablauf anschließend in Chromium/WebKit jeweils Node/workerd bestanden.
+- Build/Typprüfungen und **178 Unit-Tests bestanden**; separate Vorschau- und
+  Teilnehmerregressionen in vier Kombinationen bestanden. Die gesamte Matrix muss
+  nach der Korrektur erneut durchlaufen; bisherigen Gesamtlauf nicht als bestanden
+  werten. Keine GPU-Jobs, produktiven Datenänderungen, Pushes oder Deployments.
+
 ### Neues P0-Paket, 26.10. (nach bfd749e)
 
 - **M02/M03/M11:** Der eigene Dienst lehnt nun sämtliche Ton-/Zusatzspuren ab,
@@ -193,10 +220,11 @@ keine GPU-Aufträge, keine produktiven Änderungen und keine juristische Zusage.
    kontrollierten Wan-Erzeuger anschließen, Altarchiv separat prüfen (M01–M05).
    Profilmigration für Bestandskonten vor Veröffentlichung abnehmen (M06).
    API-/Gate-Tests ersetzen diese externen Abnahmen nicht.
-2. **P1 – Zuverlässigkeit/Betrieb:** Wiedergabe-/Enthaltungsregeln (M09), echte
+2. **P1 – Zuverlässigkeit/Betrieb:** Reale Ausgabe-/Moderationsabnahme der
+   Wiedergabe-/Enthaltungsregeln (M09), echte
    Wan-/Safari-Ausgabe (M11), getrennte HF-Abrechnung (M17), vollständiges Lösch-
-   und Aufbewahrungskonzept (M18), Kapazitätsreservierung vor GPU-Start (Rest M19),
-   Cloudflare-Logeinstellungen und korrelierte Release-Diagnose (Rest M20).
+   und Aufbewahrungskonzept (M18), externe Speicherabnahme (M19),
+   produktive Cloudflare-Logeinstellungen und erweiterte Stufendiagnose (Rest M20).
 3. **P2 – Architektur:** Mehrfachidentitäten (M23), Raum-UUIDs (M24), mobile
    Wiederkehr (Rest M25), versionierte Migrationen und DB-/Inventarmessung
    (M26–M29), verbleibende Crashfenster/Jobbereinigung/Schlüsselrotation (M31–M33).

@@ -1,4 +1,5 @@
 import type { Provider } from './providers';
+import { releaseId } from '../security/release';
 
 export interface AiTelemetry {
     generationId?: string;
@@ -11,6 +12,7 @@ export interface AiTelemetry {
     elapsedMs?: number;
     errorCode?: string;
     stage?: 'quota' | 'metadata' | 'configuration' | 'upload' | 'submit' | 'result';
+    releaseId?: string;
     httpStatus?: number;
 }
 
@@ -20,5 +22,5 @@ export function logAiEvent(event: string, fields: AiTelemetry = {}) {
         generationId: fields.generationId, roomCode: fields.roomCode, videoNumber: fields.videoNumber,
         provider: fields.provider, attempt: fields.attempt, steps: fields.steps,
         durationSeconds: fields.durationSeconds, elapsedMs: fields.elapsedMs, errorCode: fields.errorCode,
-        stage: fields.stage, httpStatus: fields.httpStatus }));
+        stage: fields.stage, httpStatus: fields.httpStatus, releaseId: releaseId(fields.releaseId) }));
 }

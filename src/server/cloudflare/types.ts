@@ -32,6 +32,7 @@ export interface CloudflareWebSocket extends WebSocket {
     deserializeAttachment(): ConnectionMeta;
 }
 export interface Env extends AuthConfig, HfConfig, QuotaConfig, ArchiveConfig, AiConfig {
+    CF_VERSION_METADATA?: { id?: string };
     ASSETS: Fetcher;
     ROOMS: DurableObjectNamespace<RoomDurableObject>;
     SERVICES?: DurableObjectNamespace<ServiceDurableObject>;

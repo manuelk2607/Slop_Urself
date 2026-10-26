@@ -14,7 +14,7 @@ import { logAiEvent } from '../../ai/telemetry';
 import { archiveEnabled } from '../../storage/archive';
 import { takeRateLimit, rateKey, MESSAGE_RATE, MESSAGE_BYTES, expensiveMessageRule, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
 import { type QuotaCapacity } from '../../ai/quota';
-import { roomAccountIds, type Room as RoomState, type Player, activeCreator, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses } from '../../game/rules';
+import { roomAccountIds, type Room as RoomState, type Player, activeCreator, roomSnapshot, finalStandings, removePlayer, finishVoting, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, maxRounds, DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses, beginViewing, confirmPreview } from '../../game/rules';
 import { service } from './runtime';
 import { deleteStoredHistory, historyVideo, HistoryError, historyJson, type HistoryDeletion } from '../statistics';
 import type { DurableObjectState, CloudflareWebSocket, ConnectionMeta, Env, PendingRoomWrite } from './types';
@@ -25,6 +25,7 @@ import { buildVideoPrompt } from '../../ai/generation';
 import { archiveRecovery } from '../../ai/recovery';
 import { ARCHIVE_LEASE_MS } from '../../storage/reservations';
 import { operationFailure } from '../../security/diagnostics';
+import { releaseId } from '../../security/release';
 import { approvedProvider } from '../../ai/provider-trust';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
@@ -192,8 +193,7 @@ export class RoomDurableObject {
                     else if (message.type === 'sendImage') await this.sendImage(player, payload);
                     else if (message.type === 'submitVote') await this.submitVote(player, payload);
                     else if (message.type === 'judgeGuesses' && judgeGuesses(this.room!, player, payload)) await this.checkVotingComplete();
-                    else if (message.type === 'finishPreview' && this.room?.players.length === 1 && activeCreator(this.room)?.id === player.id
-                        && Number(payload.videoNumber) === (this.room.videoNumber || this.room.currentRound)) await this.checkVotingComplete(true);
+                    else if (message.type === 'finishPreview' && confirmPreview(this.room!, player, payload)) { await this.checkVotingComplete(true); this.broadcastRoomUpdate(); }
                     else if (message.type === 'startNextRound') await this.startNextRound(player);
                     else if (message.type === 'closePhase' && this.room!.hostId === player.id && payload.phaseKey === this.room!.phaseKey) await this.endPhase();
                     else if (message.type === 'extendGame') await this.extendGame(player, payload);
@@ -409,7 +409,7 @@ export class RoomDurableObject {
             if (this.room === room && room.generationId === generationId) this.broadcast('generationProgress', { step });
         };
         const lifecycle = {
-            context: { generationId, roomCode: room.code, videoNumber: room.videoNumber || room.currentRound },
+            context: { generationId, roomCode: room.code, videoNumber: room.videoNumber || room.currentRound, releaseId: releaseId(this.env.CF_VERSION_METADATA?.id) },
             saveJob: async (job: NonNullable<RoomState['generationJob']>) => this.enqueue(async () => {
                 this.aiJobs[generationId] = { code: room.code, job };
                 await this.state.storage.put('aiJobs', this.aiJobs);
@@ -435,6 +435,7 @@ export class RoomDurableObject {
             if (this.room !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
             room.currentVideoUrl = videoUrl;
             room.state = 'VOTING';
+            beginViewing(room);
             await this.saveRoom();
             this.broadcastRoomUpdate();
             await this.scheduleAlarm();
@@ -681,6 +682,7 @@ export class RoomDurableObject {
             }
             const room = this.room;
             if (room) {
+                if (room.state === 'VOTING' && room.players.length > 1 && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) await this.checkVotingComplete(true);
                 if (room.phaseDeadline && room.phaseDeadline <= Date.now()) await this.endPhase();
                 if (room.sharedImage && room.sharedImage.expiresAt <= Date.now()) {
                     await deleteSharedImage(this.state.storage, room.sharedImage); room.sharedImage = undefined; resetReady(room);
@@ -718,6 +720,7 @@ export class RoomDurableObject {
         for (const meta of this.sockets.values()) if (!meta.playerId && meta.acceptedAt) deadlines.push(meta.acceptedAt + 60_000);
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
+        if (this.room?.state === 'VOTING' && this.room.players.length > 1 && this.room.previewDeadline && !this.room.previewConfirmed) deadlines.push(this.room.previewDeadline);
         if (this.room?.currentVideoUrl.startsWith('/api/videos/') && this.room.state !== 'GAME_OVER') deadlines.push(this.archiveLeaseRenewAt || Date.now() + 100);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
         if (this.quotaReleases.length) deadlines.push(Date.now() + 15_000);

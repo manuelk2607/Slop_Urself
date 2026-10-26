@@ -338,6 +338,18 @@ joinRoomButton.addEventListener('click', () => { void joinRoom('player'); });
 document.getElementById('watchRoomButton')!.addEventListener('click', () => { void joinRoom('spectator'); });
 
 function enterRoom(roomId: string, sessionId: string, playerId?: string) {
+    if (roomId !== currentRoomId) {
+        // A rematch gets a new roster. Do not expose the previous room's ready
+        // state/host actions while its new WebSocket snapshot is still in flight.
+        playerCount.innerText = '0';
+        document.getElementById('spectatorCount')!.textContent = '0';
+        (document.getElementById('readyInput') as HTMLInputElement).checked = false;
+        document.getElementById('readyControl')!.hidden = true;
+        startGameButton.disabled = true; startGameButton.style.display = 'none';
+        roomRoundCountInput.disabled = true;
+        renderLobbyPlayers([]);
+        hostNotice.textContent = 'Der Raum wird verbunden …';
+    }
     document.body.classList.add('room-open');
     clearInvitation();
     setLobbyPending(false);
@@ -393,21 +405,22 @@ function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: s
     loadingText.innerText = `⏳ ${data.activeCreatorName || 'Ein Spieler'} generiert gerade ein Video...`;
 }
 
-function showVotingState(data: { videoUrl?: string; authorId?: string; authorName?: string; hasVoted?: boolean; voted?: number; total?: number }) {
+function showVotingState(data: { videoUrl?: string; authorId?: string; authorName?: string; hasVoted?: boolean; hasAbstained?: boolean; previewConfirmed?: boolean; previewDeadline?: number; voted?: number; total?: number }) {
     if (!data.videoUrl) return;
     const entering = screenVoting.style.display === 'none';
     showScreen(screenVoting);
     const newVideo = votingVideoPlayer.getAttribute('src') !== data.videoUrl;
     if (entering || newVideo) votingPlayback.load(data.videoUrl, true);
-    finishPreviewButton.hidden = spectator || data.total !== 0;
-
     const isMe = Boolean(data.authorId) && isCurrentSocket(data.authorId || '');
+    finishPreviewButton.hidden = spectator || (!isMe && data.total !== 0) || Boolean(data.previewConfirmed);
+    finishPreviewButton.textContent = data.total === 0 ? 'Ergebnis ansehen' : 'Vorschau beenden – Ergebnis freigeben';
 
     if (spectator || isMe || data.hasVoted) {
         authorNotice.innerText = isMe ? 'Das ist dein Video!' : `Video von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'none';
         votingWaitingBox.style.display = 'block';
-        votingStatusText.innerText = data.total === 0 ? 'Solo-Vorschau ohne Bewertung.' : `${data.hasVoted ? 'Bewertung gespeichert. ' : ''}Stimmen: ${data.voted || 0}/${data.total || 0}`;
+        votingStatusText.innerText = data.total === 0 ? 'Solo-Vorschau ohne Bewertung.' : `${data.hasAbstained ? 'Enthaltung gespeichert. ' : data.hasVoted ? 'Bewertung gespeichert. ' : ''}Abgaben: ${data.voted || 0}/${data.total || 0}`;
+        if (data.total && data.previewDeadline && !data.previewConfirmed) votingStatusText.innerText += isMe ? ' Die Wertung wartet auf deine Vorschau oder Bestätigung, höchstens 45 Sekunden.' : ' Die Vorschau des Erstellers läuft noch (höchstens 45 Sekunden).';
     } else {
         authorNotice.innerText = `🎬 Video erstellt von: ${data.authorName || 'Spieler'}`;
         votingActionBox.style.display = 'block';
@@ -436,7 +449,7 @@ socket.on('roomDataUpdate', (data: {
     currentVideoUrl?: string;
     roomId?: string;
     votedPlayerIds?: string[];
-    lastResult?: { authorName: string; roundPoints: number };
+    lastResult?: { authorName: string; roundPoints: number; abstentions?: number };
 } & VariantSnapshot & PartySnapshot & { archiveAuthor?: string }) => {
     if (!currentRoomId || (data.roomId && data.roomId !== currentRoomId)) return;
     spectator = data.role === 'spectator';
@@ -486,11 +499,12 @@ socket.on('roomDataUpdate', (data: {
             authorId: archiveVote ? undefined : data.activeCreatorId,
             authorName: data.archiveAuthor || data.activeCreatorName,
             hasVoted: data.votedPlayerIds?.includes(currentPlayerId),
+            hasAbstained: data.hasAbstained, previewConfirmed: data.previewConfirmed, previewDeadline: data.previewDeadline,
             voted: data.votedPlayerIds?.length || 0,
             total: data.players.length - Number(!archiveVote)
         });
     } else if (data.gameState === 'RESULTS') {
-        showResultsState({ ...data, authorName: data.lastResult?.authorName || data.activeCreatorName || 'Spieler', roundPoints: data.lastResult?.roundPoints || 0, isFinalRound: false });
+        showResultsState({ ...data, authorName: data.lastResult?.authorName || data.activeCreatorName || 'Spieler', roundPoints: data.lastResult?.roundPoints || 0, abstentions: data.lastResult?.abstentions, isFinalRound: false });
     } else if (data.gameState === 'GAME_OVER') {
         showGameOverState({ ...data, players: [...data.players].sort((a, b) => b.score - a.score) });
     }
@@ -735,8 +749,9 @@ customButton.addEventListener('keydown', event => {
 });
 
 finishPreviewButton.addEventListener('click', () => {
-    socket.emit('finishPreview', { roomId: currentRoomId, videoNumber: currentVideoNumber });
+    variants.preview();
 });
+votingVideoPlayer.addEventListener('timeupdate', () => variants.previewPlayed(votingVideoPlayer));
 
 imageInput.addEventListener('change', async (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -835,12 +850,12 @@ voteButtons.forEach(btn => {
 });
 
 // SCREEN 4: ERGEBNISSE & HIGHSCORE
-function showResultsState(data: { authorName: string; roundPoints: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; nextRound?: number; isFinalRound: boolean }) {
+function showResultsState(data: { authorName: string; roundPoints: number; abstentions?: number; players: { id: string; name: string; score: number }[]; currentRound: number; maxRounds: number; nextRound?: number; isFinalRound: boolean }) {
     showScreen(screenResult);
     const isHost = isCurrentSocket(currentHostId);
 
     resultAuthorName.innerText = `Video von ${data.authorName}`;
-    resultPointsSummary.innerText = `+${data.roundPoints} Punkte für dieses Video`;
+    resultPointsSummary.innerText = `+${data.roundPoints} Punkte für dieses Video${data.abstentions ? ` · ${data.abstentions} ${data.abstentions === 1 ? 'Enthaltung' : 'Enthaltungen'}` : ''}`;
     nextRoundButton.style.display = !data.isFinalRound && isHost ? 'block' : 'none';
     nextRoundButton.innerText = data.nextRound === data.currentRound ? 'Nächstes Video' : `Runde ${data.nextRound || data.currentRound + 1} starten`;
     if (!data.isFinalRound && !isHost) {

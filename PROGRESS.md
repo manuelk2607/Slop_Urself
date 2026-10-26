@@ -51,6 +51,30 @@ fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter erse
 - Danach M09: explizite, phasengebundene Enthaltung sowie begrenzte Betrachtungs-
   zeit/Erstellerbestätigung vor automatischer Endwertung; keine Schemaänderung.
 
+### P1 M09/M20 und P2 M27 – lokal geprüft, Gesamtlauf noch wiederholen
+
+- M09: explizite Enthaltung über bestehende ballot-/runde-/video-
+  gebundene Abgabe (intern 0, nicht als Rating persistiert). Neue Gruppen-Videos
+  warten nach schnellen Stimmen auf Erstellervorschau oder ausdrückliche Freigabe;
+  nach höchstens 45 Sekunden kann fehlende Bestätigung die Runde nicht blockieren.
+  Solo bleibt manuell. Medien-Played-Bereiche liefern nur ein UX-Signal, keinen
+  kryptografischen Wiedergabenachweis. Preview-Ack ebenfalls phasengebunden.
+- M09 Build/178 Unit-Tests bestanden. Neue Vierfach-Browserprüfung bestanden: frühe
+  Stimmen, Reload, reduzierte Bewegung, Enthaltungen und Videoausfall. Danach
+  komplette lokale Browser-/Cloudflare-Matrix deckte eine Revanche-Race auf:
+  alter Bereitschaftsstatus blieb bis zum neuen Snapshot sichtbar. Korrigiert;
+  anschließender isolierter Teilnehmer-/Revanchetest in allen vier Browser-/Server-
+  kombinationen bestanden. Gesamtlauf erneut auszuführen, nicht als grün behaupten.
+- M20: Wrangler entfernt Querywerte aus Observability; CF-Version-Binding und
+  validierte Release-IDs in HTTP/AI-Diagnose. Keine produktive Cloudflare-Änderung.
+- M27: Speicheranzeige bündelt gleichzeitige Listenabrufe und cached sie fünf
+  Sekunden; jede physische App-Mutation invalidiert, Kapazität/FIFO bleiben frisch.
+  Kein Reconcile aus veraltetem/fehlgeschlagenem Inventar; drei Regressionen.
+- Keine Schemaänderung; Enthaltungen werden nicht als Null-Sterne-Stimmen in die
+  DB geschrieben. Historische Enthaltungszählung/volle Betroffenenlöschung offen.
+- Nächster Schritt: M23 Mehrfach-HF-Identitäten pro Raum begrenzen, danach volle
+  lokale Testmatrix und Commit-/Fortschrittsabgleich. P0-Freigabe bleibt gesperrt.
+
 ### Bereits abgeschlossene Pakete
 
 - a4e896e: M08/M22 – Wertungskennung, Runde/Video prüfen; angenommene Stimmen bleiben bei Austritt erhalten.

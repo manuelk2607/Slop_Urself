@@ -56,6 +56,7 @@ try {
         for (const port of [3310, 3311]) await run(['tests/e2e/seo.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         for (const port of [3310, 3311]) await run(['tests/e2e/accessibility.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         for (const port of [3310, 3311]) await run(['tests/e2e/legacy-media.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
+        for (const port of [3310, 3311]) await run(['tests/e2e/viewing.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/browser.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/video.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/statistics.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);

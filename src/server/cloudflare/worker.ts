@@ -15,6 +15,7 @@ import { indexingResponse } from '../indexing';
 import { contentReportResponse } from '../content-reports';
 import type { Account } from '../../auth/session';
 import { operationFailure } from '../../security/diagnostics';
+import { releaseId } from '../../security/release';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
@@ -23,7 +24,10 @@ export type { Env } from './types';
 
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
-        return indexingResponse(request, await handleRequest(request, env));
+        const response = indexingResponse(request, await handleRequest(request, env));
+        const version = releaseId(env.CF_VERSION_METADATA?.id);
+        if (version && response.status !== 101) response.headers.set('X-Slop-Release', version);
+        return response;
     }
 };
 

@@ -6,7 +6,7 @@ import { HfConnections, HfOAuthError, HfRequiredError, requirePlayerHf } from '.
 import { profileAuthConfig, type Account } from '../../auth/session';
 import { generationQuality } from '../../ai/providers';
 import { archiveVideo, deleteArchivedVideo, type ArchiveArtifact } from '../../storage/archive';
-import { archiveStatus } from '../archive';
+import { ArchiveStatusCache } from '../archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
@@ -26,11 +26,13 @@ export class ServiceDurableObject {
     private hf: HfConnections;
     private reports: ContentReports;
     private archiveReservations: ArchiveReservations;
+    private archiveInventory: ArchiveStatusCache;
     constructor(private state: DurableObjectState, private env: Env) {
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
         this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
         this.reports = new ContentReports(state.storage);
         this.archiveReservations = new ArchiveReservations(state.storage);
+        this.archiveInventory = new ArchiveStatusCache(env);
         this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {
@@ -87,6 +89,7 @@ export class ServiceDurableObject {
             else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
+                this.archiveInventory.invalidate();
                 const url = await archiveVideo(data.url, this.env, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
                     database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact, await this.archiveReservations.pendingBytes(data.artifact?.generationId));
                 if (url.startsWith('/api/videos/') && data.code) await this.archiveReservations.protect(data.code, url);
@@ -97,8 +100,8 @@ export class ServiceDurableObject {
             }
             else if (path === '/archive/release') await this.archiveReservations.release(data.jobId!);
             else if (path === '/archive/protect') await this.archiveReservations.protect(data.code, data.url);
-            else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
-            else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));
+            else if (path === '/archive/delete') { this.archiveInventory.invalidate(); await deleteArchivedVideo(data.url, this.env); }
+            else if (path === '/archive/status') return json(await this.archiveInventory.read(getDatabase(this.env.DATABASE_URL)));
             else if (path === '/profiles/create') return json({ profile: await this.profiles.create(data.name, data.passwordHash) || null });
             else if (path === '/profiles/password') return json({ profile: await this.profiles.setPassword(data.id, data.passwordHash!) || null });
             else if (path === '/profiles/find') return json({ profile: await this.profiles.find(data.name) || null });
@@ -132,7 +135,7 @@ export class ServiceDurableObject {
     async alarm() {
         const result = this.archiveOperations.then(async () => {
             const database = getDatabase(this.env.DATABASE_URL);
-            await purgeDeletedVideos(database, url => deleteArchivedVideo(url, this.env));
+            await purgeDeletedVideos(database, url => { this.archiveInventory.invalidate(); return deleteArchivedVideo(url, this.env); });
             const next = await database?.nextVideoDeletion();
             if (next !== undefined) await this.scheduleCleanup(Math.max(Date.now() + 100, next));
             const hfCleanup = await this.hf.cleanup();

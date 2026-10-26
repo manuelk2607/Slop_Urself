@@ -20,6 +20,7 @@ import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
 import { securityHeaders } from '../security/headers';
 import { operationFailure } from '../security/diagnostics';
+import { releaseId } from '../security/release';
 import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
@@ -32,7 +33,7 @@ import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from
 import { closePhase, syncPhase } from '../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
 import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo, type ArchiveArtifact } from '../storage/archive';
-import { archiveStatus } from './archive';
+import { ArchiveStatusCache } from './archive';
 import { historyResponse, historyListing, restoreHistoryResponse, deleteStoredHistory, historyVideo, purgeDeletedVideos, HistoryError, historyViewer, authorizeHistory, authorizeRestore } from './statistics';
 import { Server, Socket } from 'socket.io';
 import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETRY_MS, AI_JOB_MAX_AGE_MS, validateImage, buildVideoPrompt, DEFAULT_PROVIDER_CHAIN } from '../ai/generation';
@@ -41,7 +42,7 @@ import { logAiEvent } from '../ai/telemetry';
 import {
     Room, Player, activeCreator, roomSnapshot, finishVoting, finalStandings,
     removePlayer, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, roundLimit, maxRounds,
-    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses, roomAccountIds
+    DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses, roomAccountIds, beginViewing, confirmPreview
 } from '../game/rules';
 import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
 import { roundInput } from '../game/persistence';
@@ -69,6 +70,7 @@ const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthC
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
 const reports = new ContentReports(nodeHfStorage(process.env.MODERATION_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/moderation')));
 const archiveReservations = new ArchiveReservations(nodeHfStorage(process.env.ARCHIVE_RESERVATIONS_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/archive-reservations')));
+const archiveInventory = new ArchiveStatusCache(config);
 async function canReadVideo(url: string, account: Account) {
     return account.id === config.ADMIN_ACCOUNT_ID || [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id))
         || Boolean(await getDatabase()?.canReadVideo(url, account.id));
@@ -94,7 +96,7 @@ function scheduleVideoCleanup(time: number) {
         videoCleanupAt = Infinity;
         const cleanup = archiveWork.then(async () => {
             const database = getDatabase();
-            await purgeDeletedVideos(database, url => deleteArchivedVideo(url, config));
+            await purgeDeletedVideos(database, url => { archiveInventory.invalidate(); return deleteArchivedVideo(url, config); });
             const next = await database?.nextVideoDeletion();
             if (next !== undefined) scheduleVideoCleanup(Math.max(Date.now() + 100, next));
         });
@@ -110,6 +112,7 @@ function archive(url: string, code?: string, artifact?: ArchiveArtifact) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();
         const active = [...rooms.values()].map(r => r.currentVideoUrl).filter(Boolean);
+        archiveInventory.invalidate();
         const stored = await archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active, ...await archiveReservations.activeUrls()], database ? urls => database.reconcileArchive(urls) : undefined, code, artifact, await archiveReservations.pendingBytes(artifact?.generationId));
         if (code && stored.startsWith('/api/videos/')) await archiveReservations.protect(code, stored);
         return stored;
@@ -128,6 +131,7 @@ function releaseArchive(jobId: string) {
 }
 app.use(async (req, res, next) => {
     for (const [name, value] of Object.entries(securityHeaders(`${req.protocol}://${req.get('host')}`))) res.setHeader(name, value);
+    const version = releaseId(process.env.APP_RELEASE_ID); if (version) res.setHeader('X-Slop-Release', version);
     if (privatePath(req.path)) { res.setHeader('X-Robots-Tag', 'noindex, nofollow, nosnippet'); res.setHeader('Cache-Control', 'no-store'); }
     const rule = httpRateRule(req.path, req.method);
     if (rule) {
@@ -212,7 +216,7 @@ app.get('/api/stats', async (req, res) => {
     let account;
     try { account = await requestAccount(webRequest(req), config); } catch (error) { res.sendStatus(authFailureStatus(error)); return; }
     try {
-        const status = archiveWork.then(() => archiveStatus(config, getDatabase()));
+        const status = archiveWork.then(() => archiveInventory.read(getDatabase()));
         archiveWork = status.catch(() => {});
         const archive = await status.catch(() => null);
         res.json({ databaseEnabled: isDatabaseEnabled(), ...(await getDatabase()?.getStats(typeof req.query.player === 'string' ? req.query.player.slice(0, 100) : undefined, historyViewer(account, config)) ?? emptyStats()),
@@ -292,7 +296,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
         if (rooms.get(room.code) === room && room.generationId === generationId) io.to(room.code).emit('generationProgress', { step });
     };
     const lifecycle = {
-        context: { generationId, roomCode: room.code, videoNumber: room.videoNumber || room.currentRound },
+        context: { generationId, roomCode: room.code, videoNumber: room.videoNumber || room.currentRound, releaseId: releaseId(process.env.APP_RELEASE_ID) },
         saveJob: async (job: NonNullable<Room['generationJob']>) => {
             if (rooms.get(room.code) === room && room.generationId === generationId) room.generationJob = job;
         }
@@ -318,6 +322,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
     }).then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
         room.state = 'VOTING'; room.currentVideoUrl = videoUrl;
+        beginViewing(room);
         broadcast(room);
     }).catch(error => {
         pending = error instanceof AiPendingError;
@@ -413,7 +418,10 @@ function endPhase(room: Room) {
     }
 }
 const phaseClock = setInterval(() => {
-    for (const room of rooms.values()) if (room.phaseDeadline && room.phaseDeadline <= Date.now()) endPhase(room);
+    for (const room of rooms.values()) {
+        if (room.phaseDeadline && room.phaseDeadline <= Date.now()) endPhase(room);
+        else if (room.state === 'VOTING' && room.players.length > 1 && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { checkVotingComplete(room, true); broadcast(room); }
+    }
 }, 500);
 phaseClock.unref();
 
@@ -671,9 +679,7 @@ io.on('connection', (socket: Socket) => {
 
     on('finishPreview', payload => {
         const { room, player } = member(socket, payload);
-        if (room.players.length !== 1 || activeCreator(room)?.id !== player.id
-            || Number(payload.videoNumber) !== (room.videoNumber || room.currentRound)) return;
-        checkVotingComplete(room, true);
+        if (confirmPreview(room, player, payload)) { checkVotingComplete(room, true); broadcast(room); }
     });
 
     on('startNextRound', payload => {

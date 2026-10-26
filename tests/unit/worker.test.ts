@@ -49,7 +49,7 @@ async function fixture(stateName: Room['state'] = 'VOTING', overrides: Partial<E
     await ready;
     const message = (socket: TestSocket, type: string, payload: Record<string, unknown> = {}) => {
         const r = data.get('room') as Room;
-        return worker.webSocketMessage(socket as any, JSON.stringify({ type, payload: type === 'submitVote'
+        return worker.webSocketMessage(socket as any, JSON.stringify({ type, payload: ['submitVote', 'finishPreview'].includes(type)
             ? { ballotId: r.ballotId, currentRound: r.currentRound, videoNumber: r.videoNumber || r.currentRound, ...payload } : payload }));
     };
     const recreate = async () => {

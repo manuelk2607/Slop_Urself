@@ -45,7 +45,9 @@ export interface Room {
     generationId?: string;
     generationJob?: AiJob;
     generationRetryAt?: number;
-    lastResult?: { authorName: string; roundPoints: number };
+    lastResult?: { authorName: string; roundPoints: number; abstentions?: number };
+    previewDeadline?: number;
+    previewConfirmed?: boolean;
     options?: GameOptions;
     imageProfile?: 'bounded';
     sharedImage?: SharedImage;
@@ -169,6 +171,8 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         archiveAuthor: isArchiveGame(room) ? room.archiveCurrent?.creatorName : undefined,
         archiveResults: room.archiveResults,
         votedPlayerIds: Object.keys(room.currentVotes),
+        hasAbstained: viewerId ? room.currentVotes[viewerId] === 0 : false,
+        previewDeadline: room.previewDeadline, previewConfirmed: room.previewConfirmed,
         options: gameOptions(room.options),
         sharedImageUrl: room.sharedImage ? `/api/rooms/${room.code}/image?id=${room.sharedImage.id}` : undefined,
         ownTask: viewerId === creator?.id ? room.tasks?.[viewerId] : undefined,
@@ -227,15 +231,30 @@ export function removePlayer(room: Room, playerId: string) {
 }
 
 // Complete synchronously before any persistence await, so a second vote cannot score twice.
-export function finishVoting(room: Room, confirmedSolo = false, abstainMissing = false) {
+export function beginViewing(room: Room, now = Date.now()) {
+    room.previewConfirmed = false;
+    room.previewDeadline = !isArchiveGame(room) && room.players.length > 1 ? now + 45_000 : undefined;
+}
+export function confirmPreview(room: Room, player: Player, payload: Record<string, unknown>) {
+    if (room.state !== 'VOTING' || activeCreator(room)?.id !== player.id) return false;
+    if (payload.ballotId !== room.ballotId || payload.videoNumber !== (room.videoNumber || room.currentRound) || payload.currentRound !== room.currentRound) throw new Error('Diese Bestätigung gehört zu einem anderen Video.');
+    room.previewConfirmed = true;
+    return true;
+}
+export function finishVoting(room: Room, confirmedSolo = false, abstainMissing = false, now = Date.now()) {
     if (room.state === 'GUESS_REVIEW' && !Object.keys(room.guesses || {}).length) { room.guessesReviewed = true; room.state = 'VOTING'; }
     if (room.state !== 'VOTING') return false;
     const creator = activeCreator(room);
     if (!creator) return false;
     const voters = room.players.filter(p => gameOptions(room.options).mode === 'archive-vote' || p.id !== creator.id);
+    if (confirmedSolo) room.previewConfirmed = true;
     if (abstainMissing) for (const voter of voters) room.currentVotes[voter.id] ??= 0;
     if (voters.some(p => room.currentVotes[p.id] === undefined)) return false;
     if (!voters.length && !confirmedSolo) return false;
+    if (voters.length && room.previewDeadline && !room.previewConfirmed && !abstainMissing) {
+        if (now < room.previewDeadline) return false;
+        room.previewConfirmed = true;
+    }
     if (!abstainMissing && gameOptions(room.options).guessPrompt && !room.guessesReviewed && Object.values(room.guesses || {}).some(guess => guess.text)) {
         room.state = 'GUESS_REVIEW'; return false;
     }
@@ -243,7 +262,9 @@ export function finishVoting(room: Room, confirmedSolo = false, abstainMissing =
     if (!isArchiveGame(room)) creator.score += points;
     else if (room.archiveCurrent) (room.archiveResults ??= []).push({ id: room.archiveCurrent.id, creatorName: room.archiveCurrent.creatorName,
         points, votes: Object.values(room.currentVotes).filter(value => value > 0).length, prompt: room.currentPrompt });
-    room.lastResult = { authorName: isArchiveGame(room) ? room.archiveCurrent?.creatorName || creator.name : creator.name, roundPoints: points };
+    const abstentions = Object.values(room.currentVotes).filter(value => value === 0).length;
+    room.lastResult = { authorName: isArchiveGame(room) ? room.archiveCurrent?.creatorName || creator.name : creator.name, roundPoints: points,
+        ...abstentions ? { abstentions } : {} };
     if (room.pendingCreators) room.pendingCreators = room.pendingCreators.filter(id => id !== creator.id);
     room.state = room.currentRound >= room.maxRounds && !room.pendingCreators?.length ? 'GAME_OVER' : 'RESULTS';
     if (room.state === 'GAME_OVER') room.extensionQuota = undefined;
@@ -260,6 +281,7 @@ export function recordVote(room: Room, player: Player, payload: Record<string, u
     if (!room.ballotId || payload.ballotId !== room.ballotId || payload.videoNumber !== (room.videoNumber || room.currentRound)
         || payload.currentRound !== room.currentRound) throw new Error('Diese Bewertung gehört zu einem anderen Video. Bitte warte auf den aktuellen Spielstand.');
     if (room.state !== 'VOTING' || (gameOptions(room.options).mode !== 'archive-vote' && activeCreator(room)?.id === player.id) || room.currentVotes[player.id] !== undefined) return;
+    if (payload.abstain === true) { room.currentVotes[player.id] = 0; return; }
     const options = gameOptions(room.options);
     let points = Number(payload.points);
     let details: { taskPoints: number; funPoints: number } | undefined;
