@@ -2,7 +2,9 @@ export {};
 // Isolated UI fixtures: no real database, storage or GPU calls are permitted.
 const database = require('../../dist/database/node.js');
 database.getDatabase = () => ({ playableArchive: async () => ['1', '2', '3', '4'].map(id => ({ id, creatorId: `creator-${id}`,
-    creatorName: `Archivspieler ${id}`, prompt: `Public test prompt ${id}`, videoUrl: `/assets/mock-video.mp4?clip=${id}` })) });
+    creatorName: `Archivspieler ${id}`, prompt: `Public test prompt ${id}`, videoUrl: `/api/videos/videos/1792000000000-party-${id}.mp4` })) });
+const bytes = require('node:fs').readFileSync('public/assets/mock-video.mp4');
+require('../../dist/storage/archive.js').serveVideo = async () => new Response(bytes, { headers: { 'content-type': 'video/mp4' } });
 for (const name of ['saveRoom', 'saveScores', 'saveRound', 'markRoomStarted', 'markRoomFinished', 'reopenRoom']) {
     database[name] = async () => { throw new Error('Archive games must not write creation statistics.'); };
 }

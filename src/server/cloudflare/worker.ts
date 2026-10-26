@@ -14,6 +14,7 @@ import { huggingFaceResponse } from '../huggingface';
 import { indexingResponse } from '../indexing';
 import { contentReportResponse } from '../content-reports';
 import type { Account } from '../../auth/session';
+import { operationFailure } from '../../security/diagnostics';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
@@ -87,7 +88,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
                     archive
                 });
             } catch (error) {
-                console.error('[DB] Statistics unavailable', error instanceof Error ? error.message : 'Database error');
+                operationFailure('statistics', error);
                 return json({ error: 'Statistiken konnten nicht geladen werden.' }, { status: 503 });
             }
         }

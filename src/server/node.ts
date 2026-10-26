@@ -10,6 +10,7 @@ import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDi
 import { accountsResponse } from './accounts';
 import { contentReportResponse } from './content-reports';
 import { ContentReports } from '../security/reports';
+import { ArchiveReservations } from '../storage/reservations';
 import type { Account } from '../auth/session';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
@@ -18,6 +19,7 @@ import { nodeHfStorage } from '../auth/node-hf-storage';
 import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
 import { securityHeaders } from '../security/headers';
+import { operationFailure } from '../security/diagnostics';
 import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
@@ -66,9 +68,15 @@ const budgetData = new Map<string, unknown>();
 const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
 const reports = new ContentReports(nodeHfStorage(path.join(process.cwd(), '.local/moderation')));
+const archiveReservations = new ArchiveReservations(nodeHfStorage(path.join(process.cwd(), '.local/archive-reservations')));
 async function canReadVideo(url: string, account: Account) {
     return account.id === config.ADMIN_ACCOUNT_ID || [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id))
         || Boolean(await getDatabase()?.canReadVideo(url, account.id));
+}
+async function playableArchive(room: Room) {
+    const clips = await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(room)) || [];
+    const allowed = new Set(await reports.allowed(clips.map(clip => clip.videoUrl)));
+    return clips.filter(clip => allowed.has(clip.videoUrl));
 }
 config.verifyHfIdentity = (connection, accountId) => hf.identityMatches(connection, accountId);
 const imageData = new Map<string, unknown>();
@@ -102,7 +110,9 @@ function archive(url: string, code?: string, artifact?: ArchiveArtifact) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();
         const active = [...rooms.values()].map(r => r.currentVideoUrl).filter(Boolean);
-        return archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active], database ? urls => database.reconcileArchive(urls) : undefined, code, artifact);
+        const stored = await archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active, ...await archiveReservations.activeUrls()], database ? urls => database.reconcileArchive(urls) : undefined, code, artifact);
+        if (code && stored.startsWith('/api/videos/')) await archiveReservations.protect(code, stored);
+        return stored;
     });
     archiveWork = result.catch(() => {}); return result;
 }
@@ -199,7 +209,7 @@ app.get('/api/stats', async (req, res) => {
             videoStorageMode: archiveEnabled(config) ? 'archive' : 'url', archive });
     }
     catch (error) {
-        console.error('[DB] Statistics unavailable', error instanceof Error ? error.message : 'Database error');
+        operationFailure('statistics', error);
         res.status(503).json({ error: 'Statistiken konnten nicht geladen werden.' });
     }
 });
@@ -327,7 +337,7 @@ async function refreshLobbyQuota(room: Room) {
     const players = room.players.length;
     const quality = gameOptions(room.options).quality;
     const mode = gameOptions(room.options).mode;
-    const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(room)) || [], players) : await budget.capacity(players, quality, room.players);
+    const capacity = isArchiveGame(room) ? archiveCapacity(await playableArchive(room), players) : await budget.capacity(players, quality, room.players);
     if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length || quality !== gameOptions(room.options).quality || mode !== gameOptions(room.options).mode) return;
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
@@ -349,7 +359,7 @@ async function flushWrites(room: { code: string }) {
 function persist(room: Room, action: () => Promise<void>) {
     const writes = pendingWrites.get(room.code) || []; writes.push(action); pendingWrites.set(room.code, writes);
     const next = (persistence.get(room.code) || Promise.resolve()).then(() => flushWrites(room)).catch(error => {
-        console.error('[DB] Persistence failed', error instanceof Error ? error.message : 'Database error');
+        operationFailure('persistence', error);
         io.to(room.code).emit('roomNotice', 'Die Statistik-Speicherung ist momentan nicht erreichbar.');
     });
     persistence.set(room.code, next);
@@ -598,7 +608,7 @@ io.on('connection', (socket: Socket) => {
             if (gameOptions(room.options).sharedImage) await readSharedImage(imageStorage, room.sharedImage);
             await refreshLobbyQuota(room);
             if (!room.maxRounds || roster !== room.players.map(p => p.id).join(',')) throw new Error('Das Kontingent oder die Spielerzahl hat sich geändert. Bitte prüfe die Rundenauswahl.');
-            if (isArchiveGame(room)) prepareArchive(room, await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(room)) || []);
+            if (isArchiveGame(room)) prepareArchive(room, await playableArchive(room));
             else await withBudget(() => budget.reserve(room.code, room.maxRounds, room.players.length, gameOptions(room.options).quality, room.players));
             if (rooms.get(room.code) !== room || room.hostId !== player.id || room.state !== 'LOBBY' || roster !== room.players.map(p => p.id).join(',') || startProblem(room)) { await withBudget(() => budget.release(room.code)); throw new Error(startProblem(room) || 'Die Spielerzahl hat sich geändert.'); }
             startRounds(room);
@@ -704,7 +714,7 @@ io.on('connection', (socket: Socket) => {
             let code: string;
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
             const plan = prepareRematch(room, code), next = plan.room;
-            next.quota = isArchiveGame(next) ? archiveCapacity(await getDatabase()?.playableArchive(authDisabled(config) ? undefined : roomAccountIds(next)) || [], next.players.length)
+            next.quota = isArchiveGame(next) ? archiveCapacity(await playableArchive(next), next.players.length)
                 : await budget.capacity(next.players.length, gameOptions(next.options).quality, next.players);
             next.maxRounds = next.quota.aiRoundLimit ? maxRounds(next.maxRounds || 1, next.quota.aiRoundLimit) : 0;
             if (room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== participants(room).filter(p => p.connected).map(p => p.id).join(',') || room.players.some(p => !p.connected)) throw new Error('Die Gruppe hat sich geändert. Bitte versuche es erneut.');
@@ -746,4 +756,4 @@ server.on('error', error => {
     process.exitCode = 1;
 });
 ensureDatabaseSchema().then(() => server.listen(PORT, () => console.log(`Server läuft auf http://127.0.0.1:${PORT}`)))
-    .catch(error => { console.error('Datenbank konnte nicht initialisiert werden:', error instanceof Error ? error.message : 'Database error'); process.exitCode = 1; });
+    .catch(error => { operationFailure('startup', error); process.exitCode = 1; });

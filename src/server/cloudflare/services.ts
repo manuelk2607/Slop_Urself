@@ -13,6 +13,7 @@ import type { DurableObjectState, Env } from './types';
 import { restoreIds } from '../../shared/history';
 import { ModerationError } from '../../security/moderation';
 import { ContentReports, type ReportReason } from '../../security/reports';
+import { ArchiveReservations } from '../../storage/reservations';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -24,10 +25,12 @@ export class ServiceDurableObject {
     private budget: PlayerQuotaBudget;
     private hf: HfConnections;
     private reports: ContentReports;
+    private archiveReservations: ArchiveReservations;
     constructor(private state: DurableObjectState, private env: Env) {
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
         this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
         this.reports = new ContentReports(state.storage);
+        this.archiveReservations = new ArchiveReservations(state.storage);
         this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {
@@ -35,9 +38,10 @@ export class ServiceDurableObject {
         const action = async () => {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
                 participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number;
-                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact };
+                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
             const quality = generationQuality(data.quality);
             if (path === '/security/content/blocked') return json({ blocked: await this.reports.blocked(data.url) });
+            if (path === '/security/content/allowed') return json({ allowedUrls: await this.reports.allowed(data.urls) });
             if (path === '/security/content/list') return json({ reports: await this.reports.list() });
             if (path === '/security/content/report') { await this.reports.report(data.url, data.accountId, data.reason); return json({ ok: true }); }
             if (path === '/security/content/block') { await this.reports.block(data.url, data.accountId); return json({ ok: true }); }
@@ -83,9 +87,12 @@ export class ServiceDurableObject {
             else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
-                return json({ url: await archiveVideo(data.url, this.env, await database?.protectedVideoUrls() || [],
-                    database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact) });
+                const url = await archiveVideo(data.url, this.env, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
+                    database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact);
+                if (url.startsWith('/api/videos/') && data.code) await this.archiveReservations.protect(data.code, url);
+                return json({ url });
             }
+            else if (path === '/archive/protect') await this.archiveReservations.protect(data.code, data.url);
             else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
             else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));
             else if (path === '/profiles/create') return json({ profile: await this.profiles.create(data.name, data.passwordHash) || null });

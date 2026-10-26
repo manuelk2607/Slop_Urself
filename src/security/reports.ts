@@ -16,6 +16,11 @@ export class ContentReports {
         if (!archivedVideoPath(url)) throw new Error('Ungültiges Video.');
         return Boolean(await this.storage.get(`content-ban:${url}`));
     }
+    async allowed(urls: string[]) {
+        if (!Array.isArray(urls) || urls.length > 200 || urls.some(url => !archivedVideoPath(url))) throw new Error('Ungültige Videoauswahl.');
+        const results = await Promise.all(urls.map(async url => await this.blocked(url) ? undefined : url));
+        return results.filter((url): url is string => Boolean(url));
+    }
     async list() {
         const reports = await this.storage.get<ContentReport[]>('content-reports') || [];
         return Promise.all(reports.filter(r => r.createdAt > Date.now() - 30 * 86400_000).map(async r => ({ ...r, blocked: await this.blocked(r.url) })));

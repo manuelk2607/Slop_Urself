@@ -20,6 +20,7 @@ test('reports deduplicate, bound per-account abuse and preserve bans across rein
     await reports.block(url, 'owner'); await storage.put('video-trash', {});
     assert.equal(await new ContentReports(storage).blocked(url), true);
     assert.equal((await reports.list())[0].blocked, true);
+    assert.deepEqual(await reports.allowed([url, url.replace('aabbcc', 'other')]), [url.replace('aabbcc', 'other')]);
     await assert.rejects(reports.block('https://attacker.test/video.mp4', 'owner'));
 });
 test('report API checks proven identity, origin, viewing rights and independently unlocked administrator', async () => {

@@ -23,6 +23,8 @@ import { normalizeImage } from '../../security/images';
 import { generationSafetyReady, moderateInput, validatePrompt } from '../../security/moderation';
 import { buildVideoPrompt } from '../../ai/generation';
 import { archiveRecovery } from '../../ai/recovery';
+import { ARCHIVE_LEASE_MS } from '../../storage/reservations';
+import { operationFailure } from '../../security/diagnostics';
 import { approvedProvider } from '../../ai/provider-trust';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
@@ -38,6 +40,8 @@ export class RoomDurableObject {
     private aiJobs: Record<string, { code: string; job: NonNullable<RoomState['generationJob']>; retryAt?: number }> = {};
     private messageBuckets: RateBuckets = {};
     private snapshotChecks = new Set<CloudflareWebSocket>();
+    private archiveLeaseRenewAt = 0;
+    private leasedVideoUrl = '';
 
     constructor(private state: DurableObjectState, private env: Env) {
         state.blockConcurrencyWhile(async () => {
@@ -69,7 +73,7 @@ export class RoomDurableObject {
     private enqueue<T>(action: () => Promise<T>) {
         const next = this.operations.then(action);
         this.operations = next.catch(error => {
-            console.error('[Room] Operation failed', error instanceof Error ? error.message : 'Unknown error');
+            operationFailure('room-operation', error);
         });
         return next;
     }
@@ -85,7 +89,7 @@ export class RoomDurableObject {
             if (this.room?.rematchSource === requestId) return historyJson({ ok: true });
             if (this.room || await getDatabase(this.env.DATABASE_URL)?.roomExists(room.code)) return historyJson({ error: 'Raumcode belegt.' }, 409);
             if (!sanitizeRoomId(room.code) || !requestId || room.state !== 'LOBBY') return historyJson({}, 400);
-            room.quota = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || [], room.players.length)
+            room.quota = isArchiveGame(room) ? archiveCapacity(await this.playableArchive(room), room.players.length)
                 : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
             room.maxRounds = room.quota.aiRoundLimit ? maxRounds(room.maxRounds || 1, room.quota.aiRoundLimit) : 0;
             this.room = room; this.roomCode = room.code;
@@ -311,7 +315,7 @@ export class RoomDurableObject {
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
         if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');
-        if (isArchiveGame(room)) prepareArchive(room, await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || []);
+        if (isArchiveGame(room)) prepareArchive(room, await this.playableArchive(room));
         else await service(this.env, '/quota/reserve', { code: room.code, rounds: room.maxRounds, players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players });
         const disconnected = room.players.some(p => ![...this.sockets].some(([socket, meta]) => meta.playerId === p.id && socket.readyState === 1));
         if (startProblem(room) || disconnected) { await service(this.env, '/quota/release', { code: room.code }); throw new Error(startProblem(room) || 'Warte, bis alle Spieler verbunden sind.'); }
@@ -325,7 +329,7 @@ export class RoomDurableObject {
     private async refreshLobbyQuota() {
         const room = this.room;
         if (!room || (room.state !== 'LOBBY' && room.state !== 'GAME_OVER')) return;
-        const capacity = isArchiveGame(room) ? archiveCapacity(await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || [], room.players.length)
+        const capacity = isArchiveGame(room) ? archiveCapacity(await this.playableArchive(room), room.players.length)
             : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
         if (room.state === 'GAME_OVER') room.extensionQuota = capacity;
         else {
@@ -588,7 +592,7 @@ export class RoomDurableObject {
             await database?.saveScores(room.code, room.players, room.hostId);
             await database?.markRoomStarted(room.code);
         } catch (error) {
-            console.error('[DB] Members not saved', error instanceof Error ? error.message : 'Database error');
+            operationFailure('members', error);
             this.broadcast('roomNotice', 'Die Statistik-Speicherung ist momentan nicht erreichbar.');
         }
     }
@@ -607,7 +611,7 @@ export class RoomDurableObject {
                 this.pendingRounds.shift();
                 await this.state.storage.put('pendingRounds', this.pendingRounds);
             } catch (error) {
-                console.error('[DB] Round not saved', error instanceof Error ? error.message : 'Database error');
+                operationFailure('round', error);
                 this.broadcast('roomNotice', 'Statistiken werden gespeichert, sobald die Datenbank wieder erreichbar ist.');
                 break;
             }
@@ -708,6 +712,7 @@ export class RoomDurableObject {
         for (const meta of this.sockets.values()) if (!meta.playerId && meta.acceptedAt) deadlines.push(meta.acceptedAt + 60_000);
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
+        if (this.room?.currentVideoUrl.startsWith('/api/videos/') && this.room.state !== 'GAME_OVER') deadlines.push(this.archiveLeaseRenewAt || Date.now() + 100);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
         if (this.quotaReleases.length) deadlines.push(Date.now() + 15_000);
         for (const [jobId, entry] of Object.entries(this.aiJobs)) {
@@ -722,6 +727,13 @@ export class RoomDurableObject {
         }
     }
 
+    private async playableArchive(room: RoomState) {
+        const clips = await getDatabase(this.env.DATABASE_URL)?.playableArchive(authDisabled(this.env) ? undefined : roomAccountIds(room)) || [];
+        const { allowedUrls } = await service(this.env, '/security/content/allowed', { urls: clips.map(clip => clip.videoUrl) });
+        const allowed = new Set<string>(allowedUrls || (this.env.AI_PROVIDER === 'mock' ? clips.map(clip => clip.videoUrl) : []));
+        return clips.filter(clip => allowed.has(clip.videoUrl));
+    }
+
     private async saveRoom() {
         if (this.room) syncPhase(this.room);
         if (this.room) await this.state.storage.put('room', this.room);
@@ -729,6 +741,11 @@ export class RoomDurableObject {
             const previous = await this.state.storage.get<RoomState>('room');
             await deleteSharedImage(this.state.storage, previous?.sharedImage);
             await this.state.storage.delete('room');
+        }
+        if (this.room?.currentVideoUrl.startsWith('/api/videos/') && this.room.state !== 'GAME_OVER' && (this.archiveLeaseRenewAt <= Date.now() || this.leasedVideoUrl !== this.room.currentVideoUrl)) {
+            await service(this.env, '/archive/protect', { code: this.room.code, url: this.room.currentVideoUrl });
+            this.archiveLeaseRenewAt = Date.now() + ARCHIVE_LEASE_MS / 2;
+            this.leasedVideoUrl = this.room.currentVideoUrl;
         }
     }
 
