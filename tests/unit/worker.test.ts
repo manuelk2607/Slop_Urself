@@ -510,8 +510,11 @@ test('Worker restart resumes a persisted job once without another upload or quot
     };
     try {
         const f = await fixture('GENERATING', { SERVICES }, 1, { generationId: 'generation-1', generationJob: fakeJob(), currentVideoUrl: '' });
+        const before = roomSnapshot(f.data.get('room') as Room, 'a').generation;
+        assert.equal(before?.id, 'generation-1'); assert.ok(before!.startedAt > 0);
         assert.equal((f.data.get('room') as Room).state, 'GENERATING');
         const restored = await f.recreate();
+        assert.deepEqual(roomSnapshot(f.data.get('room') as Room, 'a').generation, before, 'A reconstructed DO preserves the known job and elapsed time.');
         await new Promise(resolve => setTimeout(resolve, 110));
         await Promise.all([restored.alarm(), restored.alarm()]);
         await Promise.all(f.pending);

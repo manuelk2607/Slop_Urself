@@ -22,10 +22,11 @@ for (const name of ['saveRoom', 'saveScores', 'saveRound', 'markRoomStarted', 'm
 }
 globalThis.fetch = async (input, options) => {
     const url = String(input);
-    if (url.endsWith('/oauth/token')) return Response.json({ access_token: 'personal-test', token_type: 'Bearer', expires_in: 28800 });
-    if (new Headers(options?.headers).get('authorization') !== 'Bearer personal-test') throw new Error('The server token must never be used');
-    if (url.endsWith('/oauth/userinfo')) return Response.json({ sub: 'shared-test', preferred_username: 'SharedTest' });
-    if (url.endsWith('/api/whoami-v2')) return Response.json({ id: 'shared-test', name: 'SharedTest' });
+    if (url.endsWith('/oauth/token')) return Response.json({ access_token: new URLSearchParams(String(options?.body)).get('code'), token_type: 'Bearer', expires_in: 28800 });
+    const token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '');
+    if (!token?.startsWith('fixture-')) throw new Error('The server token must never be used');
+    if (url.endsWith('/oauth/userinfo')) return Response.json({ sub: token, preferred_username: 'ArchiveTest' });
+    if (url.endsWith('/api/whoami-v2')) return Response.json({ id: token, name: 'ArchiveTest' });
     if (url.endsWith('/zero-gpu/quota')) return Response.json({ base: 300, current: 0, resetsAt: null, runs: { remaining: 0 } });
     throw new Error('External calls are disabled in archive tests.');
 };

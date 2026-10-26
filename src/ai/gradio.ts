@@ -1,3 +1,4 @@
+import type { AiProgress } from '../shared/generation';
 export class GradioProviderError extends Error {
     constructor(message: string, public code = 'provider_error') { super(message); }
 }
@@ -14,7 +15,7 @@ function providerFailure(value: unknown) {
     return new GradioProviderError('Der KI-Anbieter hat die Generierung ohne nähere Fehlerangabe abgebrochen.', message.trim() ? 'provider_unclassified' : 'provider_no_details');
 }
 
-export async function readQueueResult(response: Response, eventId: string, progress: (step: string) => void = () => {}): Promise<{ data: unknown[] }> {
+export async function readQueueResult(response: Response, eventId: string, progress: AiProgress = () => {}): Promise<{ data: unknown[] }> {
     if (!response.body) throw new Error('Hugging Face hat keinen Ergebnisstream geliefert.');
     const reader = response.body.getReader(), decoder = new TextDecoder();
     let buffer = '', lastStage = '';
@@ -38,8 +39,8 @@ export async function readQueueResult(response: Response, eventId: string, progr
                     return { data: message.output.data };
                 }
                 if (message.msg !== lastStage) {
-                    if (message.msg === 'estimation') progress('Warte auf einen kostenlosen GPU-Platz...');
-                    if (message.msg === 'process_starts') progress('Die KI berechnet das Video...');
+                    if (message.msg === 'estimation') progress('Warte auf einen kostenlosen GPU-Platz...', 'queue');
+                    if (message.msg === 'process_starts') progress('Die KI berechnet das Video...', 'inference');
                     lastStage = message.msg;
                 }
             }

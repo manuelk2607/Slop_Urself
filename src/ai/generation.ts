@@ -6,6 +6,7 @@ import { moderateInput, validatePrompt, type ModerationConfig } from '../securit
 import { approvedProvider, verifyProviderIdentity, verifyWanParameters, ProviderTrustError, type ProviderIdentity } from './provider-trust';
 import { GradioProviderError as AiProviderError, readQueueResult } from './gradio';
 import { logAiEvent, type AiTelemetry } from './telemetry';
+import type { AiProgress } from '../shared/generation';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
 
@@ -141,7 +142,7 @@ export function orderProviderValues(parameters: ApiParameter[], values: Record<s
     });
 }
 
-export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (step: string) => void = () => {}, lifecycle: AiLifecycle = {}) {
+export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: AiProgress = () => {}, lifecycle: AiLifecycle = {}) {
     if (!HF_SPACE_ROOT.test(job.root) || !/^\/[a-zA-Z0-9_-]+$/.test(job.endpoint)
         || (job.eventId && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.eventId))
         || (job.sessionHash && !/^[a-zA-Z0-9_-]{1,120}$/.test(job.sessionHash))) throw new Error('Ungültiger gespeicherter KI-Auftrag.');
@@ -153,7 +154,7 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (ste
     }
     // A lost POST response is ambiguous. Never issue another GPU job blindly.
     if (!job.eventId) throw new AiPendingError(job);
-    progress('Videoerstellung wird fortgesetzt...');
+    progress('Videoerstellung wird fortgesetzt...', 'result');
     logAiEvent('result_requested', jobFields(job, lifecycle));
     try {
         const resultUrl = job.sessionHash ? `${job.root}/gradio_api/queue/data?session_hash=${encodeURIComponent(job.sessionHash)}`
@@ -180,7 +181,7 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: (ste
     }
 }
 
-export async function generateAiVideo(imageBase64: string, prompt: string, config: AiConfig, progress: (step: string) => void = () => {}, allowAttempt?: (seconds: number) => Promise<void>, lifecycle: AiLifecycle = {}) {
+export async function generateAiVideo(imageBase64: string, prompt: string, config: AiConfig, progress: AiProgress = () => {}, allowAttempt?: (seconds: number) => Promise<void>, lifecycle: AiLifecycle = {}) {
     prompt = validatePrompt(prompt);
     imageBase64 = await normalizeImage(imageBase64);
     await moderateInput(imageBase64, buildVideoPrompt(prompt), config);
@@ -248,7 +249,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             // Validate before uploading, including the requested minimum duration.
             orderProviderValues(parameters, buildProviderValues(provider, prompt, null, config));
             await allowAttempt?.(needed);
-            progress(`${providerName(provider)} erstellt das Video...`);
+            progress(`${providerName(provider)} erstellt das Video...`, 'preparing');
             const bytes = Uint8Array.from(atob(image.base64), char => char.charCodeAt(0));
             const form = new FormData();
             const filename = `input.${image.mime.split('/')[1]}`;

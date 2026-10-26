@@ -1,13 +1,14 @@
 import { AwsClient } from 'aws4fetch';
 import { XMLParser } from 'fast-xml-parser';
-import { moderateOutput, type ModerationConfig } from '../security/moderation';
+import { moderateOutput, ModerationError, type ModerationConfig } from '../security/moderation';
+import { logAiEvent, type AiTelemetry } from '../ai/telemetry';
 
 export interface ArchiveConfig extends ModerationConfig {
     AWS_ACCESS_KEY_ID?: string; AWS_SECRET_ACCESS_KEY?: string; AWS_ENDPOINT_URL_S3?: string; AWS_REGION?: string;
     VIDEO_BUCKET?: string; VIDEO_ARCHIVE_MB?: string;
 }
 export interface ArchivedObject { key: string; size: number; modified: string }
-export interface ArchiveArtifact { generationId: string; submittedAt: number }
+export interface ArchiveArtifact { generationId: string; submittedAt: number; releaseId?: string }
 export const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
 export const archiveLimit = (config: ArchiveConfig) => Math.max(20, Math.min(1024, Number(config.VIDEO_ARCHIVE_MB) || 512)) * 1024 * 1024;
 export const archiveEnabled = (config: ArchiveConfig) => Boolean(config.AWS_ACCESS_KEY_ID && config.AWS_SECRET_ACCESS_KEY && config.AWS_ENDPOINT_URL_S3);
@@ -72,31 +73,43 @@ export function archiveRoomHint(url: string) {
 export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string, artifact?: ArchiveArtifact, reservedBytes = 0) {
     if (config.AI_PROVIDER === 'mock' && url === '/assets/mock-video.mp4') return url;
     if (!archiveEnabled(config)) throw new Error('Die Zugangsdaten für das dauerhafte Videoarchiv fehlen.');
-    const bytes = await downloadVideo(url);
-    // Nothing is uploaded, evicted or advertised until the complete output passes.
-    await moderateOutput(bytes, config);
     if (roomCode && !/^[A-Z0-9]{4}$/.test(roomCode)) throw new Error('Ungültige Archiv-Zuordnung.');
     if (artifact && (!/^[a-f0-9-]{36}$/.test(artifact.generationId) || !Number.isSafeInteger(artifact.submittedAt) || !/^\d{13}$/.test(String(artifact.submittedAt)))) throw new Error('Ungültiger Speicherauftrag.');
-    const key = `videos/${artifact?.submittedAt ?? Date.now()}-${roomCode ? roomCode.toLowerCase() + '-' : ''}${artifact?.generationId || crypto.randomUUID()}.mp4`;
-    const objects = await listArchive(config);
-    const remaining = new Set(objects.map(object => `/api/videos/${object.key}`));
-    await reconcile?.([...remaining]);
-    const existing = objects.find(object => object.key === key);
-    if (existing) {
-        if (existing.size !== bytes.length) throw new Error('Widersprüchlicher Speicherauftrag.');
-        return `/api/videos/${key}`;
-    }
-    const protectedKeys = new Set(protectedUrls.filter(url => url.startsWith('/api/videos/')).map(url => url.slice('/api/videos/'.length)));
-    if (!Number.isSafeInteger(reservedBytes) || reservedBytes < 0) throw new Error('Ungültige Archivreservierung.');
-    for (const old of evictionPlan(objects, bytes.length, archiveLimit(config) - reservedBytes, protectedKeys)) {
-        const response = await client(config).fetch(endpoint(config, old.key), { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
-        if (!response.ok && response.status !== 404) throw new Error('Altes Video konnte nicht gelöscht werden; Archivierung pausiert.');
-        remaining.delete(`/api/videos/${old.key}`);
+    const context = { generationId: artifact?.generationId, roomCode, releaseId: artifact?.releaseId };
+    let stage: AiTelemetry['stage'] = 'download';
+    try {
+        const bytes = await downloadVideo(url);
+        // Nothing is uploaded, evicted or advertised until the complete output passes.
+        stage = 'output_moderation';
+        await moderateOutput(bytes, config);
+        const key = `videos/${artifact?.submittedAt ?? Date.now()}-${roomCode ? roomCode.toLowerCase() + '-' : ''}${artifact?.generationId || crypto.randomUUID()}.mp4`;
+        stage = 'inventory';
+        const objects = await listArchive(config);
+        const remaining = new Set(objects.map(object => `/api/videos/${object.key}`));
         await reconcile?.([...remaining]);
+        const existing = objects.find(object => object.key === key);
+        if (existing) {
+            if (existing.size !== bytes.length) throw new Error('Widersprüchlicher Speicherauftrag.');
+            logAiEvent('archive_recovered', { ...context, stage });
+            return `/api/videos/${key}`;
+        }
+        const protectedKeys = new Set(protectedUrls.filter(url => url.startsWith('/api/videos/')).map(url => url.slice('/api/videos/'.length)));
+        if (!Number.isSafeInteger(reservedBytes) || reservedBytes < 0) throw new Error('Ungültige Archivreservierung.');
+        stage = 'archive';
+        for (const old of evictionPlan(objects, bytes.length, archiveLimit(config) - reservedBytes, protectedKeys)) {
+            const response = await client(config).fetch(endpoint(config, old.key), { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
+            if (!response.ok && response.status !== 404) throw new Error('Altes Video konnte nicht gelöscht werden; Archivierung pausiert.');
+            remaining.delete(`/api/videos/${old.key}`);
+            await reconcile?.([...remaining]);
+        }
+        const response = await client(config).fetch(endpoint(config, key), { method: 'PUT', body: bytes, headers: { 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300' }, signal: AbortSignal.timeout(30_000) });
+        if (!response.ok) throw new Error('Video konnte nicht dauerhaft gespeichert werden.');
+        logAiEvent('archived', { ...context, stage });
+        return `/api/videos/${key}`;
+    } catch (error) {
+        logAiEvent('archive_failed', { ...context, stage, errorCode: error instanceof ModerationError ? error.code : 'storage_or_media' });
+        throw error;
     }
-    const response = await client(config).fetch(endpoint(config, key), { method: 'PUT', body: bytes, headers: { 'content-type': 'video/mp4', 'cache-control': 'private, max-age=300' }, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) throw new Error('Video konnte nicht dauerhaft gespeichert werden.');
-    return `/api/videos/${key}`;
 }
 export async function serveVideo(request: Request, key: string, config: ArchiveConfig) {
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } });

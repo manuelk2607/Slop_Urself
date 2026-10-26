@@ -69,6 +69,7 @@ try {
         await run(['tests/e2e/startup.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/auth.e2e.mts', 'http://127.0.0.1:3312'], browserEnv);
         await run(['tests/e2e/huggingface.e2e.mts'], browserEnv);
+        await run(['tests/e2e/generation.e2e.mts'], browserEnv);
         for (const port of [3312, 3314]) await run(['tests/e2e/classic.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         for (const port of [3312, 3314]) await run(['tests/e2e/participants.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/quota.e2e.mts'], browserEnv);

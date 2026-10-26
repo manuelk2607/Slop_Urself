@@ -11,7 +11,7 @@ export interface AiTelemetry {
     durationSeconds?: number;
     elapsedMs?: number;
     errorCode?: string;
-    stage?: 'quota' | 'metadata' | 'configuration' | 'upload' | 'submit' | 'result';
+    stage?: 'quota' | 'metadata' | 'configuration' | 'upload' | 'submit' | 'result' | 'download' | 'output_moderation' | 'inventory' | 'archive';
     releaseId?: string;
     httpStatus?: number;
 }

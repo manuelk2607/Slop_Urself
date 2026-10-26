@@ -6,7 +6,9 @@ export async function connectTestHf(page: Page, base: string) {
     const start = await page.request.post(`${base}/api/hf/connect`, { headers: { origin: base } });
     assert.equal(start.status(), 200);
     const authorization = new URL((await start.json()).url);
-    const callback = await page.request.get(`${base}/api/hf/callback?state=${authorization.searchParams.get('state')}&code=test-code`, { maxRedirects: 0 });
+    const session = await (await page.request.get(`${base}/api/session`)).json();
+    const code = `fixture-${session.account.id}`;
+    const callback = await page.request.get(`${base}/api/hf/callback?state=${authorization.searchParams.get('state')}&code=${encodeURIComponent(code)}`, { maxRedirects: 0 });
     assert.equal(callback.status(), 303);
     assert.equal(callback.headers().location, '/?hf=connected');
     await page.reload();

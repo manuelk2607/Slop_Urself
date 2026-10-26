@@ -6,6 +6,8 @@ import { statisticsView } from './statistics';
 import type { HistoryKind } from './history-selection';
 import { historyUndo } from './history-undo';
 import { videoPlayback } from './video';
+import { generationNotice } from './generation-notice';
+import type { GenerationView } from '../shared/generation';
 import { accountManagement } from './accounts';
 import { prepareImage } from './images';
 import { gameVariants, type VariantSnapshot } from './variants';
@@ -86,6 +88,7 @@ const uploadButton = document.getElementById('uploadButton') as HTMLButtonElemen
 const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 const loadingSection = document.getElementById('loadingSection') as HTMLDivElement;
 const loadingText = document.getElementById('loadingText') as HTMLParagraphElement;
+const generationClock = generationNotice(loadingText, document.getElementById('loadingElapsed')!);
 
 // Voting-Elemente
 const authorNotice = document.getElementById('authorNotice') as HTMLParagraphElement;
@@ -179,6 +182,7 @@ function showScreen(screenToShow: HTMLElement) {
     document.body.classList.toggle('statistics-open', screenToShow === screenStats);
     if (screenToShow !== screenStats) accounts.reset();
     if (screenToShow !== screenVoting) votingVideoPlayer.pause();
+    if (screenToShow !== screenCreate) generationClock.stop();
     if (screenToShow !== screenStats) videoStatsList.querySelectorAll('video').forEach(video => video.pause());
     [document.getElementById('screenStartup')!, document.getElementById('screenAuth')!, screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
     screenToShow.style.display = 'block';
@@ -388,7 +392,7 @@ socket.on('disconnect', () => {
     if (currentRoomId) showRoomNotice('Verbindung unterbrochen. Verbinde erneut...');
 });
 
-function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: string; hostId: string; gameState?: string; reset?: boolean }) {
+function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: string; hostId: string; gameState?: string; reset?: boolean; generation?: GenerationView; serverTime?: number }) {
     showScreen(screenCreate);
     currentHostId = data.hostId;
     if (data.reset) { clearImagePreview(); promptInput.value = ''; }
@@ -402,7 +406,11 @@ function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: s
     waitControls.style.display = !isGenerating && !isMe ? 'block' : 'none';
     loadingSection.style.display = isGenerating ? 'block' : 'none';
     waitNoticeText.innerText = `${data.activeCreatorName || 'Ein Spieler'} denkt sich gerade ein Meisterwerk aus...`;
-    loadingText.innerText = `⏳ ${data.activeCreatorName || 'Ein Spieler'} generiert gerade ein Video...`;
+    if (isGenerating && data.generation) generationClock.update(data.generation, data.serverTime || Date.now());
+    else {
+        generationClock.stop();
+        loadingText.innerText = `⏳ ${data.activeCreatorName || 'Ein Spieler'} generiert gerade ein Video...`;
+    }
 }
 
 function showVotingState(data: { videoUrl?: string; authorId?: string; authorName?: string; hasVoted?: boolean; hasAbstained?: boolean; previewConfirmed?: boolean; previewDeadline?: number; voted?: number; total?: number }) {
@@ -448,6 +456,8 @@ socket.on('roomDataUpdate', (data: {
     activeCreatorName?: string;
     currentVideoUrl?: string;
     roomId?: string;
+    generation?: GenerationView;
+    serverTime?: number;
     votedPlayerIds?: string[];
     lastResult?: { authorName: string; roundPoints: number; abstentions?: number };
 } & VariantSnapshot & PartySnapshot & { archiveAuthor?: string }) => {
@@ -816,16 +826,9 @@ uploadButton.addEventListener('click', async () => {
     }
 });
 
-socket.on('generationStarted', (data: { authorName: string; step: string }) => {
-    showScreen(screenCreate);
-    creatorControls.style.display = 'none';
-    waitControls.style.display = 'none';
-    loadingSection.style.display = 'block';
-    loadingText.innerText = `⏳ ${data.authorName} generiert... (${data.step})`;
-});
-
-socket.on('generationProgress', (data: { step: string }) => {
-    loadingText.innerText = data.step;
+socket.on('generationProgress', (data: { roomId: string; generation?: GenerationView; serverTime: number }) => {
+    if (data.roomId !== currentRoomId || !data.generation || generationClock.id !== data.generation.id) return;
+    generationClock.update(data.generation, data.serverTime);
 });
 
 // --- SCREEN 3: VOTING ---

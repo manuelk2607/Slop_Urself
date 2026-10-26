@@ -4,6 +4,7 @@ import { gameOptions, assignTasks, type GameOptions } from './options';
 import type { SharedImage } from './images';
 import { isArchiveGame, type ArchiveClip } from './archive-play';
 import { resetReady, startProblem } from './participants';
+import type { GenerationStage, GenerationView } from '../shared/generation';
 
 export type GameState = 'LOBBY' | 'IDLE' | 'GENERATING' | 'VOTING' | 'GUESS_REVIEW' | 'RESULTS' | 'GAME_OVER';
 // Mobile backgrounding and HF approval commonly outlast a short network retry.
@@ -45,6 +46,8 @@ export interface Room {
     currentPrompt: string;
     currentVideoUrl: string;
     generationId?: string;
+    generationStartedAt?: number;
+    generationStage?: GenerationStage;
     generationJob?: AiJob;
     generationRetryAt?: number;
     lastResult?: { authorName: string; roundPoints: number; abstentions?: number };
@@ -169,6 +172,7 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         turnCount: room.roundPlayers?.length,
         nextRound: nextRoundNumber(room), quota: room.quota, extensionQuota: room.extensionQuota,
         activeCreatorId: creator?.id, activeCreatorName: creator?.name,
+        generation: generationView(room),
         currentVideoUrl: room.currentVideoUrl, lastResult: room.lastResult, phaseKey: room.phaseKey, phaseDeadline: room.phaseDeadline, serverTime: Date.now(),
         archiveAuthor: isArchiveGame(room) ? room.archiveCurrent?.creatorName : undefined,
         archiveResults: room.archiveResults,
@@ -184,6 +188,12 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         reviewGuesses: room.state === 'GUESS_REVIEW' && viewerId === creator?.id ? guessList(room) : undefined,
         reveal: ['RESULTS', 'GAME_OVER'].includes(room.state) ? { prompt: room.currentPrompt, task: room.tasks?.[creator?.id || ''], guesses: guessList(room) } : undefined
     };
+}
+
+export function generationView(room: Room): GenerationView | undefined {
+    const startedAt = room.generationStartedAt || room.generationJob?.submittedAt;
+    if (room.state !== 'GENERATING' || !room.generationId || !Number.isSafeInteger(startedAt) || !startedAt || startedAt < 0) return undefined;
+    return { id: room.generationId, startedAt, stage: room.generationJob?.status === 'complete' ? 'archive' : room.generationStage || 'result' };
 }
 
 export function finalStandings(room: Room) {

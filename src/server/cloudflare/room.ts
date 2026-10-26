@@ -26,6 +26,8 @@ import { archiveRecovery } from '../../ai/recovery';
 import { ARCHIVE_LEASE_MS } from '../../storage/reservations';
 import { operationFailure } from '../../security/diagnostics';
 import { releaseId } from '../../security/release';
+import type { GenerationStage } from '../../shared/generation';
+import { generationView } from '../../game/rules';
 import { approvedProvider } from '../../ai/provider-trust';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
@@ -393,6 +395,7 @@ export class RoomDurableObject {
         } catch (error) { await service(this.env, '/archive/release', { jobId: generationId }).catch(() => {}); throw error; }
         room.state = 'GENERATING';
         room.generationId = generationId;
+        room.generationStartedAt = Date.now(); room.generationStage = 'preparing';
         room.currentPrompt = prompt;
         room.currentVideoUrl = '';
         room.currentVotes = {};
@@ -407,8 +410,12 @@ export class RoomDurableObject {
         if (this.activeGenerations.has(generationId)) return;
         this.activeGenerations.add(generationId);
         room.generationRetryAt = undefined;
-        const progress = (step: string) => {
-            if (this.room === room && room.generationId === generationId) this.broadcast('generationProgress', { step });
+        const progress = (step: string, stage: GenerationStage = 'result') => {
+            this.state.waitUntil(this.enqueue(async () => {
+                if (this.room !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
+                room.generationStage = stage; await this.saveRoom();
+                this.broadcast('generationProgress', { step, roomId: room.code, generation: generationView(room), serverTime: Date.now() });
+            }).catch(error => operationFailure('room-operation', error)));
         };
         const lifecycle = {
             context: { generationId, roomCode: room.code, videoNumber: room.videoNumber || room.currentRound, releaseId: releaseId(this.env.CF_VERSION_METADATA?.id) },
@@ -429,8 +436,8 @@ export class RoomDurableObject {
         .then(async videoUrl => {
             if (this.room !== room || room.generationId !== generationId) return videoUrl;
             if (this.env.AI_PROVIDER === 'mock' && videoUrl === '/assets/mock-video.mp4') return videoUrl;
-            progress('Video wird geprüft und gespeichert …');
-            try { return (await service(this.env, '/archive', { url: videoUrl, code: room.code, artifact: room.generationJob ? { generationId, submittedAt: room.generationJob.submittedAt } : undefined })).url as string; }
+            progress('Video wird geprüft und gespeichert …', 'archive');
+            try { return (await service(this.env, '/archive', { url: videoUrl, code: room.code, artifact: room.generationJob ? { generationId, submittedAt: room.generationJob.submittedAt, releaseId: releaseId(this.env.CF_VERSION_METADATA?.id) } : undefined })).url as string; }
             catch (error) { throw archiveRecovery(error, room.generationJob); }
         }).then(videoUrl => this.enqueue(async () => {
             await this.releaseGenerationQuota(room.code, generationId);
@@ -455,8 +462,9 @@ export class RoomDurableObject {
             if (error instanceof AiPendingError) {
                 room.generationJob = error.job;
                 room.generationRetryAt = Date.now() + AI_RETRY_MS;
+                room.generationStage = error.job.status === 'complete' ? 'archive' : 'retry';
                 await this.saveRoom();
-                this.broadcast('generationProgress', { step: error.job.status === 'complete' ? 'Video ist fertig. Inhaltsprüfung und Speicherung werden erneut versucht …' : 'Videoerstellung läuft weiter...' });
+                this.broadcastRoomUpdate();
                 return;
             }
             room.state = 'IDLE';

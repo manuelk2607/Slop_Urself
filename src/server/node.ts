@@ -16,6 +16,8 @@ import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
 import { HfConnections, HfRequiredError, requirePlayerHf, type HfConfig } from '../auth/huggingface';
 import { verifyHfRoster } from '../auth/hf-roster';
+import type { GenerationStage } from '../shared/generation';
+import { generationView } from '../game/rules';
 import { nodeHfStorage } from '../auth/node-hf-storage';
 import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
@@ -293,8 +295,11 @@ function broadcast(room: Room) {
 
 function runGeneration(room: Room, generationId: string, image?: string) {
     let pending = false, uncertain = false;
-    const progress = (step: string) => {
-        if (rooms.get(room.code) === room && room.generationId === generationId) io.to(room.code).emit('generationProgress', { step });
+    const progress = (step: string, stage: GenerationStage = 'result') => {
+        if (rooms.get(room.code) === room && room.generationId === generationId && room.state === 'GENERATING') {
+            room.generationStage = stage;
+            io.to(room.code).emit('generationProgress', { step, roomId: room.code, generation: generationView(room), serverTime: Date.now() });
+        }
     };
     const lifecycle = {
         context: { generationId, roomCode: room.code, videoNumber: room.videoNumber || room.currentRound, releaseId: releaseId(process.env.APP_RELEASE_ID) },
@@ -317,8 +322,8 @@ function runGeneration(room: Room, generationId: string, image?: string) {
     });
     void generation.then(async videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId) return videoUrl;
-        progress('Video wird geprüft und gespeichert …');
-        try { return await archive(videoUrl, room.code, room.generationJob ? { generationId, submittedAt: room.generationJob.submittedAt } : undefined); }
+        progress('Video wird geprüft und gespeichert …', 'archive');
+        try { return await archive(videoUrl, room.code, room.generationJob ? { generationId, submittedAt: room.generationJob.submittedAt, releaseId: releaseId(process.env.APP_RELEASE_ID) } : undefined); }
         catch (error) { throw archiveRecovery(error, room.generationJob); }
     }).then(videoUrl => {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
@@ -331,7 +336,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
         if (rooms.get(room.code) !== room || room.generationId !== generationId || room.state !== 'GENERATING') return;
         if (pending) {
             room.generationJob = (error as AiPendingError).job;
-            progress(room.generationJob.status === 'complete' ? 'Video ist fertig. Inhaltsprüfung und Speicherung werden erneut versucht …' : 'Videoerstellung läuft weiter...');
+            progress(room.generationJob.status === 'complete' ? 'Video ist fertig. Inhaltsprüfung und Speicherung werden erneut versucht …' : 'Videoerstellung läuft weiter...', room.generationJob.status === 'complete' ? 'archive' : 'retry');
             setTimeout(() => {
                 if (rooms.get(room.code) === room && room.generationId === generationId && room.state === 'GENERATING') runGeneration(room, generationId);
             }, AI_RETRY_MS);
@@ -656,6 +661,7 @@ io.on('connection', (socket: Socket) => {
         if (AI_PROVIDER !== 'mock' && !archiveEnabled(config)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
         const generationId = randomUUID();
         room.generationId = generationId;
+        room.generationStartedAt = Date.now(); room.generationStage = 'preparing';
         // Lock the turn before the quota request yields to another image submission.
         room.state = 'GENERATING';
         try {

@@ -156,7 +156,9 @@ Abnahme bisher: Root-Build/181 Unit-Tests, Dienst-Build/10 technische Tests; neu
 Slow-Mock-Reload-Test unter Chromium bestanden. Gesamtmatrix deckte noch gemeinsame
 HF-Identitäten in alten Archiv-/Quota-Fixtures auf. Diese erhalten separate Konten;
 Quota-Prüfung testet nun ausdrücklich einen schwachen dritten Spieler, individuelle
-Reserven und Aufruflimits. Gezielter Zweibrowserlauf und Gesamtabnahme noch offen.
+Reserven und Aufruflimits. Gezielte Prüfung von Archivpartien, Quota, acht Videos mit
+Zusatzrunden und Status/Reload in Chromium/WebKit bestanden. Dienst-Build/10 Tests
+auch nach finaler strikter Einzelzeitgrenze bestanden; Gesamtabnahme noch offen.
 
 ### Weitere Pakete am 26.10.: M09, M20 und M27
 

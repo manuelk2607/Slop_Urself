@@ -8,7 +8,7 @@ deshalb Schemaarbeit offen. Kein validierter kostenloser Moderationsdienst vorha
 fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter ersetzen.
 ## Aktueller Implementierungsstand
 
-### Aktueller Fortsetzungspunkt (nach f37e0da, uncommittet)
+### Aktueller Fortsetzungspunkt (nach f37e0da/eb72950)
 
 - M36: gemeinsame echte Stufen Queue/Inferenz/Abfrage/Archiv statt Prozentwerten;
   Auftragsbeginn und Stufe im Raumsnapshot, CF persistiert Fortschritt. Reload
@@ -20,16 +20,19 @@ fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter erse
   Archiv-/Quota-Tests verbanden mehrere Profile mit demselben HF-Konto, was M23
   jetzt korrekt sperrt. Fixtures auf separate IDs/Tokens/Kontingente umgestellt;
   schwaches drittes Konto und persönliche Reservierungen werden explizit geprüft.
-- Gezielte Chromium/WebKit-Prüfung party/quota/extension/generation läuft in
-  Session 90892, Log /tmp/slop-updated-hf-fixtures.log. Nach Bestehen vollständige
-  Matrix neu starten; vorherige Läufe NICHT als Gesamterfolg werten.
+- Gezielte Chromium/WebKit-Prüfung party/quota/extension/generation bestanden;
+  separate HF-Konten statt historisch geteilter Testidentität. Keine echten
+  Provider-/Speicher-/DB-Aufrufe. Vollständige Matrix als Nächstes neu starten;
+  vorherige abgebrochene Läufe NICHT als Gesamterfolg werten.
 - P0: Moderationsfreigabe benötigt jetzt den tatsächlichen gehashten, versions-
   gebundenen Bericht, ausreichende Fall-/Videodeckung und berechnete Fehlerraten/
   Latenz statt bloßer eingetragener SHA. Dienst-Build/10 technische Tests bestanden.
   Neu: src/evidence.ts, im Runtime-Hash enthalten. Kein qualifizierender Bericht
   erstellt, keine Freigabe; derzeitiger echter Benchmark weiterhin fehlgeschlagen.
-- Nächster Schritt: gezielten Browserlauf abnehmen/reparieren, volle CI, Diensttests
-  nach finalem kleinen Zeitgrenzen-Check erneut; dann aktuelle Pakete committen.
+- Dienst-Build/10 Tests auch nach finalem Zeitgrenzen-Check bestanden; in eb72950
+  gesichert. Nächster Schritt: M36/M20/Fixtures committen, vollständige CI erneut;
+  anschließend unabhängige Restpakete (M27 Filter, M33 Vault, M41 Entwürfe) und
+  gezielte P0-Laufzeitdiagnose ohne Lockerung/Blindwiederholung bearbeiten.
   Keine produktiven Änderungen, kein Push/Deployment. Sämtliche lokalen Commits erhalten.
 
 ### P0-Paket (26.10., nach bfd749e) – Implementierung getestet, Freigabe gesperrt
