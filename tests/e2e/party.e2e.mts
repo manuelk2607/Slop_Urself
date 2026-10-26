@@ -12,6 +12,7 @@ const directory = await mkdtemp(join(tmpdir(), 'slop-party-e2e-'));
 const server = spawn(process.execPath, ['--import', 'tsx', 'tests/support/party-server.ts'], { env: { ...process.env,
     PORT: '3317', DATABASE_URL: '', AUTH_MODE: 'disabled', HF_TOKEN: 'test', AI_PROVIDER: 'wan22',
     HF_OAUTH_CLIENT_ID: 'test-public-client', HF_OAUTH_ORIGIN: '', HF_LOCAL_STORAGE_DIR: directory,
+    MODERATION_LOCAL_STORAGE_DIR: join(directory, 'moderation'), ARCHIVE_RESERVATIONS_LOCAL_STORAGE_DIR: join(directory, 'archive'),
     AWS_ACCESS_KEY_ID: '', AWS_SECRET_ACCESS_KEY: '' }, stdio: ['ignore', 'pipe', 'inherit'] });
 const exited = new Promise<void>(resolve => server.once('exit', () => resolve()));
 const ready = new Promise<void>((resolve, reject) => {
