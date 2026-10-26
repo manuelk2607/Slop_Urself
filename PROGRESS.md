@@ -8,6 +8,39 @@ deshalb Schemaarbeit offen. Kein validierter kostenloser Moderationsdienst vorha
 fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter ersetzen.
 ## Aktueller Implementierungsstand
 
+### P0-Paket (26.10., nach bfd749e) – Implementierung getestet, Freigabe gesperrt
+
+- Moderation prüft sämtliche Spuren, lehnt bislang unmoderierten Ton/
+  Zusatzspuren ab; strikter Modell-JSON-/Scorevertrag; Abbruchsignal und erneute
+  Qualifikationsprüfung nach Inferenz. FFmpeg-9-Kompatibilität via fps_mode.
+- Echter lokaler CPU-Diagnoseversuch mit ausschließlich synthetischen Motiven:
+  Node 26 brach nativ bei Kontextmodellinitialisierung ab (Exit 134); Node 24
+  erreichte Modellinitialisierung nicht erfolgreich (Exit 1). Keine semantischen
+  Fälle ausgewertet, keine Qualitätsfreigabe, keine GPU-Aufträge. Fehler wird
+  gezielt diagnostiziert, keine blinden Wiederholungen. Evaluator jetzt beaufsichtigt
+  nativen Kindprozess und protokolliert auch Abstürze als fehlgeschlagene Prüfung.
+- Root: Jobtoken wird vor Inferenz gegen tatsächliche HF-whoami-ID des reservierten
+  Spielers geprüft; Regression für unveränderte Metadaten bei falschem Token ergänzt.
+- Wan: neue Parameterprüfung lehnt unbekannte Modell-/LoRA-Defaults, doppelte oder
+  fehlende Eingaben ab. tools/ai-readiness.ts prüft nur öffentliche Metadaten/API und
+  zählt aktive lokale Verbindungen; keinerlei GPU-/Schreibaufrufe.
+- Ergebnis der echten, begrenzten CPU-Diagnose unter Node 24: beide Modelle mit
+  separat geprüftem Cache initialisiert; 9 Fälle, 0 bestanden, 7 technische Ausfälle,
+  2 harmlose Anfragen review. Keine Aussage zur Erkennung unzulässiger Inhalte.
+  Evidenz: docs/audits/2026-10-26-moderation-diagnostic.json. Qualität ungeeignet/
+  nicht freigegeben; keine illegalen Medien, keine GPU-Aufträge.
+- Echter Wan-Endpunkt erreichbar/RUNNING und API kompatibel; keine freigegebene
+  Modellkonfiguration. Lokal 0 aktive HF-Verbindungen; Produktiv-Vault und tatsäch-
+  liche Abrechnung unverifiziert. Keine kostenpflichtigen Tests gestartet.
+- Root-Build/170 Tests und Moderations-Build/7 technische Tests bestanden.
+  Vollständige Chromium-/WebKit-/workerd-Matrix bestanden (Exit 0), danach kleine
+  gebaute Bodybegrenzung der Identitätsantwort mit Unit-Tests erneut geprüft.
+- Sicherheitsfreigabe weiterhin NICHT erteilt. Nächster Schritt: unabhängige P1-
+  Pakete M19 Kapazität vor GPU-Start und M09 Wiedergabe/Enthaltung; M18/schema-
+  bezogene Aufgaben bleiben wegen vorgeschriebenem, fehlendem slop_urself-MCP offen.
+
+### Bereits abgeschlossene Pakete
+
 - a4e896e: M08/M22 – Wertungskennung, Runde/Video prüfen; angenommene Stimmen bleiben bei Austritt erhalten.
 - f4e28e0: M06/M07/M13 und Teile M25/M27/M30 – Eigentumsnachweis statt Namenslogin,
   dauerhafte HF-Zuordnung, scoped History/Videozugriffe und Delete/Restore-Rechte,

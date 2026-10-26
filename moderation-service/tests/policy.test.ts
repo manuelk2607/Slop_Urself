@@ -7,7 +7,10 @@ test('unclear, malformed, sexual and incomplete assessments never approve', () =
     assert.equal(decide(scores, JSON.stringify(safe)), 'allow');
     for (const value of ['', '{}', JSON.stringify({ ...safe, uncertain: true }), JSON.stringify({ ...safe, sexual: true })]) assert.equal(decide(scores, value), 'review');
     assert.equal(decide([], JSON.stringify(safe)), 'review');
-    assert.equal(decide([{ label: 'nsfw', score: 0.99 }], JSON.stringify(safe)), 'block');
+    assert.equal(decide([{ label: 'nsfw', score: 0.99 }], JSON.stringify(safe)), 'review');
+    assert.equal(decide([{ label: 'nsfw', score: 0.99 }, { label: 'normal', score: 0.01 }], JSON.stringify(safe)), 'block');
+    for (const malformed of [JSON.stringify({ ...safe, reason: 'unexpected' }), JSON.stringify(safe).replace('"safe":true', '"safe":false,"safe":true')]) assert.equal(decide(scores, malformed), 'review');
+    assert.equal(decide([{ label: 'nsfw', score: 0.01 }, { label: 'nsfw', score: 0.99 }], JSON.stringify(safe)), 'review');
     assert.equal(decide(scores, JSON.stringify({ ...safe, sexualMinors: true })), 'block');
 });
 test('qualification is tied to immutable models, policy, expiry and a real reviewed test report', () => {

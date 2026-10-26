@@ -17,3 +17,12 @@ export function verifyProviderIdentity(config: ProviderConfig, metadata: unknown
         || runtime?.slop_model?.id !== expected.modelId || runtime.slop_model.revision !== expected.modelRevision) throw new ProviderTrustError();
     return expected;
 }
+
+export function verifyWanParameters(parameters: unknown, values: Record<string, unknown>) {
+    if (!Array.isArray(parameters) || parameters.length > 64) throw new ProviderTrustError();
+    const names = parameters.map(p => p && typeof p === 'object' ? (p as { parameter_name?: unknown }).parameter_name : undefined);
+    // Never inherit an unknown default such as a model/LoRA selector. An API
+    // change needs review even if the server still declares the same model.
+    if (names.some(name => typeof name !== 'string' || !Object.hasOwn(values, name)) || new Set(names).size !== names.length
+        || ['input_image', 'prompt', 'steps', 'duration_seconds'].some(name => !names.includes(name))) throw new ProviderTrustError();
+}

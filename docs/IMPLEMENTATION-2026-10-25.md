@@ -126,6 +126,62 @@ Fortsetzung am **26. Oktober 2026**:
 
 ## Priorisierte Restarbeit
 
+### Neues P0-Paket, 26.10. (nach bfd749e)
+
+- **M02/M03/M11:** Der eigene Dienst lehnt nun sämtliche Ton-/Zusatzspuren ab,
+  decodiert jedes Bild der einzigen H.264-Videospur und bricht bei beschädigten
+  Frames ab. Das verhindert, dass ausschließlich geprüfte Bilder zusammen mit
+  ungeprüftem Ton veröffentlicht werden. Der aktuelle I2V-Vertrag ist ausdrücklich
+  stumm. FFmpeg 9 benötigt `fps_mode passthrough` statt des entfernten `vsync`.
+- **M02/M03:** Modellantworten mit doppelten/unbekannten JSON-Feldern oder
+  unvollständigen/widersprüchlichen Klassifikatorscores werden nicht freigegeben.
+  HTTP-Abbruch/Timeout beendet weitere Arbeit, soweit die native Modelloperation
+  Abbruch zulässt; native Einzeloperationen können darüber hinaus dauern. Der
+  Compute-Slot bleibt bis zum wirklichen Ende belegt. Nach Inferenz wird eine
+  inzwischen abgelaufene Qualifikation erneut geprüft und kann nicht freigeben.
+- **M05/M34:** Unbekannte zusätzliche API-Parameter (insbesondere Modell-/LoRA-
+  Defaults), doppelte Namen oder fehlende Bild/Prompt/Schritte/Dauer werden vor
+  Upload zurückgewiesen. Lesendes Werkzeug `tools/ai-readiness.ts` prüft echten
+  öffentlichen Endpoint/Version/API, ohne Generierung oder persönliche Tokens.
+- **M17:** Jobtoken wird vor Verwendung zusätzlich gegen HF-whoami geprüft.
+  Metadaten und tatsächliche HF-Identität müssen zum reservierten Spieler passen;
+  fremder, vertauschter oder widerrufener Token wird vor Inferenz abgewiesen.
+  Regression prüft auch den Fall korrekter gespeicherter Metadaten bei falschem
+  tatsächlichem Tokeninhaber. Kein Rückfall auf den zentralen Token.
+
+**Tatsächlich extern/lokal geprüft:** Der öffentliche Wan-Space war am 26.10.
+erreichbar und RUNNING (Quellstand `fca7f5a33da3057bae497de5cd70f49ce75e6c02`),
+sein API-Vertrag kompatibel; erforderliche Modellfreigabekonfiguration fehlte.
+Es wurden null aktive Verbindungen im lokalen HF-Vault gefunden. Daraus folgt
+keine Aussage über produktive DO-Verbindungen. Zwei getrennte Kontingentbelastungen
+sind weiterhin nicht live verifiziert. Die HF-Dokumentation bestätigt persönliche
+Token-Abrechnung und mögliche automatische Nutzung von Guthaben bei berechtigten
+Konten nach Kontingentende; eine Restbudgetschätzung allein beweist keinen
+providerseitigen Ausschluss kostenpflichtiger Überziehung.
+[HF API-/Token-Abrechnung](https://huggingface.co/docs/hub/en/spaces-api-endpoints),
+[ZeroGPU-Kontingente und Guthaben](https://huggingface.co/docs/hub/spaces-zerogpu).
+
+**Echter Moderationsversuch, nicht bestanden:** Node 26 brach bei nativer
+Kontextmodellinitialisierung ab (134). Ein Node-24-Lauf scheiterte zunächst ebenfalls
+an Initialisierung; die gezielte Einzelprüfung lud Prozessor und Kontextmodell.
+Mit diesem Cache initialisierte der anschließende beaufsichtigte CPU-Diagnoselauf
+beide Modelle. Neun sichere Diagnosen ergaben null bestandene Fälle: sieben
+technische Fehler/Timeouts und zwei zurückgehaltene harmlose Anfragen. Die vier
+beabsichtigt unzulässigen, nur nichtgrafischen Textanfragen konnten dabei nicht
+semantisch ausgewertet werden; dies belegt keine Erkennung kritischer Inhalte.
+Eine fünfsekündige synthetische Fünf-Frame-Datei scheiterte ebenfalls am Zeitbudget.
+Der kleine Korpus enthält keine realen Personen, rechtswidrigen Bilder oder
+Generierungsaufträge; er ist kein repräsentativer Sicherheitsnachweis. Kein
+Schwellenwert wurde zur Freigabe gelockert. Der alte Diagnoseablauf meldete nur
+Prozessabschluss mit 0; der neue Evaluator meldet nicht bestandene Fälle mit Exit 2.
+
+Quelle: [datensparsamer Diagnosebericht](audits/2026-10-26-moderation-diagnostic.json).
+Die native Initialisierungsursache ist nicht abschließend bewiesen; aus dem
+erfolgreichen Cachewechsel wird keine sichere Ursache abgeleitet. Der beaufsichtigte
+Evaluator erfasst native Abstürze/harte Deadline statt ein altes „starting“ zu belassen.
+**Sicherheitsfreigabe bleibt ausdrücklich aus.** Keine kostenpflichtigen Tests,
+keine GPU-Aufträge, keine produktiven Änderungen und keine juristische Zusage.
+
 1. **P0 – Freigabegrenzen:** Moderationsdienst fachlich und praktisch qualifizieren,
    kontrollierten Wan-Erzeuger anschließen, Altarchiv separat prüfen (M01–M05).
    Profilmigration für Bestandskonten vor Veröffentlichung abnehmen (M06).

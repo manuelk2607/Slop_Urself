@@ -2,10 +2,10 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { POLICY_VERSION } from './policy.js';
 interface Engine {
-    input(image: string, prompt: string): Promise<object>;
-    output(video: string): Promise<object>;
+    input(image: string, prompt: string, signal?: AbortSignal): Promise<object>;
+    output(video: string, signal?: AbortSignal): Promise<object>;
 }
-export function moderationServer(options: { secret: string; version: string; qualified(): boolean; engine(): Engine | undefined }) {
+export function moderationServer(options: { secret: string; version: string; qualified(): boolean; engine(): Engine | undefined; timeoutMs?: number }) {
     if (options.secret.length < 32) throw new Error('A separate moderation secret is required');
     let busy = false;
     return createServer(async (request, response) => {
@@ -20,6 +20,9 @@ export function moderationServer(options: { secret: string; version: string; qua
         if (!options.engine() || (route === '/validate' && !options.qualified())) { send(503, { error: 'qualification_required' }); request.resume(); return; }
         if (busy) { response.setHeader('retry-after', '10'); send(429, { error: 'busy' }); request.resume(); return; }
         busy = true;
+        const abort = new AbortController();
+        const disconnected = () => { if (!response.writableEnded) abort.abort(); };
+        response.once('close', disconnected);
         let timer: ReturnType<typeof setTimeout> | undefined;
         const work = (async () => {
             if (!request.headers['content-type']?.startsWith('application/json')) throw new Error('Invalid request');
@@ -29,19 +32,22 @@ export function moderationServer(options: { secret: string; version: string; qua
             if (!data || data.policyVersion !== POLICY_VERSION || data.modelVersion !== options.version) throw new Error('Policy/model mismatch');
             const engine = options.engine()!;
             let result: object;
-            if (data.stage === 'input' && typeof data.image === 'string' && typeof data.prompt === 'string' && data.prompt.length <= 1024) result = await engine.input(data.image, data.prompt);
-            else if (data.stage === 'output' && typeof data.video === 'string' && data.mime === 'video/mp4') result = await engine.output(data.video);
+            abort.signal.throwIfAborted();
+            if (data.stage === 'input' && typeof data.image === 'string' && typeof data.prompt === 'string' && data.prompt.length <= 1024) result = await engine.input(data.image, data.prompt, abort.signal);
+            else if (data.stage === 'output' && typeof data.video === 'string' && data.mime === 'video/mp4') result = await engine.output(data.video, abort.signal);
             else throw new Error('Invalid stage');
+            abort.signal.throwIfAborted();
+            if (route === '/validate' && !options.qualified()) throw new Error('Qualification expired during inference');
             return { ...result, digest, policyVersion: POLICY_VERSION, modelVersion: options.version, ...(route === '/evaluate' ? { evaluationOnly: true } : {}) };
         })();
         // A timed-out inference retains the sole compute slot until it actually
         // finishes; new requests cannot accumulate uncancellable model work.
         void work.finally(() => { busy = false; }).catch(() => {});
         try {
-            const result = await Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Timeout')), 25_000); })]);
+            const result = await Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => { abort.abort(); reject(new Error('Timeout')); }, Math.min(25_000, options.timeoutMs || 25_000)); })]);
             send(200, result);
         } catch { send(503, { error: 'moderation_unavailable' }); }
-        finally { clearTimeout(timer); }
+        finally { clearTimeout(timer); response.removeListener('close', disconnected); }
     });
 }
 async function body(request: IncomingMessage) {

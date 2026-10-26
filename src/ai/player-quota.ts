@@ -1,6 +1,7 @@
 import { GpuQuotaError, QuotaBudget, type BudgetStorage, type QuotaConfig, type QuotaCapacity } from './quota';
 import type { GenerationQuality } from './providers';
 import { HfRequiredError, type HfConnections } from '../auth/huggingface';
+import { boundedJson } from '../server/body';
 
 export interface BudgetPlayer { id: string; accountId?: string; hfConnectionId?: string }
 interface Owner extends BudgetPlayer { subject: string; central: boolean }
@@ -128,6 +129,15 @@ export class PlayerQuotaBudget {
         if (!owner.hfConnectionId || !owner.accountId) throw new HfRequiredError();
         const credential = await this.connections.jobCredential(jobId);
         if (credential.accountId !== owner.accountId || credential.subject !== owner.subject) throw new HfRequiredError();
+        // Verify the token itself, not only the metadata sealed alongside it.
+        // A swapped/stale credential must never charge another HF identity.
+        const identity = await fetch('https://huggingface.co/api/whoami-v2', { headers: { authorization: `Bearer ${credential.token}` }, redirect: 'error', signal: AbortSignal.timeout(10_000) });
+        if ([401, 403].includes(identity.status)) throw new HfRequiredError();
+        if (!identity.ok) throw new Error('Die persönliche HF-Identität ist vorübergehend nicht prüfbar. Es wurde kein Videoauftrag gestartet.');
+        let user: { id?: unknown };
+        try { user = await boundedJson(identity, 32_768) as typeof user; }
+        catch { throw new Error('Die persönliche HF-Identität konnte nicht sicher geprüft werden.'); }
+        if (!user || user.id !== owner.subject) throw new HfRequiredError();
         return credential.token;
     }
     async allowAttempt(code: string, seconds: number, jobId?: string) {

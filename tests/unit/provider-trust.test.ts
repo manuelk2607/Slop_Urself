@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { approvedProvider, verifyProviderIdentity } from '../../src/ai/provider-trust';
+import { approvedProvider, verifyProviderIdentity, verifyWanParameters } from '../../src/ai/provider-trust';
 import { testProviderConfig, testProviderMetadata, testProviderSettings } from '../support/provider-fixture';
 import { archiveRecovery } from '../../src/ai/recovery';
 import { AiPendingError, AI_JOB_MAX_AGE_MS, type AiJob } from '../../src/ai/generation';
@@ -22,4 +22,14 @@ test('archive outages retry completed jobs without allowing a new generation; bl
     const blocked = new ModerationError('content_blocked', 'blocked'); assert.equal(archiveRecovery(blocked, job), blocked);
     assert.equal(archiveRecovery(error, { ...job, status: 'running' }), error);
     assert.equal(archiveRecovery(error, job, job.submittedAt + AI_JOB_MAX_AGE_MS), error);
+});
+
+test('Wan API cannot silently inherit unknown model selectors, duplicate names or missing image inputs', () => {
+    const values = { input_image: null, prompt: 'wave', steps: 8, duration_seconds: 5 };
+    const parameters = Object.keys(values).map(parameter_name => ({ parameter_name, parameter_has_default: false }));
+    verifyWanParameters(parameters, values);
+    assert.throws(() => verifyWanParameters([...parameters, { parameter_name: 'model_choice', parameter_has_default: true }], values));
+    assert.throws(() => verifyWanParameters([...parameters, parameters[0]], values));
+    assert.throws(() => verifyWanParameters(parameters.slice(1), values));
+    assert.throws(() => verifyWanParameters(null, values));
 });

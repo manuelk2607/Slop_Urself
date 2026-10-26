@@ -6,7 +6,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "node --import tsx --test tests/*.test.ts",
-    "models:resolve": "node --import tsx src/resolve-models.ts"
+    "models:resolve": "node --import tsx src/resolve-models.ts",
+    "evaluate:local": "node --import tsx src/evaluate-runner.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",

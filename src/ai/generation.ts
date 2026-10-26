@@ -3,7 +3,7 @@ import { preparedImageSize } from './images';
 import { validateImage } from './image-input';
 import { normalizeImage } from '../security/images';
 import { moderateInput, validatePrompt, type ModerationConfig } from '../security/moderation';
-import { approvedProvider, verifyProviderIdentity, ProviderTrustError, type ProviderIdentity } from './provider-trust';
+import { approvedProvider, verifyProviderIdentity, verifyWanParameters, ProviderTrustError, type ProviderIdentity } from './provider-trust';
 import { GradioProviderError as AiProviderError, readQueueResult } from './gradio';
 import { logAiEvent, type AiTelemetry } from './telemetry';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
@@ -242,6 +242,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
                 fnIndex = settings.dependencies?.find(dependency => dependency.api_name === endpoint.slice(1))?.id;
                 if (typeof fnIndex !== 'number' || !Number.isInteger(fnIndex) || fnIndex < 0) throw new Error('Space bietet die erwartete Video-Queue nicht an.');
                 providerIdentity = verifyProviderIdentity(config, metadata, settings);
+                verifyWanParameters(parameters, buildProviderValues(provider, prompt, null, config));
             }
             else throw new ProviderTrustError();
             // Validate before uploading, including the requested minimum duration.

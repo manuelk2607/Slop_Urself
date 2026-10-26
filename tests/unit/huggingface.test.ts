@@ -373,6 +373,22 @@ test('a pinned job token must match its reserved player and HF identity', async 
     } finally { f.restore(); }
 });
 
+test('live token identity is rechecked before inference even when sealed job metadata still matches', async () => {
+    const f = fixture();
+    try {
+        const a = await f.connect('a', 'hf-a');
+        const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        await budget.reserve('TEST', 1, 1, 'economy', [a]);
+        await budget.begin('TEST', 1, 'identity-job', a.id, 1, a);
+        assert.match((await budget.tokenForJob('TEST', 'identity-job'))!, /private-access-a/);
+        f.tokens['private-access-a-hf-a'].id = 'different-account';
+        await assert.rejects(budget.tokenForJob('TEST', 'identity-job'), HfRequiredError);
+        await assert.rejects(budget.allowAttempt('TEST', 79, 'identity-job'), HfRequiredError);
+        delete f.tokens['private-access-a-hf-a'];
+        await assert.rejects(budget.tokenForJob('TEST', 'identity-job'), HfRequiredError);
+    } finally { f.restore(); }
+});
+
 test('a revoked HF token requests reconnection before any new video can start', async () => {
     const f = fixture();
     try {

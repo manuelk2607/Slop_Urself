@@ -68,6 +68,23 @@ Bilder/Prompts und Videos. Private Schlüssel und Testberichte geheim halten.
 Modellcache enthält Gewichte, keine absichtlich dauerhaft gespeicherten Nutzermedien.
 Hostinglogs/Backups und reale Löschwirkung müssen gesondert geprüft werden.
 
+## Begrenzter lokaler Diagnoselauf
+
+`npm run evaluate:local -- --report /tmp/neuer-diagnosebericht.json` lädt die
+festgelegten öffentlichen Modelle, nutzt ausschließlich CPU, eigene nicht sexuelle
+Zeichnungen und nichtgrafische Moderationsanfragen. Es werden weder Videos per HF
+generiert noch Nutzermedien hochgeladen. Node 24 entspricht der Container-Laufzeit.
+Der beaufsichtigte Prozess endet spätestens nach zehn Minuten; Absturz, Timeout und
+nicht bestandene Fälle sind Fehler, keine Qualifikation. Der Bericht bleibt immer
+`qualified: false`: Dieser kleine Diagnosetest ersetzt keinen repräsentativen,
+fachlich geprüften Qualitätsnachweis. Vorhandene Berichte werden nicht überschrieben.
+
+Stand 26.10.: lokaler FP32-Diagnoselauf nicht bestanden (technische Ausfälle,
+zurückgehaltene harmlose Fälle und Laufzeitüberschreitungen). Kein Einsatz von
+Missbrauchsmaterial, keine semantische Sicherheitsfreigabe. Technische Regressionen
+prüfen zusätzlich echten FFmpeg-Decode aller Frames, Ton-/Zusatzspur-Ablehnung,
+Abbruch und Ablauf der Qualifikation; diese Tests sind keine Wirksamkeitsquote.
+
 Quellen: [NSFW-ONNX-Modell](https://huggingface.co/onnx-community/nsfw_image_detection-ONNX),
 [SmolVLM](https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct),
 [Transformers.js](https://huggingface.co/docs/transformers.js/).
