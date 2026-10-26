@@ -67,8 +67,8 @@ const messageBuckets: RateBuckets = {};
 const budgetData = new Map<string, unknown>();
 const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
-const reports = new ContentReports(nodeHfStorage(path.join(process.cwd(), '.local/moderation')));
-const archiveReservations = new ArchiveReservations(nodeHfStorage(path.join(process.cwd(), '.local/archive-reservations')));
+const reports = new ContentReports(nodeHfStorage(process.env.MODERATION_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/moderation')));
+const archiveReservations = new ArchiveReservations(nodeHfStorage(process.env.ARCHIVE_RESERVATIONS_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/archive-reservations')));
 async function canReadVideo(url: string, account: Account) {
     return account.id === config.ADMIN_ACCOUNT_ID || [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id))
         || Boolean(await getDatabase()?.canReadVideo(url, account.id));

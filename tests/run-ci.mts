@@ -1,10 +1,15 @@
 import { spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { cloudflareRuntime } from './support/cloudflare';
 
 const children = new Set<ReturnType<typeof spawn>>();
+const localState = await mkdtemp(join(tmpdir(), 'slop-ci-state-'));
 let cloudflare: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 let cloudflareProfiles: Awaited<ReturnType<typeof cloudflareRuntime>> | undefined;
 const env = { ...process.env, DATABASE_URL: '', HF_TOKEN: '', AI_PROVIDER: 'mock', ADMIN_ACCOUNT_ID: '', ADMIN_ACCESS_KEY: '',
+    HF_LOCAL_STORAGE_DIR: join(localState, 'hf-support'), MODERATION_LOCAL_STORAGE_DIR: join(localState, 'moderation'), ARCHIVE_RESERVATIONS_LOCAL_STORAGE_DIR: join(localState, 'archive-reservations'),
     HF_OAUTH_CLIENT_ID: '', HF_OAUTH_ORIGIN: '', HF_OAUTH_ENCRYPTION_KEY: '',
     MODERATION_URL: '', MODERATION_SECRET: '', MODERATION_POLICY_VERSION: '', MODERATION_MODEL_VERSION: '',
     WAN_SPACE_ID: '', WAN_SPACE_REVISION: '', WAN_MODEL_ID: '', WAN_MODEL_REVISION: '',
@@ -18,7 +23,7 @@ async function run(args: string[], extra: Record<string, string> = {}) {
     if (code !== 0) throw new Error(`Test failed: ${args.join(' ')}`);
 }
 async function start(port: number, auth: boolean) {
-    const child = spawn(process.execPath, ['dist/server/node.js'], { env: { ...env, PORT: String(port), AUTH_MODE: auth ? '' : 'disabled' }, stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(process.execPath, ['dist/server/node.js'], { env: { ...env, PORT: String(port), AUTH_MODE: auth ? '' : 'disabled', HF_LOCAL_STORAGE_DIR: join(localState, `hf-${port}`) }, stdio: ['ignore', 'pipe', 'inherit'] });
     children.add(child);
     await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Test server startup timed out')), 15_000);
@@ -28,10 +33,14 @@ async function start(port: number, auth: boolean) {
     });
 }
 async function cleanup() {
-    await Promise.all([...children].map(child => new Promise<void>(resolve => { child.once('exit', () => resolve()); child.kill('SIGTERM'); })));
+    await Promise.all([...children].map(child => new Promise<void>(resolve => {
+        if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
+        child.once('exit', () => resolve()); child.kill('SIGTERM');
+    })));
     children.clear();
     await cloudflare?.dispose(); cloudflare = undefined;
     await cloudflareProfiles?.dispose(); cloudflareProfiles = undefined;
+    await rm(localState, { recursive: true, force: true });
 }
 process.once('SIGTERM', () => { void cleanup().then(() => process.exit(143)); });
 process.once('SIGINT', () => { void cleanup().then(() => process.exit(130)); });
