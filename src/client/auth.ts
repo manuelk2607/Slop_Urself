@@ -1,4 +1,4 @@
-interface Account { id: string; name: string }
+interface Account { id: string; name: string; identityProof?: 'owner' | 'pending' }
 interface AuthUI {
     signedIn(name: string, hfRequired: boolean): Promise<void>;
     signedOut(): Promise<void>;
@@ -21,6 +21,7 @@ export async function initializeAccount(ui: AuthUI) {
     const existingLabel = existing.innerText;
     const error = document.getElementById('authError')!;
     const bar = document.getElementById('accountBar')!;
+    const identityNotice = document.getElementById('identityNotice')!;
     let ready = false;
     let hfRequired = true;
     let pending: Promise<void> | undefined;
@@ -36,6 +37,7 @@ export async function initializeAccount(ui: AuthUI) {
         ready = true; bar.hidden = false;
         document.getElementById('accountName')!.innerText = account.name;
         username.value = account.name;
+        identityNotice.hidden = account.identityProof !== 'pending';
         await ui.signedIn(account.name, hfRequired);
     }
     async function enter(mode: 'create' | 'login') {
@@ -59,7 +61,7 @@ export async function initializeAccount(ui: AuthUI) {
     existing.addEventListener('click', () => { void enter('login'); });
     refresh = async () => {
         if (!ready) return;
-        if (!pending) pending = session('refresh').then(() => {}).catch(async reason => {
+        if (!pending) pending = session('refresh').then(account => { identityNotice.hidden = account.identityProof !== 'pending'; }).catch(async reason => {
             if (reason instanceof SessionError && reason.status === 401) {
                 ready = false; await ui.signedOut(); bar.hidden = true; ui.showAuth(); error.innerText = reason.message;
             }
@@ -73,6 +75,7 @@ export async function initializeAccount(ui: AuthUI) {
             const response = await fetch('/api/session', { method: 'DELETE', signal: AbortSignal.timeout(10_000) });
             if (!response.ok) throw new Error('Abmelden ist gerade nicht erreichbar.');
             bar.hidden = true; ui.showAuth();
+            identityNotice.hidden = true;
         } catch (reason) { error.innerText = reason instanceof Error ? reason.message : 'Abmelden ist gerade nicht erreichbar.'; ui.showAuth(); }
     });
     window.setInterval(() => { void refreshAccount(); }, 5 * 60_000);

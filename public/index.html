@@ -52,6 +52,7 @@
         <button id="hfAccountButton" class="btn-muted" type="button" title="Hugging-Face-Konto verwalten">KI-Konto</button>
         <button id="signOutButton" class="btn-muted" type="button">Abmelden</button>
     </div>
+    <p id="identityNotice" class="hint-text" role="status" hidden>Bestätige dieses Profil über „KI-Konto“ mit dem bereits verbundenen HF-Konto, bevor du spielen oder private Statistiken öffnen kannst. Noch nie HF verbunden? Bitte den Betreiber um eine einmalige sichere Zuordnung.</p>
     <dialog id="hfDialog" aria-labelledby="hfTitle">
         <div class="hf-dialog-heading">
             <h2 id="hfTitle">KI-Konto</h2>
@@ -99,7 +100,7 @@
         </div>
         <button id="copyRoomCodeButton" class="icon-button" type="button" title="Einladungslink kopieren" aria-label="Einladungslink kopieren">Einladungslink kopieren</button>
         <button id="leaveRoomButton" class="icon-button danger" type="button" title="Spiel verlassen">Spiel verlassen</button>
-        <p id="roomNotice" class="room-notice"></p>
+        <p id="roomNotice" class="room-notice" role="status"></p>
         <div id="phaseToolbar" class="phase-toolbar" hidden>
             <output id="phaseCountdown" aria-live="off"></output>
             <button id="closePhaseButton" class="btn-muted" type="button">Phase abschließen</button>
@@ -128,7 +129,7 @@
 
     <section id="screenStats" class="game-screen" style="display: none;">
         <h2>Statistiken</h2>
-        <p id="statsNotice" class="subtitle"></p>
+        <p id="statsNotice" class="subtitle" role="status"></p>
         <p id="statsActionNotice" class="error-msg" role="alert" hidden></p>
         <div id="statsOverview" class="stats-overview"></div>
         <h3>Spieler</h3>
@@ -293,7 +294,7 @@
 
         <div id="loadingSection" style="display: none;">
             <div class="spinner"></div>
-            <p id="loadingText">KI berechnet das Video...</p>
+            <p id="loadingText" role="status">KI berechnet das Video...</p>
         </div>
     </section>
 
@@ -303,7 +304,7 @@
         <p id="votingTask" class="task-assignment" hidden></p>
 
         <div class="video-container">
-            <video id="votingVideoPlayer" controls autoplay muted loop playsinline>
+            <video id="votingVideoPlayer" controls muted loop playsinline>
                 Dein Browser unterstützt keine Videos.
             </video>
         </div>

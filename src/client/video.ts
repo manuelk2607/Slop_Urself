@@ -54,7 +54,8 @@ export function videoPlayback({ video, notice, retry }: PlaybackElements) {
         clear();
         video.src = url;
         video.load();
-        if (autoplay) void play();
+        video.autoplay = false;
+        if (autoplay && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) void play();
     }
 
     video.addEventListener('loadeddata', () => { loaded = true; clear(); });
@@ -66,7 +67,7 @@ export function videoPlayback({ video, notice, retry }: PlaybackElements) {
     });
     retry.addEventListener('click', () => {
         const url = video.getAttribute('src');
-        if (url) load(url, true);
+        if (url) { load(url); void play(); }
     });
     return { load, play };
 }

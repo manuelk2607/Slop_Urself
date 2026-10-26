@@ -116,6 +116,8 @@ try {
         await another.locator('#screenLobby').waitFor({ state: 'visible' });
         assert.equal((await (await second.request.get(`${base}/api/session`)).json()).account.id, profileId);
         assert.equal((await second.request.get(`${base}/api/stats`)).status(), 401, 'Knowing a profile name is not proof of ownership.');
+        assert.equal(await another.locator('#identityNotice').isVisible(), true);
+        assert.match(await another.locator('#identityNotice').innerText(), /bereits verbundenen HF-Konto/);
         assert.equal((await second.request.post(`${base}/api/session`, { headers: { origin: base }, data: { mode: 'refresh' } })).status(), 200, 'A pending shell can reconnect its bound HF identity.');
     } finally { await second.close(); }
 

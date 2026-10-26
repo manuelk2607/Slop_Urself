@@ -1,6 +1,7 @@
 import type { PlayerStats, StatsOverview, VideoStats, RoomStats, VideoCreator } from '../database/types';
 import { videoPlayback } from './video';
 import { reportVideoButton } from './content-reports';
+import { ranked } from '../shared/ranking';
 import { historySelection, type HistoryKind } from './history-selection';
 import { createElement, Download, VideoOff } from 'lucide';
 
@@ -70,16 +71,16 @@ export function statisticsView({ statsOverview, statsList, statsNotice, videoSta
         }
 
         statsNotice.innerText = 'Gespeicherte Gesamtwertung über alle Spiele.';
-        players.forEach((player, index) => {
+        ranked(players, player => player.totalScore).forEach(({ item: player, rank }) => {
             const li = document.createElement('li');
-            li.className = `score-item ${index === 0 ? 'leader' : ''}`;
+            li.className = `score-item ${rank === 1 ? 'leader' : ''}`;
 
             const playerInfo = document.createElement('div');
             playerInfo.className = 'player-info';
 
             const rankBadge = document.createElement('span');
             rankBadge.className = 'rank-badge';
-            rankBadge.innerText = `#${index + 1}`;
+            rankBadge.innerText = `#${rank}`;
 
             const name = document.createElement('button');
             name.type = 'button';

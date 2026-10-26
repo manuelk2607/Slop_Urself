@@ -42,8 +42,9 @@ export function historyUndo(refresh: () => Promise<void>) {
                     if (!response.ok) throw new Error(data.error || 'Das Video konnte nicht wiederhergestellt werden.');
                     for (const result of data.results || []) {
                         const url = `/api/stats/videos/${result.id}`;
-                        if (batch.some(item => item.url === url) && ['restored', 'expired', 'not_found', 'unavailable'].includes(result.status)) pending.delete(url);
+                        if (batch.some(item => item.url === url) && ['restored', 'expired', 'not_found', 'unavailable', 'forbidden'].includes(result.status)) pending.delete(url);
                         if (result.status === 'expired') reasons.add('Bei einigen Videos ist die Frist bereits abgelaufen.');
+                        if (result.status === 'forbidden') reasons.add('Einige Videos gehören zu einem anderen Konto und können hier nicht wiederhergestellt werden.');
                     }
                 } catch (reason) { reasons.add(reason instanceof Error ? reason.message : 'Wiederherstellen fehlgeschlagen.'); }
             }));

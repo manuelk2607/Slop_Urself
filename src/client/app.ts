@@ -1,4 +1,5 @@
 import { initializeAccount, refreshAccount } from './auth';
+import { ranked } from '../shared/ranking';
 import { huggingFaceConnection } from './huggingface';
 import { createRealtimeClient, type SocketPayload } from './realtime';
 import { statisticsView } from './statistics';
@@ -159,6 +160,7 @@ function saveSession(roomId: string, sessionId: string) {
 }
 
 function clearSession(preserveStored = false) {
+    document.body.classList.remove('room-open');
     editingRoundCount = false;
     hfConnection.lock(false);
     party.clear();
@@ -172,6 +174,7 @@ function clearSession(preserveStored = false) {
 
 // --- SCREEN SWITCHER ---
 function showScreen(screenToShow: HTMLElement) {
+    const changed = screenToShow.style.display !== 'block';
     document.getElementById('aboutGame')!.hidden = ![document.getElementById('screenStartup'), document.getElementById('screenAuth'), screenLobby].includes(screenToShow);
     document.body.classList.toggle('statistics-open', screenToShow === screenStats);
     if (screenToShow !== screenStats) accounts.reset();
@@ -179,6 +182,10 @@ function showScreen(screenToShow: HTMLElement) {
     if (screenToShow !== screenStats) videoStatsList.querySelectorAll('video').forEach(video => video.pause());
     [document.getElementById('screenStartup')!, document.getElementById('screenAuth')!, screenLobby, screenStats, screenRoomLobby, screenCreate, screenVoting, screenResult, screenGameOver].forEach(s => s.style.display = 'none');
     screenToShow.style.display = 'block';
+    if (changed) {
+        const heading = screenToShow.querySelector<HTMLElement>('h1, h2, h3');
+        if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+    }
 }
 
 function clearImagePreview() {
@@ -191,16 +198,16 @@ function clearImagePreview() {
 function renderScoreList(target: HTMLUListElement, players: { id: string; name: string; score: number }[]) {
     target.innerHTML = '';
 
-    [...players].sort((a, b) => b.score - a.score).forEach((p, index) => {
+    ranked(players, p => p.score).forEach(({ item: p, rank }) => {
         const li = document.createElement('li');
-        li.className = `score-item ${index === 0 ? 'leader' : ''}`;
+        li.className = `score-item ${rank === 1 ? 'leader' : ''}`;
 
         const playerInfo = document.createElement('div');
         playerInfo.className = 'player-info';
 
         const rankBadge = document.createElement('span');
         rankBadge.className = 'rank-badge';
-        rankBadge.innerText = `#${index + 1}`;
+        rankBadge.innerText = `#${rank}`;
 
         const name = document.createElement('span');
         name.className = 'player-name';
@@ -331,6 +338,7 @@ joinRoomButton.addEventListener('click', () => { void joinRoom('player'); });
 document.getElementById('watchRoomButton')!.addEventListener('click', () => { void joinRoom('spectator'); });
 
 function enterRoom(roomId: string, sessionId: string, playerId?: string) {
+    document.body.classList.add('room-open');
     clearInvitation();
     setLobbyPending(false);
     pendingRoomCreation = null;
