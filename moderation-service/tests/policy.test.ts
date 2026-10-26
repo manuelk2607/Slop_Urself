@@ -21,7 +21,7 @@ test('qualification is tied to immutable models, policy, expiry and a real revie
     assert.notEqual(modelVersion(lock, 'b'.repeat(64)), version);
     const value = { policyVersion: POLICY_VERSION, modelVersion: version, expiresAt: new Date(Date.now() + 86400_000).toISOString(), ownerReviewed: true, licensesReviewed: true,
         testReportSha256: 'c'.repeat(64), riskGroups: ['sexual_minors', 'nonconsensual', 'graphic_abuse', 'benign_de', 'benign_en'], benignCases: 30, latencyP95Ms: 20000 };
-    assert.equal(qualificationValid(value, version), true);
+    assert.equal(qualificationValid(value, version), false, 'Declared report metadata without the actual validated report cannot qualify.');
     assert.equal(qualificationValid({ ...value, latencyP95Ms: 40000 }, version), false);
     assert.equal(qualificationValid({ ...value, ownerReviewed: false }, version), false);
     assert.equal(qualificationValid(value, 'wrong'), false);

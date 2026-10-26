@@ -8,6 +8,30 @@ deshalb Schemaarbeit offen. Kein validierter kostenloser Moderationsdienst vorha
 fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter ersetzen.
 ## Aktueller Implementierungsstand
 
+### Aktueller Fortsetzungspunkt (nach f37e0da, uncommittet)
+
+- M36: gemeinsame echte Stufen Queue/Inferenz/Abfrage/Archiv statt Prozentwerten;
+  Auftragsbeginn und Stufe im Raumsnapshot, CF persistiert Fortschritt. Reload
+  übernimmt Uhrzeit/Job-ID; verspätete fremde Fortschritte ignoriert. Separater
+  Zähler ohne Live-Region-Daueransagen. Chromium-Slow-Mock-Test bestanden.
+- M20: Archivfehler unterscheiden Download, Ausgabemoderation, Inventar und
+  Speicherung; Job/Release korreliert, keine Rohfehler/URLs/Prompts. Regression.
+- Root-Build/181 Unit-Tests bestanden. Gesamtlauf stoppte an historischer Fixture:
+  Archiv-/Quota-Tests verbanden mehrere Profile mit demselben HF-Konto, was M23
+  jetzt korrekt sperrt. Fixtures auf separate IDs/Tokens/Kontingente umgestellt;
+  schwaches drittes Konto und persönliche Reservierungen werden explizit geprüft.
+- Gezielte Chromium/WebKit-Prüfung party/quota/extension/generation läuft in
+  Session 90892, Log /tmp/slop-updated-hf-fixtures.log. Nach Bestehen vollständige
+  Matrix neu starten; vorherige Läufe NICHT als Gesamterfolg werten.
+- P0: Moderationsfreigabe benötigt jetzt den tatsächlichen gehashten, versions-
+  gebundenen Bericht, ausreichende Fall-/Videodeckung und berechnete Fehlerraten/
+  Latenz statt bloßer eingetragener SHA. Dienst-Build/10 technische Tests bestanden.
+  Neu: src/evidence.ts, im Runtime-Hash enthalten. Kein qualifizierender Bericht
+  erstellt, keine Freigabe; derzeitiger echter Benchmark weiterhin fehlgeschlagen.
+- Nächster Schritt: gezielten Browserlauf abnehmen/reparieren, volle CI, Diensttests
+  nach finalem kleinen Zeitgrenzen-Check erneut; dann aktuelle Pakete committen.
+  Keine produktiven Änderungen, kein Push/Deployment. Sämtliche lokalen Commits erhalten.
+
 ### P0-Paket (26.10., nach bfd749e) – Implementierung getestet, Freigabe gesperrt
 
 - Moderation prüft sämtliche Spuren, lehnt bislang unmoderierten Ton/

@@ -47,8 +47,24 @@ angelegt oder veröffentlicht und kein Schutzversprechen für die Modelle abgege
 6. Erst nach fachlicher/Betreiberprüfung ein privates qualification.json bereitstellen:
    policyVersion, ausgegebene modelVersion, expiresAt (maximal 31 Tage), ownerReviewed,
    licensesReviewed, testReportSha256, riskGroups, benignCases und latencyP95Ms.
-   Die Pflichtfelder prüft src/policy.ts. Der Nachweis muss auf tatsächlichen Tests
-   beruhen; ein ausgefülltes JSON allein beweist keine Schutzwirkung.
+   Zusätzlich muss der **tatsächliche private Testbericht** unter
+   `MODERATION_TEST_REPORT_FILE` (Standard `qualification-report.json`) vorliegen.
+   Seine SHA-256 muss exakt übereinstimmen. Fehlender/diagnostischer Bericht gibt
+   nicht frei. `src/evidence.ts` prüft Version, Policy, Alter und einzelne Messungen:
+   `purpose: moderation-qualification`, `sufficientForQualification: true`,
+   `completedAt`, `modelVersion`, `policyVersion`, `cases`. Jeder Fall hat eindeutige
+   `id`, `group`, `expected` (allow/hold), `decision` (allow/review/block),
+   `decodeComplete: true` und gemessene `elapsedMs` unter 25.000.
+   Mindestens je zehn harmlose DE-/EN-Fälle, je fünf sichere Moderationsanfragen zu
+   sexual_minors/nonconsensual/graphic_abuse sowie drei harmlose Fünfsekundenvideos
+   sind erforderlich. Letztere müssen mindestens 80 vollständig geprüfte Frames,
+   Dauer, H.264 und yuv420p nachweisen (group benign_video). Keine kritische
+   Fehlfreigabe; höchstens fünf Prozent zurückgehaltene harmlose Fälle. Gruppen,
+   harmlose Fallzahl und P95 werden aus dem Bericht berechnet und mit der Freigabe
+   verglichen. Die Gültigkeit endet spätestens 31 Tage nach der Messung.
+   Diese Mindestprüfung ersetzt keine fachliche Beurteilung der Repräsentativität;
+   frei erfundene Berichte sind kein Nachweis. Der bestehende kleine Diagnoselauf
+   erzeugt ausdrücklich keinen qualifizierenden Bericht und keine Freigabedatei.
    modelVersion enthält auch den Fingerabdruck der tatsächlich laufenden Prüfsoftware
    und ihres Dependency-Locks. Nach Code-/Dependency-Änderungen ist eine erneute
    Qualifikation nötig; eine alte Freigabe wird nicht still übernommen. Maßgeblich ist

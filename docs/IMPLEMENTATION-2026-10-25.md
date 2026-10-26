@@ -133,6 +133,31 @@ Fortsetzung am **26. Oktober 2026**:
 
 ## Priorisierte Restarbeit
 
+### Laufendes Folgepaket nach f37e0da
+
+M36 stellt beim Reload die bekannte Generierungsstufe mit Auftragsbeginn wieder her.
+Queue/Inferenz stammen aus tatsächlichen Gradio-Ereignissen; eine Abfrage wird nicht
+als sicher laufende GPU-Berechnung ausgegeben. CF speichert Änderungen; der Client
+akzeptiert Fortschritt nur für den aktuellen Raum/Auftrag. Kein scheinpräziser
+Prozentbalken, getrennte Zeit ohne sekündliche Screenreader-Ansage. M20 unterscheidet
+Archivstufen Download, Moderation, Inventar und Speicherung, jeweils mit validierter
+Release-/Auftragskennung ohne Fehlertext/Privatdaten.
+
+P0-Freigabevertrag gehärtet: Der tatsächliche private, gehashte Messbericht muss
+vorliegen, zur laufenden Software-/Modellversion gehören und ausreichende Gruppen,
+harmlose DE-/EN-Fälle sowie echte vollständig decodierte Fünfsekundenvideos belegen.
+Fallentscheidungen, Fehlfreigaben/Fehlalarme, Latenz und Ablauf werden nachgerechnet.
+Eine bloße SHA-/Fallzahlbehauptung oder der kleine Diagnosetest qualifiziert nicht.
+Das ersetzt keine menschliche Qualitäts-/Lizenzprüfung und liefert weiterhin
+keinen bestätigten Schutz gegen CSAM/fehlende Einwilligung. Kein Freigabebericht
+erzeugt, echte KI weiterhin gesperrt.
+
+Abnahme bisher: Root-Build/181 Unit-Tests, Dienst-Build/10 technische Tests; neuer
+Slow-Mock-Reload-Test unter Chromium bestanden. Gesamtmatrix deckte noch gemeinsame
+HF-Identitäten in alten Archiv-/Quota-Fixtures auf. Diese erhalten separate Konten;
+Quota-Prüfung testet nun ausdrücklich einen schwachen dritten Spieler, individuelle
+Reserven und Aufruflimits. Gezielter Zweibrowserlauf und Gesamtabnahme noch offen.
+
 ### Weitere Pakete am 26.10.: M09, M20 und M27
 
 - **M09/M22:** Neue klassische Mehrspieler-Videos bleiben trotz schneller Stimmen

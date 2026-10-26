@@ -12,6 +12,7 @@ public/assets/slopurself-touch-v4.png
 node_modules/
 moderation-service/dist/
 moderation-service/qualification.json
+moderation-service/qualification-report.json
 cloudflare/.wrangler/
 cloudflare/.dev.vars
 cloudflare/public/*
