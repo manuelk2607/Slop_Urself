@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { createEngine } from './engine.js';
-import { modelVersion, qualificationValid, type ModelLock } from './policy.js';
+import { qualificationValid, type ModelLock } from './policy.js';
+import { runtimeVersion } from './version.js';
 import { moderationServer } from './http.js';
 
 const lock = JSON.parse(await readFile('model-lock.json', 'utf8')) as ModelLock;
-const version = modelVersion(lock);
+const version = await runtimeVersion(lock);
 let engine: Awaited<ReturnType<typeof createEngine>> | undefined;
 let qualification: unknown;
 try { qualification = JSON.parse(process.env.MODERATION_QUALIFICATION_JSON || await readFile(process.env.MODERATION_QUALIFICATION_FILE || 'qualification.json', 'utf8')); } catch { /* /validate remains unavailable. */ }

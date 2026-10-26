@@ -49,6 +49,10 @@ angelegt oder veröffentlicht und kein Schutzversprechen für die Modelle abgege
    licensesReviewed, testReportSha256, riskGroups, benignCases und latencyP95Ms.
    Die Pflichtfelder prüft src/policy.ts. Der Nachweis muss auf tatsächlichen Tests
    beruhen; ein ausgefülltes JSON allein beweist keine Schutzwirkung.
+   modelVersion enthält auch den Fingerabdruck der tatsächlich laufenden Prüfsoftware
+   und ihres Dependency-Locks. Nach Code-/Dependency-Änderungen ist eine erneute
+   Qualifikation nötig; eine alte Freigabe wird nicht still übernommen. Maßgeblich ist
+   die beim Start des gebauten Dienstes ausgegebene Version.
    In Docker kann die Datei als Secret-Datei oder schreibgeschützte Laufzeitdatei
    unter MODERATION_QUALIFICATION_FILE bereitgestellt werden; nie öffentlich committen.
 7. Im Spiel MODERATION_URL auf die HTTPS-Adresse **mit `/validate`**, den separaten

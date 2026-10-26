@@ -23,9 +23,10 @@ export function decide(scores: Scores[], context: string): Decision {
     return 'allow';
 }
 export interface ModelLock { nsfw: { id: string; revision: string }; vlm: { id: string; revision: string } }
-export function modelVersion(lock: ModelLock) {
+export function modelVersion(lock: ModelLock, implementation: string) {
+    if (!/^[a-f0-9]{64}$/.test(implementation)) throw new Error('A runtime implementation fingerprint is required');
     for (const model of [lock.nsfw, lock.vlm]) if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(model.id) || !/^[a-f0-9]{40}$/.test(model.revision)) throw new Error('Models require immutable repository revisions');
-    return createHash('sha256').update(JSON.stringify({ lock, policy: POLICY, thresholds: [0.2, 0.8] })).digest('hex');
+    return createHash('sha256').update(JSON.stringify({ lock, implementation, policy: POLICY, thresholds: [0.2, 0.8] })).digest('hex');
 }
 export function qualificationValid(value: unknown, version: string, now = Date.now()) {
     const q = value as { policyVersion?: unknown; modelVersion?: unknown; expiresAt?: unknown; ownerReviewed?: unknown; licensesReviewed?: unknown;
