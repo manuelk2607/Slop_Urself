@@ -15,6 +15,7 @@ import type { Account } from '../auth/session';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
 import { HfConnections, HfRequiredError, requirePlayerHf, type HfConfig } from '../auth/huggingface';
+import { verifyHfRoster } from '../auth/hf-roster';
 import { nodeHfStorage } from '../auth/node-hf-storage';
 import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
@@ -536,7 +537,10 @@ io.on('connection', (socket: Socket) => {
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
         checkJoin(room, name, socket.data.account?.id, spectator);
         if (!spectator) await requirePlayerHf(config, socket.data.account, hf);
+        const roster = room.players.map(player => player.id).join(',');
+        if (!spectator) await verifyHfRoster(config, [...room.players, { id: socket.id, accountId: socket.data.account?.id, hfConnectionId: socket.data.account?.hfConnectionId }], hf);
         if (rooms.get(room.code) !== room || socket.data.roomId) throw new Error('Der Raum hat sich geändert. Bitte erneut beitreten.');
+        if (!socket.connected || (!spectator && roster !== room.players.map(player => player.id).join(','))) throw new Error('Die Spielerliste hat sich geändert. Bitte erneut beitreten.');
         checkJoin(room, name, socket.data.account?.id, spectator);
         const player: Player = { id: socket.id, accountId: socket.data.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || randomUUID(), name, score: 0, connected: true };
         if (participants(room).some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
@@ -623,6 +627,7 @@ io.on('connection', (socket: Socket) => {
         pendingStarts.add(room.code);
         const roster = room.players.map(p => p.id).join(',');
         try {
+            await verifyHfRoster(config, room.players, hf);
             if (gameOptions(room.options).sharedImage) await readSharedImage(imageStorage, room.sharedImage);
             await refreshLobbyQuota(room);
             if (!room.maxRounds || roster !== room.players.map(p => p.id).join(',')) throw new Error('Das Kontingent oder die Spielerzahl hat sich geändert. Bitte prüfe die Rundenauswahl.');

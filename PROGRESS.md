@@ -72,8 +72,21 @@ fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter erse
   Kein Reconcile aus veraltetem/fehlgeschlagenem Inventar; drei Regressionen.
 - Keine Schemaänderung; Enthaltungen werden nicht als Null-Sterne-Stimmen in die
   DB geschrieben. Historische Enthaltungszählung/volle Betroffenenlöschung offen.
-- Nächster Schritt: M23 Mehrfach-HF-Identitäten pro Raum begrenzen, danach volle
-  lokale Testmatrix und Commit-/Fortschrittsabgleich. P0-Freigabe bleibt gesperrt.
+- Folgepaket M23: verifizierte HF-Subjekte vor Spielerbeitritt und Spielstart
+  eindeutig verlangen. Zuschauer haben kein Stimmrecht und dürfen dieselbe
+  Identität verwenden. Node prüft nach asynchroner Abnahme die unveränderte
+  Spielerliste erneut. Alte Budgetreservierungen bleiben dedupliziert erhalten.
+- M25: 90 statt 15 Sekunden Rückkehrfrist; explizites Verlassen bleibt sofort.
+  DO-Regression prüft Rückkehr und exakte Ablaufgrenze mit neuer Trennung.
+- P0-Dienst: unvollständige Uploads werden bei Timeout tatsächlich beendet und
+  geben den Prüfplatz frei. Ungültiges UTF-8/Encoding gelangt nicht zur Inferenz.
+  Dienst-Build/8 technische Tests bestanden; keine neue semantische Freigabe.
+- M23 Chromium und WebKit: simulierte persönliche Konten mit sechs Videos plus
+  Alias-Ablehnung und erlaubter Zuschauerrolle bestanden. Keine reale Abrechnung.
+- Lesende HF-Verbindung authentifiziert kostenloses Konto, jedoch ohne read-billing;
+  eigener alter Testspace darüber nicht abrufbar. Kein Kontingentnachweis/Deployment.
+- Nächster Schritt: Root-Abnahme/Commit dieses Folgepakets, dann M36 Status nach
+  Reload und volle lokale Matrix. P0 bleibt gesperrt; slop_urself-MCP weiterhin fehlt.
 
 ### Bereits abgeschlossene Pakete
 

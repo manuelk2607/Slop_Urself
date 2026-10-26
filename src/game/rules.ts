@@ -6,7 +6,9 @@ import { isArchiveGame, type ArchiveClip } from './archive-play';
 import { resetReady, startProblem } from './participants';
 
 export type GameState = 'LOBBY' | 'IDLE' | 'GENERATING' | 'VOTING' | 'GUESS_REVIEW' | 'RESULTS' | 'GAME_OVER';
-export const DISCONNECT_GRACE_MS = 15_000;
+// Mobile backgrounding and HF approval commonly outlast a short network retry.
+// Explicit leaving still removes immediately; disconnected players cannot vote.
+export const DISCONNECT_GRACE_MS = 90_000;
 
 export interface Player {
     id: string;

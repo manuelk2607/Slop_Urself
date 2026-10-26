@@ -162,6 +162,30 @@ Fortsetzung am **26. Oktober 2026**:
 
 ### Neues P0-Paket, 26.10. (nach bfd749e)
 
+Fortsetzung: M23 prüft eindeutige bestätigte HF-Subjekte vor Beitritt und Spielstart
+in Node und Cloudflare. Zuschauer dürfen dieselbe Identität nutzen, erhalten aber
+keine Wahlberechtigung. Eine während der Node-Prüfung geänderte Spielerliste wird
+erneut abgewiesen statt ungeprüft übernommen. Bestehende Budget-Deduplizierung bleibt
+für Altholds erhalten. Browsertests mit simuliertem HF: Chromium/WebKit jeweils
+sechs persönliche Videoaufträge, zusätzliche Profilidentität mit demselben HF-Konto
+abgewiesen, Zuschauerbeitritt erlaubt. Dies beweist keine reale HF-Abrechnung.
+
+M25 erweitert die Verbindungsfrist auf 90 Sekunden. Die DO-Regression prüft Rückkehr,
+Zurücksetzen der Bereitschaft sowie die neue exakte Ablaufgrenze; expliziter Austritt
+bleibt sofort. Keine Gleichsetzung mit einer Prüfung auf echten Mobilgeräten.
+
+P0-HTTP-Diensthärtung: Abbruchsignal begrenzt nun auch einen unvollständigen Body;
+Timeout beendet den Upload und gibt den Prüfplatz frei. Defektes UTF-8 und komprimierte
+Anfragen werden vor Inferenz zurückgehalten. Dienst-Build und acht technische Tests
+bestanden. Geänderter Dienstcode invalidiert die bisherige Runtime-Version; der alte
+fehlgeschlagene Diagnosebericht bleibt historische Evidenz, keine Qualifikation.
+
+Externe Zusatzprüfung: HF-Connector authentifizierte das kostenlose Konto, besitzt
+jedoch kein `read-billing`; damit kein echter Kontingent-/Abrechnungsnachweis. Der
+früher erwähnte eigene Testspace war über diese Verbindung nicht abrufbar. Kein
+Space wurde erstellt oder verändert, keine Jobs/Bezahlaufrufe ausgeführt. Das
+vorgeschriebene MCP `slop_urself` ist weiterhin nicht verfügbar.
+
 - **M02/M03/M11:** Der eigene Dienst lehnt nun sämtliche Ton-/Zusatzspuren ab,
   decodiert jedes Bild der einzigen H.264-Videospur und bricht bei beschädigten
   Frames ab. Das verhindert, dass ausschließlich geprüfte Bilder zusammen mit
@@ -225,8 +249,8 @@ keine GPU-Aufträge, keine produktiven Änderungen und keine juristische Zusage.
    Wan-/Safari-Ausgabe (M11), getrennte HF-Abrechnung (M17), vollständiges Lösch-
    und Aufbewahrungskonzept (M18), externe Speicherabnahme (M19),
    produktive Cloudflare-Logeinstellungen und erweiterte Stufendiagnose (Rest M20).
-3. **P2 – Architektur:** Mehrfachidentitäten (M23), Raum-UUIDs (M24), mobile
-   Wiederkehr (Rest M25), versionierte Migrationen und DB-/Inventarmessung
+3. **P2 – Architektur:** Live-/Bestandsabnahme der Mehrfachidentitäten (M23), Raum-UUIDs (M24), mobile
+   Realgeräteprüfung (Rest M25), versionierte Migrationen und DB-/Inventarmessung
    (M26–M29), verbleibende Crashfenster/Jobbereinigung/Schlüsselrotation (M31–M33).
    M26/M28/M44 benötigen den vorgeschriebenen DB-Zugang beziehungsweise isolierte
    Wiederherstellungsprüfungen; produktiv nicht als verifiziert behauptet.

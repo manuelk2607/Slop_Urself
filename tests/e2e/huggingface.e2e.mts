@@ -107,7 +107,29 @@ try {
     }
     assert.deepEqual(errors, []);
     await guest.screenshot({ path: artifactPath('slopurself-personal-hf-game.png'), fullPage: true });
-    console.log('PASS: two separate OAuth sessions, three rounds/six videos using creator-specific tokens, reload, voting and identical final scores; no real GPU usage.');
+    // A new game profile bound to the same verified HF subject may watch, but
+    // cannot acquire a second voting slot. No extra generation is needed.
+    await guest.locator('#leaveRoomButton').click(); await guest.locator('#screenLobby').waitFor({ state: 'visible' });
+    await guest.locator('#createRoomButton').click(); await guest.locator('#screenRoomLobby').waitFor({ state: 'visible' });
+    const alias = await (await browser.newContext()).newPage();
+    alias.on('pageerror', error => errors.push(error.message));
+    await alias.goto(base); await alias.locator('#screenAuth').waitFor({ state: 'visible' });
+    await alias.locator('#authUsername').fill('PersonalBAlias'); await alias.locator('#authSubmit').click();
+    await alias.locator('#screenLobby').waitFor({ state: 'visible' });
+    await alias.locator('#hfAccountButton').click(); await alias.locator('#hfConnectButton').click();
+    await alias.locator('#hfDeviceCode').waitFor({ state: 'visible' });
+    await alias.waitForEvent('load'); await alias.locator('#hfDialog').waitFor({ state: 'visible' });
+    await alias.waitForFunction(() => document.getElementById('hfStatus')?.textContent?.includes('90 / 300'));
+    await alias.locator('#hfCloseButton').click();
+    await alias.locator('#roomCodeInput').fill(await guest.locator('#displayRoomCode').innerText());
+    await alias.locator('#joinRoomButton').click();
+    await alias.waitForFunction(() => document.getElementById('lobbyError')?.textContent?.includes('nur einen Spieler'));
+    assert.equal(await alias.locator('#screenRoomLobby').isVisible(), false);
+    assert.equal(await guest.locator('#playerCount').innerText(), '1');
+    await alias.locator('#watchRoomButton').click(); await alias.locator('#screenRoomLobby').waitFor({ state: 'visible' });
+    await alias.waitForFunction(() => !document.getElementById('spectatorRole')?.hidden);
+    assert.deepEqual(errors, []);
+    console.log('PASS: separate OAuth sessions, six creator-token videos, reload/voting, duplicate-HF player rejected while spectator permitted; no real GPU usage.');
 } finally {
     await browser?.close(); server.kill('SIGTERM'); await exit;
     await rm(directory, { recursive: true, force: true });

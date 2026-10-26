@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RoomDurableObject, ServiceDurableObject, Env } from '../../src/server/cloudflare/worker';
 import { AI_JOB_MAX_AGE_MS, type AiJob } from '../../src/ai/generation';
-import { Room, roomSnapshot } from '../../src/game/rules';
+import { Room, roomSnapshot, DISCONNECT_GRACE_MS } from '../../src/game/rules';
 import { getDatabase } from '../../src/database/neon';
 import { DATABASE_SCHEMA } from '../../src/database/schema';
 import { testImageData } from '../support/images';
@@ -59,6 +59,29 @@ async function fixture(stateName: Room['state'] = 'VOTING', overrides: Partial<E
     };
     return { worker, sockets, outsider, data, pending, message, recreate, alarms };
 }
+
+test('Worker preserves a mobile participant for 90 seconds, resumes safely and expires the new disconnect at its boundary', async () => {
+    const originalNow = Date.now; let now = originalNow(); Date.now = () => now;
+    try {
+        const f = await fixture('LOBBY');
+        await f.message(f.sockets[1], 'setReady', { ready: true });
+        await f.worker.webSocketClose(f.sockets[1] as never);
+        now += 20_000; await f.worker.alarm();
+        let room = f.data.get('room') as Room;
+        assert.equal(room.players.length, 3); assert.equal(room.players[1].connected, false);
+        assert.equal(room.players[1].ready, false);
+        await f.message(f.outsider, 'resumeRoom', { sessionId: 'session-b-1234567890' });
+        room = f.data.get('room') as Room;
+        assert.equal(room.players[1].connectionId, 'outsider'); assert.equal(room.players[1].connected, true);
+        assert.equal(room.players[1].ready, false);
+        await f.worker.webSocketClose(f.outsider as never);
+        now += DISCONNECT_GRACE_MS - 1; await f.worker.alarm();
+        assert.equal((f.data.get('room') as Room).players.length, 3);
+        now++; await f.worker.alarm();
+        assert.equal((f.data.get('room') as Room).players.length, 2);
+        assert.equal((f.data.get('room') as Room).players.some(player => player.id === 'b'), false);
+    } finally { Date.now = originalNow; }
+});
 
 test('Worker serializes votes and ignores duplicates; outsiders cannot vote or read room snapshots', async () => {
     const f = await fixture();
@@ -342,12 +365,12 @@ test('global video-cleanup alarms survive service recreation and retry failed st
     } finally { globalThis.fetch = original; }
 });
 
-test('Worker applies actual lobby membership to the round limit and reserves all videos', async () => {
+test('Worker reserves all videos against distinct personal accounts and releases only the leaving player', async () => {
     const original = globalThis.fetch;
     let current = 720;
     globalThis.fetch = async () => Response.json({ base: 720, current, resetsAt: null, runs: { remaining: 8 } });
     const budgetData = new Map<string, any>();
-    const personal = await testHfPlayers(budgetData, ['a', 'b', 'c']);
+    const personal = await testHfPlayers(budgetData, ['a', 'b', 'c'], true);
     const state = { storage: personal.storage };
     const services = new ServiceDurableObject(state as any, { ...personal.config, HF_TOKEN: 'must-never-be-used', AI_PROVIDER_CHAIN: 'ltx' } as any);
     const SERVICES = { idFromName: (name: string) => name, get: () => ({ fetch: (request: Request) => services.fetch(request) }) } as any;
@@ -355,27 +378,22 @@ test('Worker applies actual lobby membership to the round limit and reserves all
         const f = await fixture('LOBBY', { SERVICES }, 5, { players: personal.players });
         await f.message(f.sockets[0], 'refreshQuota');
         let r = f.data.get('room') as Room;
-        assert.equal(r.quota?.playerCount, 3); assert.equal(r.maxRounds, 2);
+        assert.equal(r.quota?.playerCount, 3); assert.equal(r.maxRounds, 5);
         await f.message(f.sockets[1], 'setRoundCount', { rounds: 1 });
-        assert.equal((f.data.get('room') as Room).maxRounds, 2, 'Only the host can change rounds.');
-        current = 185;
-        await f.message(f.sockets[0], 'startGame');
-        r = f.data.get('room') as Room;
-        assert.equal(r.maxRounds, 0); assert.equal(r.state, 'LOBBY'); assert.equal(heldHfVideos(budgetData), 0);
-        current = 720;
+        assert.equal((f.data.get('room') as Room).maxRounds, 5, 'Only the host can change rounds.');
         await f.message(f.sockets[0], 'setRoundCount', { rounds: 999 });
-        assert.equal((f.data.get('room') as Room).maxRounds, 2);
+        assert.equal((f.data.get('room') as Room).maxRounds, 6);
         await f.message(f.sockets[0], 'startGame');
         r = f.data.get('room') as Room;
         assert.equal(r.state, 'IDLE'); assert.deepEqual(r.pendingCreators, ['a', 'b', 'c']);
-        assert.equal(heldHfVideos(budgetData), 6);
+        assert.equal(heldHfVideos(budgetData), 18);
         await f.message(f.sockets[1], 'leaveRoom');
-        assert.equal(heldHfVideos(budgetData), 4);
+        assert.equal(heldHfVideos(budgetData), 12);
         assert.deepEqual((f.data.get('room') as Room).roundPlayers, ['a', 'c']);
     } finally { globalThis.fetch = original; }
 });
 
-test('Worker includes cheap fallbacks and restores a two-player round when the third player leaves', async () => {
+test('Worker refuses legacy duplicate-HF voting rosters before reserving GPU quota', async () => {
     const original = globalThis.fetch;
     globalThis.fetch = async () => Response.json({ base: 300, current: 185, resetsAt: null, runs: { remaining: 7 } });
     const data = new Map<string, any>();
@@ -387,14 +405,16 @@ test('Worker includes cheap fallbacks and restores a two-player round when the t
         const f = await fixture('LOBBY', { SERVICES }, 2, { players: personal.players });
         await f.message(f.sockets[0], 'startGame');
         assert.equal((f.data.get('room') as Room).state, 'LOBBY');
+        assert.match(f.sockets[0].messages.at(-1)?.payload, /nur einen Spieler/);
+        assert.equal(heldHfVideos(data), 0);
         await f.message(f.sockets[2], 'leaveRoom');
         const r = f.data.get('room') as Room;
         assert.equal(r.quota?.playerCount, 2); assert.equal(r.quota?.aiRoundLimit, 1);
         assert.equal(r.quota?.sharedQuota, false);
         await f.message(f.sockets[0], 'startGame');
-        assert.equal((f.data.get('room') as Room).state, 'IDLE');
-        assert.equal(heldHfVideos(data), 2);
-        assert.equal(data.get('hf-budget:shared-test:reservations')['TEST:a'].gpuSecondsPerVideo, 92);
+        assert.equal((f.data.get('room') as Room).state, 'LOBBY');
+        assert.equal(heldHfVideos(data), 0);
+        assert.match(f.sockets[0].messages.at(-1)?.payload, /nur einen Spieler/);
     } finally { globalThis.fetch = original; }
 });
 

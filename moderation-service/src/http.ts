@@ -11,7 +11,12 @@ export function moderationServer(options: { secret: string; version: string; qua
     return createServer(async (request, response) => {
         response.setHeader('content-type', 'application/json'); response.setHeader('cache-control', 'no-store');
         response.setHeader('x-content-type-options', 'nosniff');
-        const send = (status: number, body: unknown) => { response.statusCode = status; response.end(JSON.stringify(body)); };
+        const send = (status: number, body: unknown) => {
+            if (response.destroyed || response.writableEnded) return;
+            response.statusCode = status;
+            if (!request.complete) response.setHeader('connection', 'close');
+            response.end(JSON.stringify(body), () => { if (!request.complete) request.destroy(); });
+        };
         const route = request.url;
         if (route === '/health' && request.method === 'GET') { send(200, { ready: Boolean(options.engine() && options.qualified()) }); return; }
         const hash = (value: string) => createHash('sha256').update(value).digest();
@@ -25,10 +30,11 @@ export function moderationServer(options: { secret: string; version: string; qua
         response.once('close', disconnected);
         let timer: ReturnType<typeof setTimeout> | undefined;
         const work = (async () => {
-            if (!request.headers['content-type']?.startsWith('application/json')) throw new Error('Invalid request');
-            const bytes = await body(request), digest = createHash('sha256').update(bytes).digest('hex');
+            if (request.headers['content-type']?.split(';', 1)[0].trim().toLowerCase() !== 'application/json'
+                || (request.headers['content-encoding'] && request.headers['content-encoding'] !== 'identity')) throw new Error('Invalid request');
+            const bytes = await body(request, abort.signal), digest = createHash('sha256').update(bytes).digest('hex');
             if (request.headers['x-content-sha256'] !== digest) throw new Error('Content digest mismatch');
-            const data = JSON.parse(bytes.toString('utf8')) as { stage?: string; policyVersion?: string; modelVersion?: string; image?: string; prompt?: string; video?: string; mime?: string };
+            const data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as { stage?: string; policyVersion?: string; modelVersion?: string; image?: string; prompt?: string; video?: string; mime?: string };
             if (!data || data.policyVersion !== POLICY_VERSION || data.modelVersion !== options.version) throw new Error('Policy/model mismatch');
             const engine = options.engine()!;
             let result: object;
@@ -50,13 +56,25 @@ export function moderationServer(options: { secret: string; version: string; qua
         finally { clearTimeout(timer); response.removeListener('close', disconnected); }
     });
 }
-async function body(request: IncomingMessage) {
+async function body(request: IncomingMessage, signal: AbortSignal) {
     const limit = 24 * 1024 * 1024;
     if (Number(request.headers['content-length']) > limit) throw new Error('Body too large');
-    const parts: Buffer[] = []; let size = 0;
-    for await (const part of request) {
-        const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part); size += chunk.length;
-        if (size > limit) throw new Error('Body too large'); parts.push(chunk);
-    }
-    return Buffer.concat(parts, size);
+    signal.throwIfAborted();
+    return new Promise<Buffer>((resolve, reject) => {
+        const parts: Buffer[] = []; let size = 0;
+        const cleanup = () => {
+            request.off('data', data); request.off('end', end); request.off('error', fail); request.off('aborted', aborted);
+            signal.removeEventListener('abort', aborted);
+        };
+        const fail = (error: Error) => { cleanup(); request.pause(); reject(error); };
+        const aborted = () => fail(new Error('Request cancelled'));
+        const data = (part: Buffer | string) => {
+            const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part); size += chunk.length;
+            if (size > limit) fail(new Error('Body too large'));
+            else parts.push(chunk);
+        };
+        const end = () => { cleanup(); resolve(Buffer.concat(parts, size)); };
+        request.on('data', data); request.once('end', end); request.once('error', fail); request.once('aborted', aborted);
+        signal.addEventListener('abort', aborted, { once: true });
+    });
 }

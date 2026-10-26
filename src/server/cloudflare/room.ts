@@ -253,6 +253,7 @@ export class RoomDurableObject {
         checkJoin(room, name, meta.account?.id, spectator);
         if (!spectator) await service(this.env, '/hf/require', { account: meta.account });
         const player: Player = { id: meta.socketId, accountId: meta.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || crypto.randomUUID(), name, score: 0, connected: true };
+        if (!spectator) await service(this.env, '/hf/roster', { participants: [...room.players, { ...player, hfConnectionId: meta.account?.hfConnectionId }] });
         if (participants(room).some(p => p.sessionId === player.sessionId)) throw new Error('Diese Sitzung ist bereits im Raum.');
         if (spectator) (room.spectators ??= []).push(player);
         else { room.players.push(player); resetReady(room); }
@@ -312,6 +313,7 @@ export class RoomDurableObject {
         const room = this.room!;
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
         if (startProblem(room)) throw new Error(startProblem(room));
+        await service(this.env, '/hf/roster', { participants: room.players });
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
         if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');

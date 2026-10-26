@@ -7,6 +7,7 @@ import { sessionResponse } from '../../src/auth/session';
 import { storedProfiles } from '../../src/auth/profiles';
 import { ServiceDurableObject } from '../../src/server/cloudflare/services';
 import { roomSnapshot, remainingVideosFor, type Room } from '../../src/game/rules';
+import { verifyHfRoster } from '../../src/auth/hf-roster';
 
 function fixture() {
     const data = new Map<string, any>();
@@ -311,11 +312,20 @@ test('individual quotas give each player three rounds, not one shared round or s
     } finally { f.restore(); }
 });
 
-test('the same HF identity is deduplicated across profiles and a missing or weak personal account limits the room', async () => {
+test('shared HF identities remain budget-deduplicated for legacy holds but cannot join a new voting roster', async () => {
     const f = fixture();
     try {
         const a = await f.connect('a', 'same'), b = await f.connect('b', 'same');
         const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        await assert.rejects(verifyHfRoster(f.config, [a, b], f.connections), /nur einen Spieler/);
+        const c = await f.connect('c', 'different');
+        await verifyHfRoster(f.config, [a, c], f.connections);
+        await assert.rejects(verifyHfRoster(f.config, [a, { ...c, accountId: 'impostor' }], f.connections), HfRequiredError);
+        const service = new ServiceDurableObject({ storage: f.storage } as never, f.config as never);
+        const response = await service.fetch(new Request('https://internal/hf/roster', { method: 'POST', body: JSON.stringify({ participants: [a, b] }) }));
+        assert.equal(response.status, 503); assert.match((await response.json()).error, /nur einen Spieler/);
+        // Low-level reservation accounting keeps legacy holds intact rather than
+        // granting a second allowance or deleting them during this migration.
         assert.equal((await budget.capacity(2, 'economy', [a, b])).aiRoundLimit, 1);
         const self = await f.connect('self-profile', 'self', 'owner');
         assert.equal((await budget.capacity(2, 'economy', [self, { id: 'central-player' }])).aiRoundLimit, 0);

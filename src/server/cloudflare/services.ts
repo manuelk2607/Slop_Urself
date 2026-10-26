@@ -14,6 +14,7 @@ import { restoreIds } from '../../shared/history';
 import { ModerationError } from '../../security/moderation';
 import { ContentReports, type ReportReason } from '../../security/reports';
 import { ArchiveReservations } from '../../storage/reservations';
+import { verifyHfRoster } from '../../auth/hf-roster';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -60,6 +61,7 @@ export class ServiceDurableObject {
             if (path === '/hf/status') return json(await this.hf.status(data.connection, data.accountId));
             if (path === '/hf/identity') return json({ verified: await this.hf.identityMatches(data.connection, data.accountId) });
             if (path === '/hf/require') { await requirePlayerHf(this.env, data.account, this.hf); return json({ ok: true }); }
+            if (path === '/hf/roster') { await verifyHfRoster(this.env, data.participants || [], this.hf); return json({ ok: true }); }
             if (path === '/hf/disconnect') { await this.hf.disconnect(data.connection, data.accountId); return json({ ok: true }); }
             if (path === '/video-trash/schedule') {
                 await this.scheduleCleanup(data.time);
