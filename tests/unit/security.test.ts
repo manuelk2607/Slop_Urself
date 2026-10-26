@@ -20,6 +20,7 @@ test('CSP permits only this origin and its exact websocket, denies scripts in ob
     assert.match(headers['Content-Security-Policy'], /connect-src 'self' wss:\/\/game.test;/);
     assert.match(headers['Content-Security-Policy'], /frame-ancestors 'none'/);
     assert.match(headers['Content-Security-Policy'], /script-src 'self';/);
+    assert.match(headers['Content-Security-Policy'], /media-src 'self' blob: https:\/\/\*\.hf\.space https:\/\/huggingface\.co https:\/\/\*\.hf\.co;/);
     assert.equal(headers['X-Frame-Options'], 'DENY');
     assert.match(securityHeaders('http://127.0.0.1:3310')['Content-Security-Policy'], /ws:\/\/127.0.0.1:3310/);
 });
