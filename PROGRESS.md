@@ -1,4 +1,4 @@
-# Audit-Umsetzung – 25. Oktober 2026
+# Audit-Umsetzung – fortgesetzt am 26. Oktober 2026
 
 Aktiver Auftrag: Auditpunkte in getesteten Paketen umsetzen; Branch codex/audit-remediation.
 Pakete: 1 Stimmen/Austritte; 2 Identität/Objektrechte/Requestgrenzen;
@@ -19,23 +19,38 @@ fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter erse
   Verfügbarkeit/Qualität prüfen. Keine manuelle Freigabelösung. Der Dienst bleibt bis
   dokumentierter Qualifikation geschlossen; keine realen Medien-/GPU-Tests durchgeführt.
 - Abhängigkeiten: body-parser 2.4.0, Zod 4.6.7; jpeg-js für bounded Decode ergänzt.
-- Root-Build und 158 Unit-Tests bestanden, Service-Build und 3 Tests bestanden.
-  Produktionsabhängigkeiten nach gezieltem Lock-Update: npm audit meldet 0 Befunde.
-  Erster Gesamt-E2E-Lauf stoppte an veraltetem Namenslogin im Admin-Test. Fixture
-  mit echten Passwortnachweisen korrigiert; erneuter Chromium/WebKit-Gesamtlauf läuft.
+- Aktuelle Abnahme: Root-Build/Typprüfungen und 168 Unit-Tests bestanden. Vollständiger
+  isolierter Chromium-/WebKit-/workerd-Gesamtlauf mit Exitcode 0 bestanden; anschließend
+  eng begrenzte Legacy-HF-Medienausnahme mit vier zusätzlichen Browserchecks geprüft.
+  Produktionsabhängigkeiten in Root und CPU-Dienst: npm audit meldete jeweils 0 Befunde.
 - Nächstes Paket implementiert: M04 Melden/Sperren mit unabhängiger Adminfreigabe und
   persistenten Sperren auf allen Archivdownloads; M15 CSP/Frame-/Berechtigungsheader;
   M13/M16 Byte-/Aktionsbudgets und Join-Timeout; M12 stabiler Archivschlüssel bei
-  verlorener PUT-Antwort. Root-Build und 164 Unit-Tests bestanden, einschließlich
-  Worker-Sperrtest. Verwaltung im Chromium bestanden; Gesamt-E2E läuft.
+  verlorener PUT-Antwort. Einschließlich Worker-Sperrtest auf GET/HEAD/Range/Download.
 - CPU-Dienst: indirektes verwundbares sharp gezielt auf 0.35.5 aktualisiert,
-  Transformers-Decode/Resize mit nativer Bibliothek geprüft. Service-Build und 4 Tests
-  bestanden, npm audit für dessen Produktionsabhängigkeiten jetzt ebenfalls 0.
-- Nächster Schritt: Gesamt-E2E auswerten, nächste Sicherheits-/Recoverymaßnahmen.
-  Keine Modellgewichte geladen, keine Klassifikationsqualität zugesichert.
+  Transformers-Decode/Resize mit nativer Bibliothek geprüft. Service-Build und 5 Tests
+  bestanden. Qualifikation hängt zusätzlich am tatsächlichen Code-/Dependency-Hash.
+- Fortsetzung 26.10.: persistente Archivreservierungen (M19), erneuert durch Raum-
+  Alarme, schützen aktive Wiedergaben über Services-Neustarts. Neue Archivpartien
+  filtern gesperrte Clips (M04). Datenbank-/Raumlogs enthalten keine rohen Fehler-
+  meldungen/Queries/Tokens mehr (M20 teilweise).
+- Bedienungspaket umgesetzt: Kontraste (M21), reduzierte Bewegung samt manuellem
+  Video-Retry (M38), gemeinsame Plätze (M40), Screen-Fokus (M37), stabile Position
+  der Raumaktionen/dynamische Viewporthöhe (M39 teilweise), verständlicher Hinweis
+  auf noch unbestätigte Profilidentität und Restore-Rechte (M06/M07 UX).
+- Raumlayout oben verankert; Modalzentrierung erhalten. Geometrie-/A11y-Regressionen
+  und realistische Range-Auslieferung der lokalen Safari-Archivfixture bestanden.
+  CI nutzt temporäre, isolierte HF-/Moderations-/Archivablagen.
+- Eigene Modellrevisionen/ONNX-Dateien per öffentlichem HF-Metadatenabruf bestätigt.
+  Keine Modellgewichte geladen, keine semantische Klassifikationsqualität zugesichert.
+- Nächster Schritt: qualifizierten Moderationsdienst und kontrollierten Wan-Stand
+  real abnehmen, Bestandsidentität/individuelle HF-Abrechnung prüfen; anschließend
+  verbleibende P1- und P2-Pakete laut docs/IMPLEMENTATION-2026-10-25.md umsetzen.
 - Keine produktive Schemaänderung, kein Push oder Deployment.
 
 ## Vorheriger Auditstand
+
+Historische Analyse vom 24.10.; kein erneuter Analyseauftrag. Aktueller Umsetzungsstand oben.
 
 Ziel: Priorisierter Maßnahmenkatalog inklusive belegter HF/Wan-Sicherheitsanalyse.
 Nur Analyse und Berichte; keine Implementierung, Deployments oder echten GPU-Jobs.

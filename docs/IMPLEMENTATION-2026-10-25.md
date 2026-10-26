@@ -17,7 +17,7 @@ sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erl
 | M04 teilweise | Berechtigte Zuschauer können Archivclips melden; Verwalter prüft Meldungen und bestätigt permanente Sperre. Dateiausgabe prüft die persistente Sperre auch bei bekannter URL, Range/Download und nach Restore. Meldungen allein sperren nicht automatisch. | Kein automatischer juristischer Melde-/Beweissicherungsprozess; Altarchivprüfung, Einspruch und verfeinerter Status in allen Spielansichten offen. |
 | M13, M16 teilweise | Begrenztes Einlesen von HTTP-Bodies, WS-Bytebudgets und Limits für Raumgründung/Uploads; komplexe Node-Payloads werden abgelehnt. Unbeigetretene Verbindungen enden nach 60 Sekunden. | Worker-Bytebudgets gelten pro Raum/Instanz; teure Befehle zusätzlich persistent pro Konto. Cloudflare-WAF/Account-Grenzen nicht geprüft. |
 | M14 | Gezielt aktualisierte body-parser/Zod-Auflösung; begrenzter JPEG-Decoder ergänzt. | Root-Produktionsabhängigkeiten ohne npm-Auditbefund beim Test; keine allgemeine Sicherheitsgarantie. |
-| M15 | CSP mit exakter eigener WS-Origin, Frame-Einbettung verboten, Geräte-/Zahlungsberechtigungen deaktiviert, Referrer unterdrückt. HTML passiert Worker für passende dynamische Header. | Inline-Stile bleiben wegen vorhandener Darstellung zugelassen; kein neues Inline-JavaScript erlaubt. |
+| M15 | CSP mit exakter eigener WS-Origin, Frame-Einbettung verboten, Geräte-/Zahlungsberechtigungen deaktiviert, Referrer unterdrückt. HTML passiert Worker für passende dynamische Header. | Inline-Stile bleiben wegen vorhandener Darstellung zugelassen; kein neues Inline-JavaScript erlaubt. Medienausnahme ausschließlich für bisher unterstützte HF-Hosts erhält alte Links. |
 | M25, M27, M30 teilweise | Vorübergehender HF-Ausfall wird von fehlender Verbindung getrennt; unabhängige Statistikreads parallel; Node-Videodateien werden gestreamt. | DB-Querypläne, Inventarcaching, globaler Durchsatz und reale Mobilgeräte bleiben offen. |
 
 ## Vorbereitung des kostenlosen Moderationsdienstes
@@ -33,11 +33,20 @@ versionsgebundene Qualifikation geschlossen. Kein frei erfundener Testbericht od
 Allow-Platzhalter wurde eingesetzt. Kleine allgemeine Modelle beweisen weder
 Volljährigkeit noch Einwilligung oder zuverlässige Erkennung sexueller Ausbeutung.
 Insbesondere vollständige Videoprüfung auf CPU kann das Laufzeitbudget überschreiten.
+Die Freigabe ist zusätzlich an einen automatisch berechneten Fingerabdruck der
+tatsächlich laufenden Prüfsoftware und des Dependency-Locks gebunden. Geänderter
+Prüfcode kann eine alte Qualifikation nicht unverändert weiterverwenden.
 
 Noch nicht verifiziert: Hosting-Verfügbarkeit, tatsächliche Modellinitialisierung/
 ONNX-Kompatibilität, Klassifikationsqualität einschließlich Fehlalarmen und
 missbräuchlichen Eingaben, Speicherbedarf, Laufzeit aller Frames, Lizenzkette und
 reale Löschwirkung beim Hoster. Bis dahin keine semantische Schutzwirkung behaupten.
+
+Am 26.10. wurden die öffentlichen HF-Dateimetadaten **genau der festgeschriebenen
+Revisionen** erneut geprüft: beide SHAs erreichbar und passend, erforderliche
+FP32-ONNX-Dateien vorhanden ([NSFW-Dateistand](https://huggingface.co/onnx-community/nsfw_image_detection-ONNX/tree/1ceb3c7fe1e9f3f2507e6df577437f23a9149fd5/onnx): 343.401.688 Bytes, [VLM-Dateistand](https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct/tree/a7da5b986cb59b408707209984f360a5f4ad7e47/onnx) zusammen
+2.032.852.109 Bytes). Dies war ausschließlich ein Metadatenabruf, kein Gewichte-
+Download, kein Inferenztest und keine Überprüfung der kostenlosen Hostingkapazität.
 
 ## Vor einer Veröffentlichung erforderlich
 
@@ -67,23 +76,71 @@ reale Löschwirkung beim Hoster. Bis dahin keine semantische Schutzwirkung behau
 
 ## Verifikation und nächste Pakete
 
-- Root-Build/Typprüfungen erfolgreich; derzeit 164 Unit-Tests bestanden.
-- Service-Build und vier Protokoll-/Entscheidungs-/Qualifikation-/native Bildruntime-Tests bestanden.
+Fortsetzung am **26. Oktober 2026**:
+
+- M19: Aktive Archivdateien werden vor Veröffentlichung reserviert. Services-Neustarts
+  bewahren die Reservierungen; Raumalarme erneuern sie, abgelaufene Reservierungen
+  fallen automatisch aus der Verdrängungssperre. Node schützt zusätzlich die aktiven
+  URLs seiner Räume. Kapazitätsreservierung vor dem GPU-Start bleibt offen.
+- M04: Neue Archivpartien filtern gesperrte URLs serverseitig. Bereits laufende
+  Partien können nach nachträglicher Sperre weiterhin einen nicht abspielbaren Clip
+  enthalten; Auslieferung bleibt gesperrt. Automatisches Überspringen ist noch offen.
+- M20: Betriebsfehler aus Datenbank-/Raumpfaden protokollieren ausschließlich feste
+  Stufen und bekannte Fehlercodes. Keine Rohmeldungen, SQL-Werte, Prompts, URLs,
+  Tokens oder Stacks. Cloudflare-Account-Logeinstellungen nicht geändert/geprüft.
+- M21/M38/M40: lesbare Buttonkontraste, reduzierte CSS-Bewegung und kein Videoautostart
+  bei reduzierter Bewegung; bewusster Play-/Retry-Aufruf bleibt möglich. Gleichstände
+  teilen in Endwertung und Statistik die Platznummer.
+- M37/M39 teilweise: Fokus auf Screenüberschrift nur bei echtem Screenwechsel, kein
+  Fokusverlust bei bloßem Snapshot; Raumaktionen bleiben beim Höhenwechsel verankert,
+  dynamische Viewporthöhe berücksichtigt. Reale Screenreader-/Gerätetests bleiben offen.
+- M06/M07: Hinweis auf ausstehenden Eigentumsnachweis; Restore lehnt fremde Objekte
+  verständlich ab und entfernt sie aus wiederholten Undo-Versuchen.
+- M15-Kompatibilität: Ein gezielter Browsertest bestätigte, dass `media-src 'self'`
+  alte externe HF-Clips unbeabsichtigt blockiert. Medien sind deshalb zusätzlich
+  von den bereits im Downloadpfad zugelassenen HTTPS-HF-Hosts erlaubt; keine
+  pauschale Freigabe fremder HTTPS-Quellen. Diese Altlinks werden beim Anbieter
+  ausgeliefert; eigene Archiv-Sperren können fremde Kopien oder bereits geladene
+  Bytes nicht zurückrufen. Altarchiv-Migration/-Prüfung bleibt offen.
+
+- Root-Build/Typprüfungen erfolgreich; derzeit 168 Unit-Tests bestanden.
+- Service-Build und fünf Protokoll-/Entscheidungs-/Qualifikation-/native Bildruntime-/Versionsbindungstests bestanden.
+- Versionsberechnung zusätzlich am gebauten Dienst ohne Modell-Downloads geprüft.
 - Der separate Dienst enthielt indirekt eine ältere verwundbare sharp-Auflösung.
   Gezieltes Override auf 0.35.5, mit tatsächlichem Transformers-Decode/Resize geprüft;
   dessen Produktionsabhängigkeiten melden anschließend ebenfalls 0 npm-Auditbefunde.
-- Verwaltungstest im echten lokalen Chromium bestanden; vollständiger isolierter
-  Chromium/WebKit-/workerd-Lauf wird abschließend dokumentiert.
+- Vollständiger isolierter Chromium-/WebKit-/workerd-Lauf mit **Exitcode 0** bestanden:
+  HTTP-Limits, echte lokale Worker-/DO-Routings und Alarme, simulierte persönliche
+  HF-Konten, JS-freies SEO, Bedienung, Video/Retry/Reload, Statistiken/Undo/Pagination,
+  Spielvarianten, Archivpartien, zehn Spieler, Verwaltung und klassische Runden.
+  Danach: erneuter Build/168 Unit-Tests sowie **vier zusätzliche bestandene
+  Legacy-CSP-Prüfungen** (Chromium/WebKit jeweils auf Node/workerd) für die eng
+  begrenzte HF-Medienausnahme. Der neue Fall ist in künftige Gesamtläufe integriert.
+- CI-Testablagen für HF-Verbindungen, Moderationsregister und Archivreservierungen
+  liegen in eigens erzeugten temporären Verzeichnissen. Lokale Nutzerdaten werden
+  dafür nicht verwendet. Standalone-Archivtests besitzen ebenfalls eigene Ablagen.
 - Tests nutzen ausschließlich harmlose Fixtures und simulierte HF-/S3-/DB-Antworten;
   keine GPU-Aufträge, produktiven Löschungen oder Nutzerübernahmen ausgeführt.
 - robots.txt/Sitemap-Routing unverändert; neue Header werden mit vorhandenen
   JS-freien SEO-Regressionen geprüft. Kein neuer Produktionsabruf in diesem Paket.
 
-Priorisiert offen: qualifizierte Moderation/Altarchivstatus und Modellfreigabe
-(M01–M05), Identitätsmigration/Live-Abrechnung (M06/M17), Wiedergabe-/Enthaltungsregeln
-(M09), vollständiges Löschkonzept (M18), aktive Archivreservierungen (M19),
-datensparsame Betriebsdiagnostik (M20), Kontrast (M21), Mehrfachidentitäten (M23),
-Raum-UUIDs (M24), mobile Wiederkehr (M25), Migrationen/DB-/Inventarmessung (M26–M29),
-verbleibende Crashfenster/Jobbereinigung/Schlüsselrotation (M31–M33), UX/A11y
-(M35–M41), Wiederherstellbarkeit und Releaseabnahme (M44–M45). Optionale
-Spielerweiterungen M46–M54 bleiben hinter den Sicherheitsabhängigkeiten.
+## Priorisierte Restarbeit
+
+1. **P0 – Freigabegrenzen:** Moderationsdienst fachlich und praktisch qualifizieren,
+   kontrollierten Wan-Erzeuger anschließen, Altarchiv separat prüfen (M01–M05).
+   Profilmigration für Bestandskonten vor Veröffentlichung abnehmen (M06).
+   API-/Gate-Tests ersetzen diese externen Abnahmen nicht.
+2. **P1 – Zuverlässigkeit/Betrieb:** Wiedergabe-/Enthaltungsregeln (M09), echte
+   Wan-/Safari-Ausgabe (M11), getrennte HF-Abrechnung (M17), vollständiges Lösch-
+   und Aufbewahrungskonzept (M18), Kapazitätsreservierung vor GPU-Start (Rest M19),
+   Cloudflare-Logeinstellungen und korrelierte Release-Diagnose (Rest M20).
+3. **P2 – Architektur:** Mehrfachidentitäten (M23), Raum-UUIDs (M24), mobile
+   Wiederkehr (Rest M25), versionierte Migrationen und DB-/Inventarmessung
+   (M26–M29), verbleibende Crashfenster/Jobbereinigung/Schlüsselrotation (M31–M33).
+   M26/M28/M44 benötigen den vorgeschriebenen DB-Zugang beziehungsweise isolierte
+   Wiederherstellungsprüfungen; produktiv nicht als verifiziert behauptet.
+4. **P2 – Nutzbarkeit/Abnahme:** Prompt-/Warteführung (M35–M36), verbleibende
+   Screenreader-/Realgeräte-/Entwurfsprüfung (M37/M39/M41), Restore- und Release-
+   abnahme (M44–M45). M21/M38/M40 sind im Code mit Regressionen umgesetzt.
+5. Optionale Spielerweiterungen M46–M54 bleiben hinter den Sicherheitsabhängigkeiten.
+   Bestehende öffentliche SEO-Endpunkte benötigen keinen weiteren robots-Fix.
