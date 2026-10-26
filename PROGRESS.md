@@ -39,6 +39,18 @@ fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter erse
   Pakete M19 Kapazität vor GPU-Start und M09 Wiedergabe/Enthaltung; M18/schema-
   bezogene Aufgaben bleiben wegen vorgeschriebenem, fehlendem slop_urself-MCP offen.
 
+### P1-Paket M19 – lokal geprüft
+
+- Nach d2a3a94: M19 reserviert max. 15 MiB pro Job vor quota/begin;
+  Reservierungen gelten 30 Minuten, bleiben über Services-Neustart erhalten,
+  werden idempotent freigegeben und bei FIFO/Upload anderer Räume abgezogen.
+  Vorabprüfung löscht keine Dateien und kontaktiert keinen KI-Provider.
+- M19: Root-Build/171 Unit-Tests bestanden. Zusätzlicher Test prüft parallele
+  Raumreservierung, Wiederherstellung, Fremdraum-Abweisung und Ablauf. Aktuell
+  persönliche HF-Browserstrecke mit simulierter S3-Vorabprüfung bestanden (Chromium).
+- Danach M09: explizite, phasengebundene Enthaltung sowie begrenzte Betrachtungs-
+  zeit/Erstellerbestätigung vor automatischer Endwertung; keine Schemaänderung.
+
 ### Bereits abgeschlossene Pakete
 
 - a4e896e: M08/M22 – Wertungskennung, Runde/Video prüfen; angenommene Stimmen bleiben bei Austritt erhalten.

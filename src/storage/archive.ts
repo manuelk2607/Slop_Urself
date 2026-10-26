@@ -69,7 +69,7 @@ export async function downloadVideo(url: string) {
 export function archiveRoomHint(url: string) {
     return /^\/api\/videos\/videos\/\d{13}-([a-z0-9]{4})-[a-f0-9-]{36}\.mp4$/.exec(url)?.[1].toUpperCase();
 }
-export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string, artifact?: ArchiveArtifact) {
+export async function archiveVideo(url: string, config: ArchiveConfig, protectedUrls: string[] = [], reconcile?: (urls: string[]) => Promise<void>, roomCode?: string, artifact?: ArchiveArtifact, reservedBytes = 0) {
     if (config.AI_PROVIDER === 'mock' && url === '/assets/mock-video.mp4') return url;
     if (!archiveEnabled(config)) throw new Error('Die Zugangsdaten für das dauerhafte Videoarchiv fehlen.');
     const bytes = await downloadVideo(url);
@@ -87,7 +87,8 @@ export async function archiveVideo(url: string, config: ArchiveConfig, protected
         return `/api/videos/${key}`;
     }
     const protectedKeys = new Set(protectedUrls.filter(url => url.startsWith('/api/videos/')).map(url => url.slice('/api/videos/'.length)));
-    for (const old of evictionPlan(objects, bytes.length, archiveLimit(config), protectedKeys)) {
+    if (!Number.isSafeInteger(reservedBytes) || reservedBytes < 0) throw new Error('Ungültige Archivreservierung.');
+    for (const old of evictionPlan(objects, bytes.length, archiveLimit(config) - reservedBytes, protectedKeys)) {
         const response = await client(config).fetch(endpoint(config, old.key), { method: 'DELETE', signal: AbortSignal.timeout(15_000) });
         if (!response.ok && response.status !== 404) throw new Error('Altes Video konnte nicht gelöscht werden; Archivierung pausiert.');
         remaining.delete(`/api/videos/${old.key}`);

@@ -81,7 +81,14 @@ Fortsetzung am **26. Oktober 2026**:
 - M19: Aktive Archivdateien werden vor Veröffentlichung reserviert. Services-Neustarts
   bewahren die Reservierungen; Raumalarme erneuern sie, abgelaufene Reservierungen
   fallen automatisch aus der Verdrängungssperre. Node schützt zusätzlich die aktiven
-  URLs seiner Räume. Kapazitätsreservierung vor dem GPU-Start bleibt offen.
+  URLs seiner Räume. Zusätzlich reserviert die gemeinsame Archivwarteschlange vor
+  Budgetbeginn maximal 15 MiB je Job. Andere Jobs können diese Zusage nicht verbrauchen;
+  FIFO plant mit verbleibendem Budget. Vorabprüfung löscht keine Daten, zählt aktive
+  Videos/Undo mit und löst keine KI-Aufrufe aus. Reservierungen überstehen Services-
+  Neustarts, werden idempotent beendet und verfallen spätestens nach 30 Minuten.
+  Die Zusage gilt gegen andere App-Jobs; externe Bucket-Mutationen/Ausfälle können
+  weiterhin Speicherung verhindern und sind durch die separate Archivwiederholung
+  abgedeckt. Konservative Maximalgröße kann bei kleinen Archiven früher sperren.
 - M04: Neue Archivpartien filtern gesperrte URLs serverseitig. Bereits laufende
   Partien können nach nachträglicher Sperre weiterhin einen nicht abspielbaren Clip
   enthalten; Auslieferung bleibt gesperrt. Automatisches Überspringen ist noch offen.

@@ -8,7 +8,8 @@ const original = globalThis.fetch;
 let devices = 0;
 globalThis.fetch = async (input, options) => {
     const moderated = moderationFixture(input, options); if (moderated) return moderated;
-    const url = String(input), token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '') || '';
+    const url = String(input instanceof Request ? input.url : input), token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '') || '';
+    if (url.startsWith('https://storage.test/') && url.includes('list-type')) return new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>');
     if (url === 'https://huggingface.co/oauth/device') {
         const code = devices++ === 0 ? 'hf-a' : 'hf-b';
         return Response.json({ device_code: code, user_code: code === 'hf-a' ? 'ABCD-1234' : 'EFGH-5678', verification_uri: 'https://huggingface.co/oauth/device', expires_in: 300, interval: 5 });

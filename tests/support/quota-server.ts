@@ -11,6 +11,7 @@ const original = globalThis.fetch;
 globalThis.fetch = async (input, options) => {
     const moderated = moderationFixture(input, options); if (moderated) return moderated;
     const url = String(input instanceof Request ? input.url : input);
+    if (url.startsWith('https://storage.test/') && url.includes('list-type')) return new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>');
     if (url === 'https://huggingface.co/oauth/token') return Response.json({ access_token: 'personal-test', token_type: 'Bearer', expires_in: 28800 });
     const token = new Headers(options?.headers).get('authorization');
     if (url.startsWith('https://huggingface.co/') && token !== 'Bearer personal-test') throw new Error('The server token must never be used');

@@ -384,8 +384,11 @@ export class RoomDurableObject {
         if (room.imageProfile === 'bounded') preparedImageSize(image.base64);
         if (this.env.AI_PROVIDER !== 'mock' && !archiveEnabled(this.env)) throw new Error('Der Videospeicher ist nicht eingerichtet. Bitte die Storage-Schlüssel auf dem Server hinterlegen.');
         const generationId = crypto.randomUUID();
-        await service(this.env, '/quota/begin', { code: room.code, generations: remainingVideos(room), jobId: generationId,
-            playerId: player.id, ownRemaining: remainingVideosFor(room, player.id), participant: player });
+        if (this.env.AI_PROVIDER !== 'mock') await service(this.env, '/archive/preflight', { code: room.code, jobId: generationId });
+        try {
+            await service(this.env, '/quota/begin', { code: room.code, generations: remainingVideos(room), jobId: generationId,
+                playerId: player.id, ownRemaining: remainingVideosFor(room, player.id), participant: player });
+        } catch (error) { await service(this.env, '/archive/release', { jobId: generationId }).catch(() => {}); throw error; }
         room.state = 'GENERATING';
         room.generationId = generationId;
         room.currentPrompt = prompt;
@@ -513,7 +516,10 @@ export class RoomDurableObject {
 
     private async flushQuotaReleases() {
         while (this.quotaReleases.length) {
-            try { await service(this.env, '/quota/consume', this.quotaReleases[0]); }
+            try {
+                await service(this.env, '/quota/consume', this.quotaReleases[0]);
+                await service(this.env, '/archive/release', this.quotaReleases[0]);
+            }
             catch { break; }
             this.quotaReleases.shift();
             await this.state.storage.put('quotaReleases', this.quotaReleases);

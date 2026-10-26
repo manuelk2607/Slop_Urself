@@ -110,10 +110,20 @@ function archive(url: string, code?: string, artifact?: ArchiveArtifact) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();
         const active = [...rooms.values()].map(r => r.currentVideoUrl).filter(Boolean);
-        const stored = await archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active, ...await archiveReservations.activeUrls()], database ? urls => database.reconcileArchive(urls) : undefined, code, artifact);
+        const stored = await archiveVideo(url, config, [...await database?.protectedVideoUrls() || [], ...active, ...await archiveReservations.activeUrls()], database ? urls => database.reconcileArchive(urls) : undefined, code, artifact, await archiveReservations.pendingBytes(artifact?.generationId));
         if (code && stored.startsWith('/api/videos/')) await archiveReservations.protect(code, stored);
         return stored;
     });
+    archiveWork = result.catch(() => {}); return result;
+}
+function reserveArchive(jobId: string, code: string) {
+    if (AI_PROVIDER === 'mock') return Promise.resolve();
+    const result = archiveWork.then(async () => archiveReservations.reserve(jobId, code, config,
+        [...await getDatabase()?.protectedVideoUrls() || [], ...[...rooms.values()].map(room => room.currentVideoUrl).filter(Boolean)]));
+    archiveWork = result.catch(() => {}); return result;
+}
+function releaseArchive(jobId: string) {
+    const result = archiveWork.then(() => archiveReservations.release(jobId));
     archiveWork = result.catch(() => {}); return result;
 }
 app.use(async (req, res, next) => {
@@ -325,7 +335,7 @@ function runGeneration(room: Room, generationId: string, image?: string) {
         broadcast(room);
         io.to(room.code).emit('errorMsg', error instanceof Error ? error.message : 'Generierung fehlgeschlagen.');
     }).finally(async () => {
-        if (!pending && !uncertain) await withBudget(() => budget.consume(room.code, generationId));
+        if (!pending && !uncertain) await Promise.all([withBudget(() => budget.consume(room.code, generationId)), releaseArchive(generationId)]);
         await refreshLobbyQuota(room);
     }).catch(() => logAiEvent('callback_failed', { ...lifecycle.context, errorCode: 'service' }));
 }
@@ -635,8 +645,11 @@ io.on('connection', (socket: Socket) => {
         room.generationId = generationId;
         // Lock the turn before the quota request yields to another image submission.
         room.state = 'GENERATING';
-        try { await withBudget(() => budget.begin(room.code, remainingVideos(room), generationId, player.id, remainingVideosFor(room, player.id), player)); } catch (error) { if (room.generationId === generationId) room.state = 'IDLE'; throw error; }
-        if (rooms.get(room.code) !== room || room.generationId !== generationId || activeCreator(room)?.id !== player.id) { await withBudget(() => budget.consume(room.code, generationId)); return; }
+        try {
+            await reserveArchive(generationId, room.code);
+            await withBudget(() => budget.begin(room.code, remainingVideos(room), generationId, player.id, remainingVideosFor(room, player.id), player));
+        } catch (error) { if (room.generationId === generationId) room.state = 'IDLE'; await releaseArchive(generationId).catch(() => {}); throw error; }
+        if (rooms.get(room.code) !== room || room.generationId !== generationId || activeCreator(room)?.id !== player.id) { await Promise.all([withBudget(() => budget.consume(room.code, generationId)), releaseArchive(generationId)]); return; }
         room.state = 'GENERATING'; room.generationId = generationId;
         room.currentPrompt = prompt; room.currentVideoUrl = ''; room.currentVotes = {};
         broadcast(room);

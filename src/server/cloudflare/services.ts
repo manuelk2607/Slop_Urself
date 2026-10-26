@@ -88,10 +88,14 @@ export class ServiceDurableObject {
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
                 const url = await archiveVideo(data.url, this.env, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
-                    database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact);
+                    database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact, await this.archiveReservations.pendingBytes(data.artifact?.generationId));
                 if (url.startsWith('/api/videos/') && data.code) await this.archiveReservations.protect(data.code, url);
                 return json({ url });
             }
+            else if (path === '/archive/preflight') {
+                if (this.env.AI_PROVIDER !== 'mock') await this.archiveReservations.reserve(data.jobId!, data.code, this.env, await getDatabase(this.env.DATABASE_URL)?.protectedVideoUrls() || []);
+            }
+            else if (path === '/archive/release') await this.archiveReservations.release(data.jobId!);
             else if (path === '/archive/protect') await this.archiveReservations.protect(data.code, data.url);
             else if (path === '/archive/delete') await deleteArchivedVideo(data.url, this.env);
             else if (path === '/archive/status') return json(await archiveStatus(this.env, getDatabase(this.env.DATABASE_URL)));
