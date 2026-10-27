@@ -7,6 +7,7 @@ import type { HistoryKind } from './history-selection';
 import { historyUndo } from './history-undo';
 import { videoPlayback } from './video';
 import { generationNotice } from './generation-notice';
+import { promptDrafts } from './prompt-drafts';
 import type { GenerationView } from '../shared/generation';
 import { accountManagement } from './accounts';
 import { prepareImage } from './images';
@@ -84,6 +85,9 @@ const waitNoticeText = document.getElementById('waitNoticeText') as HTMLParagrap
 const imageInput = document.getElementById('imageInput') as HTMLInputElement;
 const imagePreview = document.getElementById('imagePreview') as HTMLImageElement;
 const promptInput = document.getElementById('promptInput') as HTMLInputElement;
+const drafts = promptDrafts(() => sessionStorage);
+let draftScope = '';
+promptInput.addEventListener('input', () => { if (draftScope) drafts.save(draftScope, promptInput.value); });
 const uploadButton = document.getElementById('uploadButton') as HTMLButtonElement;
 const customButton = document.querySelector('.custom-file-btn') as HTMLLabelElement;
 const loadingSection = document.getElementById('loadingSection') as HTMLDivElement;
@@ -163,6 +167,7 @@ function saveSession(roomId: string, sessionId: string) {
 }
 
 function clearSession(preserveStored = false) {
+    drafts.clear(); draftScope = '';
     document.body.classList.remove('room-open');
     editingRoundCount = false;
     hfConnection.lock(false);
@@ -395,12 +400,14 @@ socket.on('disconnect', () => {
 function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: string; hostId: string; gameState?: string; reset?: boolean; generation?: GenerationView; serverTime?: number }) {
     showScreen(screenCreate);
     currentHostId = data.hostId;
-    if (data.reset) { clearImagePreview(); promptInput.value = ''; }
     uploadButton.disabled = false;
     uploadButton.innerText = 'KI-Video generieren';
 
     const isGenerating = data.gameState === 'GENERATING';
     const isMe = Boolean(data.activeCreatorId) && isCurrentSocket(data.activeCreatorId || '');
+    if (isGenerating || !isMe) { if (draftScope) drafts.remove(draftScope); draftScope = ''; }
+    else draftScope = `${currentRoomId}:${currentPlayerId}:${currentVideoNumber}`;
+    if (data.reset) { clearImagePreview(); promptInput.value = draftScope ? drafts.get(draftScope) : ''; }
 
     creatorControls.style.display = !isGenerating && isMe ? 'block' : 'none';
     waitControls.style.display = !isGenerating && !isMe ? 'block' : 'none';

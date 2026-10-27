@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import { chromium, webkit } from 'playwright';
+import { testImage } from '../support/images';
+const base = process.argv[2] || 'http://127.0.0.1:3310';
+const browser = await (process.env.TEST_BROWSER_ENGINE === 'webkit' ? webkit : chromium).launch({ headless: true, executablePath: process.env.TEST_BROWSER_PATH || undefined });
+try {
+    const page = await browser.newPage();
+    const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+    await page.goto(base); await page.locator('#usernameInput').fill('DraftPlayer');
+    await page.locator('#createRoomButton').click(); await page.locator('#screenRoomLobby').waitFor({ state: 'visible' });
+    await page.locator('#startGameButton').click(); await page.locator('#creatorControls').waitFor({ state: 'visible' });
+    await page.locator('#imageInput').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: testImage(320, 240) });
+    await page.locator('#imagePreview').waitFor({ state: 'visible' });
+    const text = 'Der gelbe Ball hüpft über die Wiese.';
+    await page.locator('#promptInput').fill(text);
+    const saved = await page.evaluate(() => sessionStorage.getItem('slopurself-prompt-drafts'));
+    assert.ok(saved?.includes(text)); assert.doesNotMatch(saved, /data:image|base64|hfConnection|sessionId/);
+    await page.reload(); await page.locator('#creatorControls').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#promptInput').inputValue(), text);
+    assert.equal(await page.locator('#imageInput').evaluate((input: HTMLInputElement) => input.files?.length), 0);
+    assert.equal(await page.locator('#imagePreview').isVisible(), false);
+    await page.locator('#imageInput').setInputFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: testImage(320, 240) });
+    await page.locator('#imagePreview').waitFor({ state: 'visible' }); await page.locator('#uploadButton').click();
+    await page.locator('#screenVoting').waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('slopurself-prompt-drafts')), null);
+    await page.locator('#leaveRoomButton').click(); await page.locator('#screenLobby').waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('slopurself-prompt-drafts')), null);
+    assert.deepEqual(errors, []);
+    console.log('PASS: tab-local prompt survives reload without retaining image bytes; accepted generation and leaving clear the draft.');
+} finally { await browser.close(); }

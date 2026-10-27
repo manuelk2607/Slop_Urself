@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { promptDrafts, PROMPT_DRAFT_TTL_MS } from '../../src/client/prompt-drafts';
+test('prompt drafts are scoped, short-lived, text-only, bounded and cleared after submission/leave', () => {
+    const data = new Map<string, string>();
+    const storage = { getItem: (key: string) => data.get(key) || null, setItem: (key: string, value: string) => { data.set(key, value); }, removeItem: (key: string) => { data.delete(key); } };
+    const drafts = promptDrafts(() => storage);
+    drafts.save('ROOM:player:1', 'Der Ball hüpft.', 1000);
+    assert.equal(drafts.get('ROOM:player:1', 1001), 'Der Ball hüpft.');
+    assert.equal(drafts.get('ROOM:other:1', 1001), '');
+    assert.equal(drafts.get('ROOM:player:2', 1001), '');
+    assert.equal(drafts.get('ROOM:player:1', 1000 + PROMPT_DRAFT_TTL_MS), '');
+    assert.equal(data.size, 0);
+    for (let i = 0; i < 20; i++) drafts.save(`scope-${i}`, 'benign', 1000 + i);
+    assert.equal(Object.keys(JSON.parse([...data.values()][0])).length, 10);
+    assert.doesNotMatch([...data.values()][0], /image|token|session|data:/);
+    drafts.clear(); assert.equal(data.size, 0);
+    drafts.save('scope', 'a'.repeat(151)); assert.equal(data.size, 0);
+    drafts.save('scope', 'benign'); drafts.remove('scope'); assert.equal(data.size, 0);
+});
+test('malformed/blocked tab storage cannot break the game or restore invalid drafts', () => {
+    const blocked = promptDrafts(() => { throw new Error('storage unavailable'); });
+    assert.equal(blocked.get('scope'), ''); blocked.save('scope', 'benign'); blocked.clear();
+    let value = '{bad json';
+    const drafts = promptDrafts(() => ({ getItem: () => value, setItem: (_key, next) => { value = next; }, removeItem: () => { value = ''; } }));
+    assert.equal(drafts.get('scope'), '');
+    assert.equal(value, ''); drafts.save('scope', 'recovered'); assert.equal(drafts.get('scope'), 'recovered');
+    value = JSON.stringify({ scope: { text: 'a'.repeat(151), expiresAt: Date.now() + 1000 } });
+    assert.equal(drafts.get('scope'), ''); assert.equal(value, '');
+});
