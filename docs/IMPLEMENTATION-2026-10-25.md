@@ -395,3 +395,17 @@ unverändert; andere Protokolle haben eigene Versionsfingerabdrücke. Kein koste
 Aufruf, keine GPU, kein Deployment, keine Qualifikation. Weitere identische Messungen
 ohne neue technische Hypothese werden nicht wiederholt. Evidenz:
 [ausschließlich synthetischer CPU-Bericht](audits/2026-10-27-moderation-labels-diagnostic.json).
+
+
+### M04: nachträgliche Sperren in laufenden Archivpartien (27.10.)
+
+Node und Room-DO prüfen den aktuellen Clip vor Abschluss einer Wertung sowie vor
+Vergabe von Rate-Bonuspunkten erneut. Ein 10s-Check (auch nach Hibernation) überspringt
+einen inzwischen gesperrten Clip ohne Punkte und entfernt Prompt/Abgaben aus dem
+aktuellen Raumzustand. Der folgende Spielzug bleibt erreichbar. Unklare/fehlende
+Sperrantworten halten die Wertung zurück; asynchron veraltete Antworten dürfen kein
+neues Video überspringen. Bereits im Browser heruntergeladene Bytes können nicht
+zurückgerufen werden; neue Medienabrufe bleiben wie bisher sofort gesperrt.
+Build/191 Units bestanden, einschließlich Persistenz/Wiederanlauf und Statusausfall.
+Die vollständige isolierte Chromium/WebKit/workerd-Matrix läuft noch; keine
+produktive Verifikation und keine vollständige Moderationsabnahme daraus ableiten.

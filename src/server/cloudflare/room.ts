@@ -7,7 +7,7 @@ import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETR
 import { qualityConfig } from '../../ai/providers';
 import { preparedImageSize } from '../../ai/images';
 import { gameOptions } from '../../game/options';
-import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from '../../game/archive-play';
+import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent } from '../../game/archive-play';
 import { closePhase, syncPhase } from '../../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse } from '../../game/images';
 import { logAiEvent } from '../../ai/telemetry';
@@ -45,6 +45,7 @@ export class RoomDurableObject {
     private snapshotChecks = new Set<CloudflareWebSocket>();
     private archiveLeaseRenewAt = 0;
     private leasedVideoUrl = '';
+    private contentCheckAt = 0;
 
     constructor(private state: DurableObjectState, private env: Env) {
         state.blockConcurrencyWhile(async () => {
@@ -194,7 +195,9 @@ export class RoomDurableObject {
                     else if (message.type === 'startGame') await this.startGame(player);
                     else if (message.type === 'sendImage') await this.sendImage(player, payload);
                     else if (message.type === 'submitVote') await this.submitVote(player, payload);
-                    else if (message.type === 'judgeGuesses' && judgeGuesses(this.room!, player, payload)) await this.checkVotingComplete();
+                    else if (message.type === 'judgeGuesses') {
+                        if (await this.archiveContentReady(this.room!) && judgeGuesses(this.room!, player, payload)) await this.checkVotingComplete();
+                    }
                     else if (message.type === 'finishPreview' && confirmPreview(this.room!, player, payload)) { await this.checkVotingComplete(true); this.broadcastRoomUpdate(); }
                     else if (message.type === 'startNextRound') await this.startNextRound(player);
                     else if (message.type === 'closePhase' && this.room!.hostId === player.id && payload.phaseKey === this.room!.phaseKey) await this.endPhase();
@@ -576,8 +579,30 @@ export class RoomDurableObject {
     private async checkVotingComplete(confirmedSolo = false) {
         const room = this.room;
         if (!room) return;
+        if (!await this.archiveContentReady(room)) return;
         if (!finishVoting(room, confirmedSolo)) { await this.saveRoom(); return; }
         await this.completeVoting();
+    }
+
+    private async archiveContentReady(room: RoomState) {
+        this.contentCheckAt = Date.now() + 10_000;
+        try {
+            const result = await checkArchiveContent(room, async url => {
+                if (!this.env.SERVICES && this.env.AI_PROVIDER === 'mock') return false;
+                const response = await service(this.env, '/security/content/blocked', { url });
+                if (typeof response.blocked !== 'boolean') throw new Error('Content status unavailable');
+                return response.blocked;
+            });
+            if (result === 'skipped') {
+                await this.saveRoom(); this.broadcastRoomUpdate();
+                this.broadcast('roomNotice', 'Ein gesperrtes Archivvideo wurde ohne Wertung übersprungen.');
+            }
+            return result === 'allowed';
+        } catch (error) {
+            operationFailure('archive-content-status', error);
+            this.broadcast('roomNotice', 'Die Inhaltsprüfung ist gerade nicht erreichbar. Die Wertung wartet.');
+            return false;
+        }
     }
 
     private async completeVoting() {
@@ -692,6 +717,7 @@ export class RoomDurableObject {
             }
             const room = this.room;
             if (room) {
+                if (this.contentCheckAt <= Date.now()) await this.archiveContentReady(room);
                 if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) await this.checkVotingComplete(true);
                 if (room.phaseDeadline && room.phaseDeadline <= Date.now()) await this.endPhase();
                 if (room.sharedImage && room.sharedImage.expiresAt <= Date.now()) {
@@ -730,6 +756,7 @@ export class RoomDurableObject {
         for (const meta of this.sockets.values()) if (!meta.playerId && meta.acceptedAt) deadlines.push(meta.acceptedAt + 60_000);
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
+        if (this.room && isArchiveGame(this.room) && ['VOTING', 'GUESS_REVIEW'].includes(this.room.state)) deadlines.push(this.contentCheckAt || Date.now() + 100);
         if (this.room?.state === 'VOTING' && this.room.previewDeadline && !this.room.previewConfirmed) deadlines.push(this.room.previewDeadline);
         if (this.room?.currentVideoUrl.startsWith('/api/videos/') && this.room.state !== 'GAME_OVER') deadlines.push(this.archiveLeaseRenewAt || Date.now() + 100);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
@@ -791,6 +818,7 @@ export class RoomDurableObject {
     private async endPhase() {
         const room = this.room;
         if (!room) return;
+        if (!await this.archiveContentReady(room)) return;
         const creatorId = activeCreator(room)?.id;
         const result = closePhase(room);
         if (result === 'voted') await this.completeVoting();

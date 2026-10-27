@@ -32,7 +32,7 @@ import { generationSafetyReady, moderateInput, validatePrompt } from '../securit
 import { archiveRecovery } from '../ai/recovery';
 import { approvedProvider } from '../ai/provider-trust';
 import { gameOptions } from '../game/options';
-import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo } from '../game/archive-play';
+import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent } from '../game/archive-play';
 import { closePhase, syncPhase } from '../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
 import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo, type ArchiveArtifact } from '../storage/archive';
@@ -397,7 +397,28 @@ function persistMembers(room: Room) {
     });
 }
 
-function checkVotingComplete(room: Room, confirmedSolo = false) {
+const contentChecks = new WeakMap<Room, Promise<boolean>>();
+const contentCheckAt = new WeakMap<Room, number>();
+function archiveContentReady(room: Room): Promise<boolean> {
+    if (!isArchiveGame(room) || !['VOTING', 'GUESS_REVIEW'].includes(room.state)) return Promise.resolve(true);
+    const pending = contentChecks.get(room); if (pending) return pending;
+    contentCheckAt.set(room, Date.now() + 10_000);
+    const check = checkArchiveContent(room, url => reports.blocked(url)).then(result => {
+        if (rooms.get(room.code) !== room) return false;
+        if (result === 'skipped') {
+            broadcast(room);
+            io.to(room.code).emit('roomNotice', 'Ein gesperrtes Archivvideo wurde ohne Wertung übersprungen.');
+        }
+        return result === 'allowed';
+    }).catch(error => {
+        operationFailure('archive-content-status', error);
+        io.to(room.code).emit('roomNotice', 'Die Inhaltsprüfung ist gerade nicht erreichbar. Die Wertung wartet.');
+        return false;
+    }).finally(() => { contentChecks.delete(room); });
+    contentChecks.set(room, check); return check;
+}
+async function checkVotingComplete(room: Room, confirmedSolo = false) {
+    if (isArchiveGame(room) && !await archiveContentReady(room)) return;
     if (!finishVoting(room, confirmedSolo)) return;
     completeVoting(room);
 }
@@ -409,7 +430,9 @@ function completeVoting(room: Room) {
     if (room.state === 'GAME_OVER') void refreshLobbyQuota(room);
 }
 
-function endPhase(room: Room) {
+async function endPhase(room: Room) {
+    const key = room.phaseKey;
+    if (isArchiveGame(room) && (!await archiveContentReady(room) || room.phaseKey !== key)) return;
     const creatorId = activeCreator(room)?.id;
     const result = closePhase(room);
     if (result === 'voted') completeVoting(room);
@@ -425,8 +448,9 @@ function endPhase(room: Room) {
 }
 const phaseClock = setInterval(() => {
     for (const room of rooms.values()) {
-        if (room.phaseDeadline && room.phaseDeadline <= Date.now()) endPhase(room);
-        else if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { checkVotingComplete(room, true); broadcast(room); }
+        if (isArchiveGame(room) && ['VOTING', 'GUESS_REVIEW'].includes(room.state) && (contentCheckAt.get(room) || 0) <= Date.now()) void archiveContentReady(room);
+        if (room.phaseDeadline && room.phaseDeadline <= Date.now()) void endPhase(room);
+        else if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { void checkVotingComplete(room, true).then(() => broadcast(room)); }
     }
 }, 500);
 phaseClock.unref();
@@ -453,7 +477,7 @@ function leave(room: Room, player: Player) {
         const standings = finalStandings(room);
         if (!isArchiveGame(room)) persist(room, () => markRoomFinished(room.code, standings));
     }
-    checkVotingComplete(room);
+    void checkVotingComplete(room).then(() => broadcast(room));
     broadcast(room);
     if (room.state === 'LOBBY') room.quota = undefined;
     if (room.state === 'GAME_OVER') room.extensionQuota = undefined;
@@ -676,21 +700,22 @@ io.on('connection', (socket: Socket) => {
         runGeneration(room, generationId, imageBase64 as string);
     });
 
-    on('submitVote', payload => {
+    on('submitVote', async payload => {
         const { room, player } = member(socket, payload);
         if (room.state !== 'VOTING' || room.currentVotes[player.id] !== undefined) return;
         recordVote(room, player, payload);
-        checkVotingComplete(room);
+        await checkVotingComplete(room);
         broadcast(room);
     });
-    on('judgeGuesses', payload => {
+    on('judgeGuesses', async payload => {
         const { room, player } = member(socket, payload);
-        if (judgeGuesses(room, player, payload)) { checkVotingComplete(room); broadcast(room); }
+        if (isArchiveGame(room) && !await archiveContentReady(room)) return;
+        if (judgeGuesses(room, player, payload)) { await checkVotingComplete(room); broadcast(room); }
     });
 
-    on('finishPreview', payload => {
+    on('finishPreview', async payload => {
         const { room, player } = member(socket, payload);
-        if (confirmPreview(room, player, payload)) { checkVotingComplete(room, true); broadcast(room); }
+        if (confirmPreview(room, player, payload)) { await checkVotingComplete(room, true); broadcast(room); }
     });
 
     on('startNextRound', payload => {
@@ -701,10 +726,10 @@ io.on('connection', (socket: Socket) => {
         broadcast(room);
     });
 
-    on('closePhase', payload => {
+    on('closePhase', async payload => {
         const { room, player } = member(socket, payload);
         if (room.hostId !== player.id || payload.phaseKey !== room.phaseKey) return;
-        endPhase(room);
+        await endPhase(room);
     });
 
     on('extendGame', async payload => {

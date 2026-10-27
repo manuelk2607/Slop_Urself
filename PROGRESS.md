@@ -18,11 +18,10 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
 - In Arbeit M04: Sperrstatus laufender Archivclips vor Wertung/Ratebonus und per
   10s-Check erneut prüfen. Gesperrte Clips ohne Punkte überspringen; Statusausfall
   hält die Wertung zurück. Gemeinsame Regel für Node/DO, Tests für Hibernation,
-  Statusausfall und veraltete asynchrone Ergebnisse ergänzt. Noch nicht abgenommen.
-- Aktueller Root-Build+Units: **38019**; Logs
-  `/tmp/slop-build-ban-2026-10-27.log` und `/tmp/slop-unit-ban-2026-10-27.log`.
-  Erster Build meldete fehlende neue FailureStage; korrigiert, Folgeprüfung läuft.
-- Keine Modelltests oder Testwebserver mehr aktiv. Kein Push/Deployment.
+  Statusausfall und veraltete asynchrone Ergebnisse ergänzt. Build/191 Units bestanden; vollständige isolierte Browser-/workerd-Matrix läuft.
+- Root-Build+Units **38019 beendet, Exit 0**. Vollständige Matrix **42975** läuft;
+  `/tmp/slop-ci-ban-2026-10-27.log/.exit`. Keine Produktivdienste beteiligt.
+- Keine Modelltests aktiv; CI betreibt ausschließlich eigene isolierte Server. Kein Push/Deployment.
 
 ## Gesicherte Pakete (Auswahl)
 

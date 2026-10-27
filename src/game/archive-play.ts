@@ -24,3 +24,25 @@ export function playArchiveVideo(room: Room) {
     room.archiveCurrent = clip;
     room.currentPrompt = clip.prompt; room.currentVideoUrl = clip.videoUrl; room.state = 'VOTING';
 }
+
+// Recheck immediately before tallying and periodically while a replay is open.
+// A media ban already denies GET/HEAD/Range; this also keeps the game moving.
+export async function checkArchiveContent(room: Room, blocked: (url: string) => Promise<boolean>): Promise<'allowed' | 'skipped' | 'stale'> {
+    if (!isArchiveGame(room) || !['VOTING', 'GUESS_REVIEW'].includes(room.state) || !room.currentVideoUrl) return 'allowed';
+    const url = room.currentVideoUrl, ballot = room.ballotId;
+    const denied = await blocked(url);
+    // Node can receive a leave/next-turn event during the storage read.
+    if (room.currentVideoUrl !== url || room.ballotId !== ballot || !['VOTING', 'GUESS_REVIEW'].includes(room.state)) return 'stale';
+    if (!denied) return 'allowed';
+    const curator = room.players[room.activeCreatorIndex];
+    room.pendingCreators = room.pendingCreators?.filter(id => id !== curator?.id);
+    room.archiveClips = room.archiveClips?.filter(clip => clip.videoUrl !== url);
+    room.archiveCurrent = undefined;
+    room.currentVideoUrl = ''; room.currentPrompt = ''; room.currentVotes = {};
+    room.guesses = {}; room.guessesReviewed = false; room.voteDetails = {};
+    room.previewDeadline = undefined; room.previewConfirmed = undefined;
+    room.ballotId = crypto.randomUUID();
+    room.lastResult = { authorName: 'Gesperrtes Video übersprungen', roundPoints: 0 };
+    room.state = room.currentRound >= room.maxRounds && !room.pendingCreators?.length ? 'GAME_OVER' : 'RESULTS';
+    return 'skipped';
+}

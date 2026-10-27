@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { gameOptions } from '../../src/game/options';
 import { closePhase, syncPhase } from '../../src/game/phases';
-import { archiveCapacity, prepareArchive, playArchiveVideo } from '../../src/game/archive-play';
+import { archiveCapacity, prepareArchive, playArchiveVideo, checkArchiveContent } from '../../src/game/archive-play';
 import { startRounds, recordVote as rawRecordVote, finishVoting, judgeGuesses, roomSnapshot, advanceTurn, type Room } from '../../src/game/rules';
 import { roundInput } from '../../src/game/persistence';
 const recordVote: typeof rawRecordVote = (r, player, payload) => rawRecordVote(r, player, { ...roomSnapshot(r), ...payload });
@@ -51,4 +51,24 @@ test('archive guessing rotates the judge and awards only confirmed guessing poin
     assert.ok(roomSnapshot(r, 'a').reviewPrompt); assert.equal(roomSnapshot(r, 'b').reviewPrompt, undefined);
     assert.equal(judgeGuesses(r, r.players[0], { videoNumber: 1, correctPlayerIds: ['b'] }), true);
     finishVoting(r); assert.equal(r.players[0].score, 0); assert.equal(r.players[1].score, 2);
+});
+
+test('a newly banned replay is skipped without points or retained prompt, and rejects stale ballot reads', async () => {
+    const r = room('archive-guess'); prepareArchive(r, clips); startRounds(r); playArchiveVideo(r);
+    recordVote(r, r.players[1], { points: 5, guess: 'right' }); finishVoting(r);
+    const original = r.currentVideoUrl, ballot = r.ballotId;
+    assert.equal(r.state, 'GUESS_REVIEW');
+    assert.equal(await checkArchiveContent(r, async url => url === original), 'skipped');
+    assert.equal(r.state, 'RESULTS'); assert.equal(r.currentVideoUrl, ''); assert.equal(r.currentPrompt, '');
+    assert.equal(r.archiveCurrent, undefined); assert.deepEqual(r.currentVotes, {}); assert.deepEqual(r.guesses, {});
+    assert.notEqual(r.ballotId, ballot); assert.equal(r.players.every(p => p.score === 0), true);
+    assert.deepEqual(r.archiveResults, []); assert.equal(r.lastResult?.roundPoints, 0);
+    advanceTurn(r); playArchiveVideo(r); assert.notEqual(r.currentVideoUrl, original);
+    let resolve!: (value: boolean) => void;
+    const pending = checkArchiveContent(r, () => new Promise<boolean>(done => { resolve = done; }));
+    const replacement = crypto.randomUUID(); r.ballotId = replacement; resolve(true);
+    assert.equal(await pending, 'stale'); assert.equal(r.state, 'VOTING'); assert.equal(r.ballotId, replacement);
+    await assert.rejects(checkArchiveContent(r, async () => { throw new Error('storage unavailable'); }));
+    assert.equal(r.state, 'VOTING');
+    assert.equal(await checkArchiveContent(r, async () => true), 'skipped'); assert.equal(r.state, 'GAME_OVER');
 });

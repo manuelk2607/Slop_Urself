@@ -224,6 +224,37 @@ test('Worker archive games bypass HF, persist replay state and never rewrite cre
     } finally { database.playableArchive = original; }
 });
 
+test('Worker rechecks active archive bans before scores and after hibernation, holding on unavailable status', async () => {
+    const videoUrl = '/api/videos/videos/1792000000000-abcd-aabbcc.mp4';
+    let denied = true, unavailable = false;
+    const services = { idFromName: () => 'global', get: () => ({ fetch: async (request: Request) => {
+        const path = new URL(request.url).pathname;
+        if (path === '/security/content/blocked') return new Response(JSON.stringify(unavailable ? {} : { blocked: denied }), { status: unavailable ? 503 : 200 });
+        return new Response(JSON.stringify({ ok: true }));
+    } }) } as unknown as Env['SERVICES'];
+    const initial: Partial<Room> = { options: gameOptions({ mode: 'archive-vote' }), currentVideoUrl: videoUrl,
+        archiveCurrent: { id: 'old', creatorId: 'old', creatorName: 'Original', prompt: 'private old prompt', videoUrl },
+        pendingCreators: ['a', 'b', 'c'], roundPlayers: ['a', 'b', 'c'], archiveResults: [], currentVotes: { a: 5, b: 4 } };
+    const f = await fixture('VOTING', { SERVICES: services }, 1, initial);
+    await f.message(f.sockets[2], 'submitVote', { points: 5 });
+    let r = f.data.get('room') as Room;
+    assert.equal(r.state, 'RESULTS'); assert.deepEqual(r.archiveResults, []); assert.equal(r.currentVideoUrl, '');
+    assert.equal(r.players.every(player => player.score === 0), true); assert.deepEqual(r.currentVotes, {});
+    const notices = f.sockets[0].messages.filter(m => m.type === 'roomNotice'); assert.match(notices.at(-1)!.payload, /übersprungen/);
+    // A different currently displayed ballot survives a service outage without
+    // awarding its otherwise complete votes, even when the host closes it.
+    r = { ...r, ...structuredClone(initial), state: 'VOTING', phaseKey: undefined, phaseDeadline: undefined };
+    f.data.set('room', r); denied = false; unavailable = true;
+    const restored = await f.recreate(); await restored.alarm();
+    r = f.data.get('room') as Room; assert.equal(r.state, 'VOTING'); assert.deepEqual(r.archiveResults, []);
+    await restored.webSocketMessage(f.sockets[0] as never, JSON.stringify({ type: 'closePhase', payload: { phaseKey: r.phaseKey } }));
+    assert.equal((f.data.get('room') as Room).state, 'VOTING');
+    unavailable = false; denied = true;
+    const restarted = await f.recreate(); await restarted.alarm();
+    assert.equal((f.data.get('room') as Room).state, 'RESULTS');
+    assert.ok(f.alarms.some(time => time <= Date.now() + 10_100));
+});
+
 test('Worker restores private tasks, chunked common images and creator-only guess review after recreation', async () => {
     const f = await fixture('LOBBY', {}, 1, { imageProfile: 'bounded', options: gameOptions({ sharedImage: true, secretTasks: true, guessPrompt: true }) });
     await f.message(f.sockets[1], 'setSharedImage', { imageBase64: testImageData(832, 624) });
