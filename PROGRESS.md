@@ -1,245 +1,91 @@
-# Audit-Umsetzung – fortgesetzt am 27. Oktober 2026
+# Audit-Umsetzung – Stand 27. Oktober 2026
 
-Aktiver Auftrag: Auditpunkte in getesteten Paketen umsetzen; Branch codex/audit-remediation.
-Pakete: 1 Stimmen/Austritte; 2 Identität/Objektrechte/Requestgrenzen;
-3 Moderationsgates/Medien/Provider; 4 Recovery/Betrieb; 5 UX/Performance/Abnahme.
-Keine produktive Schemaänderung oder Veröffentlichung. MCP slop_urself fehlt;
-deshalb Schemaarbeit offen. Kein validierter kostenloser Moderationsdienst vorhanden:
-fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter ersetzen.
-## Aktueller Implementierungsstand
+## Auftrag und Grenzen
 
-### Aktuell laufend – M41 und gezieltes P0-CPU-Paket (27.10.)
+Alle offenen Maßnahmen aus `docs/IMPLEMENTATION-2026-10-25.md` und den beiden
+Audits vom 24.10. in getesteten Paketen umsetzen. Branch: `codex/audit-remediation`.
+Keine erneute Gesamtauditphase. Bestehende Arbeit erhalten. Kein Push/Deployment
+in diesem Auftrag. Echte KI bleibt bis belastbarer Moderation, Modellkontrolle
+und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
 
-- M41 uncommittet: nur Prompttext im aktuellen Tab, nach Raum/Spieler/Video
-  getrennt, 15 Minuten Gültigkeit, maximal zehn Einträge. Keine Bilder/Tokens/
-  Sitzungsgeheimnisse. Angenommene Generierung und Verlassen löschen Entwürfe;
-  blockierter/defekter Speicher verhindert Spielen nicht. Build/188 Units bestanden.
-- Vollständige CI mit vier Draft-Prüfungen bestanden, Exitcode 0 (Session 15291
-  abgeschlossen; /tmp/slopurself-ci-2026-10-27.log/.exit). Alle Chromium-/WebKit-/
-  workerd-Strecken einschließlich M33/M27 und Entwürfen grün. Root-Build/188 Units.
-- P0-Diagnose ohne Inferenz belegt 13–17 Kontext-Tiles bei 2048px gegenüber fünf
-  bei 1024px; ohne Splitting nur ein Tile, diese unsicherere Variante NICHT übernommen.
-  Alle akzeptierten Quellbilder <=1024px. Jetzt begrenztes Upscaling bei erhaltenem
-  Splitting; jede Quelle behält native Auflösung, kein 320px-Video-Vorabschrumpfen.
-  Gemeinsame Kantenbegrenzung und harte Prüfung erwarteter Prozessorparameter;
-  Runtime-Fingerprint enthält neues preprocessing.ts. Dienst-Build/11 Tests PASS.
-- CPU-Diagnose 59519 beendet: Exit 1 beim Kontextmodell-Laden, 0 semantische Fälle,
-  „Protobuf parsing failed“. Aktuelle Decoderdatei nur 1.323.696.414 statt der
-  per gepinnter HF-Metadaten bestätigten 1.450.425.745 Bytes. Dies belegt einen
-  unvollständigen aktuellen Cache, erklärt nicht pauschal ältere native Abstürze.
-- P0: manifeste ONNX-Größen/LFS-SHA256 im Lock, Streaming-Prüfung vor Modellladen,
-  öffentliche credentialfreie Reparatur mit Bytegrenze/Hash und atomarer Übernahme.
-  Abbruch/Fehler ersetzt den alten Cache nicht. Service-Build/13 Tests PASS.
-- Kontrollierte Cache-Reparatur läuft in Session 69609; Log/Exitdatei
-  /tmp/slop-model-repair-2026-10-27.log/.exit. Erst nach bestätigtem Abschluss
-  EINEN neuen CPU-Diagnoselauf starten. Keine GPU-Aufträge/Qualifikation/Freigabe.
-- Nutzer bestätigt: derzeit nur EIN reales HF-Konto verfügbar. M17-Zwei-Konten-
-  Abrechnungsnachweis bleibt deshalb extern blockiert, keine Ersatzbehauptung.
-- Nächster Schritt: M41 committen, technische P0-Korrekturen dokumentieren/sichern;
-  Reparaturprozess abwarten, anschließend geänderten Moderator mit überprüftem
-  Cache testen. Weitere priorisierte Restmaßnahmen währenddessen unabhängig.
+## Aktueller Fortsetzungspunkt
 
-### Fortsetzung 27.10. – M33/M32- und M27-Paket
+- M09/M22-Folgepaket in **da0934e** gesichert:
+  Abgaben ausgeschiedener Wähler bleiben auch im Fortschrittsnenner; ursprüngliche
+  Gruppenvorschau behält 45s-Ablauf, selbst wenn nur der Ersteller bleibt.
+  Echte Solo-Vorschau bleibt manuell. Build/189 Units und vier zusätzliche
+  Chromium/WebKit-Tests auf Node/workerd bestanden.
+- Uncommittete Moderationsdiagnostik liefert feste Review-Gründe statt Rohtext.
+  Entscheidungslogik/Schwellen unverändert. Dienst-Build und 14 technische Tests
+  bestanden. `--case` erlaubt einen gezielten Fall ohne Gesamtwiederholung.
+- Realer CPU-Grundtest **58858 beendet, Exit 2**, Node24, kompilierter Dienst,
+  nur `benign-en-motion`: review wegen `context_format`, 10.941 ms. Report/Log
+  `/tmp/slop-moderation-reason-2026-10-27.json` bzw. `.log`. Kein erneuter identischer
+  Lauf; als nächstes nur Ausgabeform/Tokenlimit datensparsam eingrenzen. Keine GPU,
+  keine Nutzerbilder, keine Qualifikation. Einzel-Formtest 80840 ebenfalls Exit 2:
+  nur 8 Ausgabetokens, kein JSON-Objekt/Fencing, Limit nicht erreicht. Keine blinde
+  Tokenbudget-Erhöhung und keine Freigabe natürlichsprachlicher Modellantworten.
+  `/tmp/slop-moderation-format-2026-10-27.json/.log`; keine Prozesse mehr aktiv.
+- Beendete Testprozesse: 15291 vollständige CI Exit 0; 19452 Vierfach-Austrittstest
+  Exit 0; 69609 Modellreparatur Exit 0; 3601 vollständige CPU-Diagnose Exit 2.
+  Isolierter Diagnose-Webserver 3380 (TTY 13243) wurde gestoppt. Keine Tests laufen.
 
-- Ausgangsstand 9195426 sauber; vollständige Browser-/Cloudflare-Matrix vom
-  26.10. tatsächlich mit Exitcode 0 abgeschlossen (Session 7330, Log
-  /tmp/slopurself-ci-final.log). Bezieht sich auf 181-Unit-Stand, nicht neue Pakete.
-- M33: aktueller/vorheriger Vault-Schlüssel, authentifizierte Schlüsselkennungen,
-  kompatibles Lesen alter Formate und kontrollierte Umverschlüsselung. Keine
-  Verlängerung der Token-/Jobablaufzeit; gleichzeitiges Disconnect wird nicht
-  rückgängig gemacht. Vorheriger Schlüssel nur explizit per Setup übertragbar.
-- M33: höchstens 16 neue aktive Vault-Einträge je Profil (global weiter 512),
-  serialisierte parallele Starts und Bereinigung von Eigentümer-/Ablaufindex.
-  Alteinträge werden bei Umverschlüsselung zugeordnet, nicht pauschal gelöscht.
-- M32 teilweise: Cleanup-Indizes werden vor verschlüsselten Geheimnissen
-  geschrieben. Fehler hinterlassen begrenzte leere Slots mit Ablauf statt
-  dauerhafter unindizierter Tokens; gezielte Crash-/Cleanup-Regression ergänzt.
-- M27: Spielerfilter lädt nur paginierte Videohistorie, keine Gesamtstatistik oder
-  erneuten Speicherabgleich; schützt Auswahl, Fokus, Scrollposition und alte
-  verspätete Seiten. Alle acht History-/Statistikprüfungen in Chromium/WebKit
-  jeweils auf Node/workerd bestanden. Fehlendes lokales WebKit-Startskript durch
-  offiziellen Download behoben; Chromium wird ebenfalls wiederhergestellt
-  (Session 60084). Browser-GC künftig via PLAYWRIGHT_SKIP_BROWSER_GC=1 vermeiden.
-- Build/186 Units einschließlich Cap-/Crashergänzungen bestanden. HF-workerd-
-  Prüfung und persönlicher Chromium-HF-Ablauf nach Rotation bestanden; nach
-  finalem Index-Schreibauftrag workerd nochmals bestanden. Ein vorheriger
-  HF-Teststart timeoutete während parallelem Build; Wiederholung bestanden.
-- Nächster Schritt: Commits abschließen, danach tablokale Prompt-
-  Entwürfe (M41). Gezielte CPU-Vorverarbeitungsdiagnose läuft ohne Inferenz in
-  Session 16829 (Log /tmp/slop-moderation-preprocess.log); keine Modell-/Produktions-
-  parameter geändert. P0-Freigabe unverändert
-  gesperrt; keine externen Schreibaktionen und kein Push/Deployment.
+## Gesicherte Pakete (Auswahl)
 
-### Aktueller Fortsetzungspunkt (nach f37e0da/eb72950)
+- a4e896e/f4e28e0: Phasenbindung, angenommene Stimmen bei Austritt, Identitätsbeweis,
+  geschützte Archiv-/Statistikrechte und Eigentümer-/Löschprüfungen.
+- 289846e/b8e2dc9/a1e6d23: fail-closed Moderation, Decoder, Provider-Pinning,
+  Meldung/Sperren, CSP, Request-/Bytegrenzen, sichere Logs, aktive Archivleases.
+- d2a3a94: echte persönliche HF-whoami-Prüfung vor Inferenz, Wan-Parametervertrag,
+  strikte Score-/JSON-Verträge, vollständiger Frame-/Spur-/Abbruchvertrag.
+- d3eca91: 15-MiB-Kapazitätsreservierung vor persönlichem GPU-Budgetbeginn.
+- b49f5da/f37e0da: Vorschau/Enthaltung, Revanche-Race, Releasekorrelation,
+  Inventar-Cache, eindeutige HF-Spieler, 90s-Wiederkehr, Upload-Timeout-Abbruch.
+- eb72950: Freigabe benötigt echten gehashten Messbericht mit nachgerechneten
+  Ergebnissen, Abdeckung und Zeitgrenzen. Keine bloß behauptete SHA/Fallzahl.
+- 9195426: persistente Bearbeitungsstufen/Zeiten nach Reload, korrelierte
+  Archivstufen; Testkonten besitzen eigene Tokens/Kontingente.
+- 07713ba: Vault-Schlüsselrotation/Legacy-Migration ohne Laufzeitverlängerung,
+  16 Einträge pro Profil, Cleanup-Index vor Geheimnissen, Disconnect-Race geschützt.
+- ed248b8: Videofilter nutzt nur paginierte Liste statt Gesamtstatistik/Inventar.
+- 5ebe6a8: kurz gültige tablokale Prompttexte; keine Bild-/Tokenablage.
+- 8001c36: ONNX-Größen/LFS-SHA256, atomare credentialfreie Cache-Reparatur,
+  begrenztes Upscaling mit Splitting und Prüfung nativer Videoauflösung.
 
-- M36: gemeinsame echte Stufen Queue/Inferenz/Abfrage/Archiv statt Prozentwerten;
-  Auftragsbeginn und Stufe im Raumsnapshot, CF persistiert Fortschritt. Reload
-  übernimmt Uhrzeit/Job-ID; verspätete fremde Fortschritte ignoriert. Separater
-  Zähler ohne Live-Region-Daueransagen. Chromium-Slow-Mock-Test bestanden.
-- M20: Archivfehler unterscheiden Download, Ausgabemoderation, Inventar und
-  Speicherung; Job/Release korreliert, keine Rohfehler/URLs/Prompts. Regression.
-- Root-Build/181 Unit-Tests bestanden. Gesamtlauf stoppte an historischer Fixture:
-  Archiv-/Quota-Tests verbanden mehrere Profile mit demselben HF-Konto, was M23
-  jetzt korrekt sperrt. Fixtures auf separate IDs/Tokens/Kontingente umgestellt;
-  schwaches drittes Konto und persönliche Reservierungen werden explizit geprüft.
-- Gezielte Chromium/WebKit-Prüfung party/quota/extension/generation bestanden;
-  separate HF-Konten statt historisch geteilter Testidentität. Keine echten
-  Provider-/Speicher-/DB-Aufrufe. Vollständige Matrix als Nächstes neu starten;
-  vorherige abgebrochene Läufe NICHT als Gesamterfolg werten.
-- P0: Moderationsfreigabe benötigt jetzt den tatsächlichen gehashten, versions-
-  gebundenen Bericht, ausreichende Fall-/Videodeckung und berechnete Fehlerraten/
-  Latenz statt bloßer eingetragener SHA. Dienst-Build/10 technische Tests bestanden.
-  Neu: src/evidence.ts, im Runtime-Hash enthalten. Kein qualifizierender Bericht
-  erstellt, keine Freigabe; derzeitiger echter Benchmark weiterhin fehlgeschlagen.
-- Dienst-Build/10 Tests auch nach finalem Zeitgrenzen-Check bestanden; in eb72950
-  gesichert. Nächster Schritt: M36/M20/Fixtures committen, vollständige CI erneut;
-  anschließend unabhängige Restpakete (M27 Filter, M33 Vault, M41 Entwürfe) und
-  gezielte P0-Laufzeitdiagnose ohne Lockerung/Blindwiederholung bearbeiten.
-  Keine produktiven Änderungen, kein Push/Deployment. Sämtliche lokalen Commits erhalten.
+## Verifikation und echte Moderationsgrenze
 
-### P0-Paket (26.10., nach bfd749e) – Implementierung getestet, Freigabe gesperrt
+- Root-Build/189 Unit-Tests bestanden. Vollständige isolierte Chromium/WebKit/
+  workerd-Matrix am 27.10. Exit 0 auf dem 188-Unit-/M41-Stand; neue M09/M22-Korrektur
+  anschließend separat in vier Kombinationen bestanden. Nicht auf unbekannte
+  Produktionsstände oder reale HF-Abrechnung übertragen.
+- Dienst-Build/14 technische Tests bestanden; echte FFmpeg-/sharp-Prüfungen,
+  Protokoll, Hashbindung und Fehlerfälle. Keine Aussage semantischer Zuverlässigkeit.
+- Aktueller Protobuf-Fehler: Decodercache 1.323.696.414 statt 1.450.425.745 Bytes.
+  Reparatur verifizierte alle vier Gewichtsdateien per SHA256; Modelle laden danach.
+  Keine pauschale Erklärung älterer nativer Abstürze.
+- Anschließender echter CPU-Lauf: 8 Eingaben sämtlich review, darunter 4 harmlose;
+  5-Frame-/5s-Video scheitert nach 33.997ms. Kein sinnvoller Qualitätsnachweis.
+  Evidenz `docs/audits/2026-10-27-moderation-diagnostic.json` noch uncommittet.
+  Vorverarbeitung: 2048px erzeugte 13–17 Tiles; 1024px fünf, Splitting bleibt aktiv.
+- Lokaler Kaltstart der ungebündelten Node-Module dauerte zeitweise ~57s, deshalb
+  zwei Hilfsteststarts verworfen (einmal Build noch nicht fertig, einmal Timeout).
+  Kein Produkt-Erfolg daraus abgeleitet; finaler Test nutzte bestätigten Mockserver.
 
-- Moderation prüft sämtliche Spuren, lehnt bislang unmoderierten Ton/
-  Zusatzspuren ab; strikter Modell-JSON-/Scorevertrag; Abbruchsignal und erneute
-  Qualifikationsprüfung nach Inferenz. FFmpeg-9-Kompatibilität via fps_mode.
-- Echter lokaler CPU-Diagnoseversuch mit ausschließlich synthetischen Motiven:
-  Node 26 brach nativ bei Kontextmodellinitialisierung ab (Exit 134); Node 24
-  erreichte Modellinitialisierung nicht erfolgreich (Exit 1). Keine semantischen
-  Fälle ausgewertet, keine Qualitätsfreigabe, keine GPU-Aufträge. Fehler wird
-  gezielt diagnostiziert, keine blinden Wiederholungen. Evaluator jetzt beaufsichtigt
-  nativen Kindprozess und protokolliert auch Abstürze als fehlgeschlagene Prüfung.
-- Root: Jobtoken wird vor Inferenz gegen tatsächliche HF-whoami-ID des reservierten
-  Spielers geprüft; Regression für unveränderte Metadaten bei falschem Token ergänzt.
-- Wan: neue Parameterprüfung lehnt unbekannte Modell-/LoRA-Defaults, doppelte oder
-  fehlende Eingaben ab. tools/ai-readiness.ts prüft nur öffentliche Metadaten/API und
-  zählt aktive lokale Verbindungen; keinerlei GPU-/Schreibaufrufe.
-- Ergebnis der echten, begrenzten CPU-Diagnose unter Node 24: beide Modelle mit
-  separat geprüftem Cache initialisiert; 9 Fälle, 0 bestanden, 7 technische Ausfälle,
-  2 harmlose Anfragen review. Keine Aussage zur Erkennung unzulässiger Inhalte.
-  Evidenz: docs/audits/2026-10-26-moderation-diagnostic.json. Qualität ungeeignet/
-  nicht freigegeben; keine illegalen Medien, keine GPU-Aufträge.
-- Echter Wan-Endpunkt erreichbar/RUNNING und API kompatibel; keine freigegebene
-  Modellkonfiguration. Lokal 0 aktive HF-Verbindungen; Produktiv-Vault und tatsäch-
-  liche Abrechnung unverifiziert. Keine kostenpflichtigen Tests gestartet.
-- Root-Build/170 Tests und Moderations-Build/7 technische Tests bestanden.
-  Vollständige Chromium-/WebKit-/workerd-Matrix bestanden (Exit 0), danach kleine
-  gebaute Bodybegrenzung der Identitätsantwort mit Unit-Tests erneut geprüft.
-- Sicherheitsfreigabe weiterhin NICHT erteilt. Nächster Schritt: unabhängige P1-
-  Pakete M19 Kapazität vor GPU-Start und M09 Wiedergabe/Enthaltung; M18/schema-
-  bezogene Aufgaben bleiben wegen vorgeschriebenem, fehlendem slop_urself-MCP offen.
+## Blocker und nächste Schritte
 
-### P1-Paket M19 – lokal geprüft
-
-- Nach d2a3a94: M19 reserviert max. 15 MiB pro Job vor quota/begin;
-  Reservierungen gelten 30 Minuten, bleiben über Services-Neustart erhalten,
-  werden idempotent freigegeben und bei FIFO/Upload anderer Räume abgezogen.
-  Vorabprüfung löscht keine Dateien und kontaktiert keinen KI-Provider.
-- M19: Root-Build/171 Unit-Tests bestanden. Zusätzlicher Test prüft parallele
-  Raumreservierung, Wiederherstellung, Fremdraum-Abweisung und Ablauf. Aktuell
-  persönliche HF-Browserstrecke mit simulierter S3-Vorabprüfung bestanden (Chromium).
-- Danach M09: explizite, phasengebundene Enthaltung sowie begrenzte Betrachtungs-
-  zeit/Erstellerbestätigung vor automatischer Endwertung; keine Schemaänderung.
-
-### P1 M09/M20 und P2 M27 – lokal geprüft, Gesamtlauf noch wiederholen
-
-- M09: explizite Enthaltung über bestehende ballot-/runde-/video-
-  gebundene Abgabe (intern 0, nicht als Rating persistiert). Neue Gruppen-Videos
-  warten nach schnellen Stimmen auf Erstellervorschau oder ausdrückliche Freigabe;
-  nach höchstens 45 Sekunden kann fehlende Bestätigung die Runde nicht blockieren.
-  Solo bleibt manuell. Medien-Played-Bereiche liefern nur ein UX-Signal, keinen
-  kryptografischen Wiedergabenachweis. Preview-Ack ebenfalls phasengebunden.
-- M09 Build/178 Unit-Tests bestanden. Neue Vierfach-Browserprüfung bestanden: frühe
-  Stimmen, Reload, reduzierte Bewegung, Enthaltungen und Videoausfall. Danach
-  komplette lokale Browser-/Cloudflare-Matrix deckte eine Revanche-Race auf:
-  alter Bereitschaftsstatus blieb bis zum neuen Snapshot sichtbar. Korrigiert;
-  anschließender isolierter Teilnehmer-/Revanchetest in allen vier Browser-/Server-
-  kombinationen bestanden. Gesamtlauf erneut auszuführen, nicht als grün behaupten.
-- M20: Wrangler entfernt Querywerte aus Observability; CF-Version-Binding und
-  validierte Release-IDs in HTTP/AI-Diagnose. Keine produktive Cloudflare-Änderung.
-- M27: Speicheranzeige bündelt gleichzeitige Listenabrufe und cached sie fünf
-  Sekunden; jede physische App-Mutation invalidiert, Kapazität/FIFO bleiben frisch.
-  Kein Reconcile aus veraltetem/fehlgeschlagenem Inventar; drei Regressionen.
-- Keine Schemaänderung; Enthaltungen werden nicht als Null-Sterne-Stimmen in die
-  DB geschrieben. Historische Enthaltungszählung/volle Betroffenenlöschung offen.
-- Folgepaket M23: verifizierte HF-Subjekte vor Spielerbeitritt und Spielstart
-  eindeutig verlangen. Zuschauer haben kein Stimmrecht und dürfen dieselbe
-  Identität verwenden. Node prüft nach asynchroner Abnahme die unveränderte
-  Spielerliste erneut. Alte Budgetreservierungen bleiben dedupliziert erhalten.
-- M25: 90 statt 15 Sekunden Rückkehrfrist; explizites Verlassen bleibt sofort.
-  DO-Regression prüft Rückkehr und exakte Ablaufgrenze mit neuer Trennung.
-- P0-Dienst: unvollständige Uploads werden bei Timeout tatsächlich beendet und
-  geben den Prüfplatz frei. Ungültiges UTF-8/Encoding gelangt nicht zur Inferenz.
-  Dienst-Build/8 technische Tests bestanden; keine neue semantische Freigabe.
-- M23 Chromium und WebKit: simulierte persönliche Konten mit sechs Videos plus
-  Alias-Ablehnung und erlaubter Zuschauerrolle bestanden. Keine reale Abrechnung.
-- Lesende HF-Verbindung authentifiziert kostenloses Konto, jedoch ohne read-billing;
-  eigener alter Testspace darüber nicht abrufbar. Kein Kontingentnachweis/Deployment.
-- Nächster Schritt: Root-Abnahme/Commit dieses Folgepakets, dann M36 Status nach
-  Reload und volle lokale Matrix. P0 bleibt gesperrt; slop_urself-MCP weiterhin fehlt.
-
-### Bereits abgeschlossene Pakete
-
-- a4e896e: M08/M22 – Wertungskennung, Runde/Video prüfen; angenommene Stimmen bleiben bei Austritt erhalten.
-- f4e28e0: M06/M07/M13 und Teile M25/M27/M30 – Eigentumsnachweis statt Namenslogin,
-  dauerhafte HF-Zuordnung, scoped History/Videozugriffe und Delete/Restore-Rechte,
-  Bodylimits, Statistik-Reads parallel und Node-Videos gestreamt. Build/153 Unit-Tests bestanden.
-- Implementiert, externe Abnahme offen: M01–M03/M05/M10–M12/M14 – serverseitiger
-  PNG/JPEG-Decode, versions-/digestgebundene Eingabe-/Ausgabegates, Provider-Pinning
-  und Archiv-Retry ohne neuen GPU-Auftrag. Eigener CPU-Dienst vorbereitet, ungeprüft.
-- Benutzerentscheidung: eigenen kostenlosen Moderationsdienst vorbereiten, anschließend
-  Verfügbarkeit/Qualität prüfen. Keine manuelle Freigabelösung. Der Dienst bleibt bis
-  dokumentierter Qualifikation geschlossen; keine realen Medien-/GPU-Tests durchgeführt.
-- Abhängigkeiten: body-parser 2.4.0, Zod 4.6.7; jpeg-js für bounded Decode ergänzt.
-- Aktuelle Abnahme: Root-Build/Typprüfungen und 168 Unit-Tests bestanden. Vollständiger
-  isolierter Chromium-/WebKit-/workerd-Gesamtlauf mit Exitcode 0 bestanden; anschließend
-  eng begrenzte Legacy-HF-Medienausnahme mit vier zusätzlichen Browserchecks geprüft.
-  Produktionsabhängigkeiten in Root und CPU-Dienst: npm audit meldete jeweils 0 Befunde.
-- Nächstes Paket implementiert: M04 Melden/Sperren mit unabhängiger Adminfreigabe und
-  persistenten Sperren auf allen Archivdownloads; M15 CSP/Frame-/Berechtigungsheader;
-  M13/M16 Byte-/Aktionsbudgets und Join-Timeout; M12 stabiler Archivschlüssel bei
-  verlorener PUT-Antwort. Einschließlich Worker-Sperrtest auf GET/HEAD/Range/Download.
-- CPU-Dienst: indirektes verwundbares sharp gezielt auf 0.35.5 aktualisiert,
-  Transformers-Decode/Resize mit nativer Bibliothek geprüft. Service-Build und 5 Tests
-  bestanden. Qualifikation hängt zusätzlich am tatsächlichen Code-/Dependency-Hash.
-- Fortsetzung 26.10.: persistente Archivreservierungen (M19), erneuert durch Raum-
-  Alarme, schützen aktive Wiedergaben über Services-Neustarts. Neue Archivpartien
-  filtern gesperrte Clips (M04). Datenbank-/Raumlogs enthalten keine rohen Fehler-
-  meldungen/Queries/Tokens mehr (M20 teilweise).
-- Bedienungspaket umgesetzt: Kontraste (M21), reduzierte Bewegung samt manuellem
-  Video-Retry (M38), gemeinsame Plätze (M40), Screen-Fokus (M37), stabile Position
-  der Raumaktionen/dynamische Viewporthöhe (M39 teilweise), verständlicher Hinweis
-  auf noch unbestätigte Profilidentität und Restore-Rechte (M06/M07 UX).
-- Raumlayout oben verankert; Modalzentrierung erhalten. Geometrie-/A11y-Regressionen
-  und realistische Range-Auslieferung der lokalen Safari-Archivfixture bestanden.
-  CI nutzt temporäre, isolierte HF-/Moderations-/Archivablagen.
-- Eigene Modellrevisionen/ONNX-Dateien per öffentlichem HF-Metadatenabruf bestätigt.
-  Keine Modellgewichte geladen, keine semantische Klassifikationsqualität zugesichert.
-- Nächster Schritt: qualifizierten Moderationsdienst und kontrollierten Wan-Stand
-  real abnehmen, Bestandsidentität/individuelle HF-Abrechnung prüfen; anschließend
-  verbleibende P1- und P2-Pakete laut docs/IMPLEMENTATION-2026-10-25.md umsetzen.
-- Keine produktive Schemaänderung, kein Push oder Deployment.
-
-## Vorheriger Auditstand
-
-Historische Analyse vom 24.10.; kein erneuter Analyseauftrag. Aktueller Umsetzungsstand oben.
-
-Ziel: Priorisierter Maßnahmenkatalog inklusive belegter HF/Wan-Sicherheitsanalyse.
-Nur Analyse und Berichte; keine Implementierung, Deployments oder echten GPU-Jobs.
-
-- Ausgangspunkt: f59a1a7; Arbeitsverzeichnis sauber vor Berichtserstellung.
-- Geprüft: KI, OAuth/Vault/Quota, Worker/DO, Node, Spielzustände, SQL, UI, Archiv und Live-SEO.
-- Belegt: Space ohne sichtbare Moderation; safe_mode nur GPU-Reserve; live fremder Modell-Merge;
-  offene Profilanmeldung/globaler History-Zugriff; veraltete Stimmen akzeptiert; defektes PNG akzeptiert.
-- Extern: robots/sitemap 200; aktive Worker-Version 2136ab45; WAF-API weiterhin ohne Leserecht.
-- Verifikation: Build und 145 Unit-Tests mit Exitcode 0 bestanden; isolierter Chromium/WebKit-Lauf
-  lieferte PASS-Ausgaben bis zu den abschließenden Worker-E2Es. Abschließender Exitcode nach
-  Sitzungsverlust nicht abrufbar, daher keine uneingeschränkte lokale CI-Erfolgsaussage.
-- Zusätzlich: Googles eigenes Prüftool rief robots.txt am 24.10. um 13:16:53 UTC mit 200 text/plain ab.
-- Erstellt: docs/audits/2026-10-24-website.md (54 Maßnahmen) und
-  docs/audits/2026-10-24-content-safety.md (Providerbelege, mehrstufige Moderation, Kosten/Grenzen).
-- Abgeschlossen: 54 eindeutige Maßnahmen mit Priorität, Begründung, Aufwand und Komponenten;
-  Roadmap, Quick Wins und Sicherheitskonzept. IDs, Prioritätsreihenfolge, lokale Links und
-  Diff-Whitespace geprüft. Geändert wurden ausschließlich Berichts-/Fortschrittsdateien.
-- Nächster Schritt: Nutzer entscheidet über Umsetzung; nichts committed, gepusht oder deployed.
-- Offen: Reale HF-Abrechnung/Qualität, produktive DB/ACL/Backups und vollständige WAF-Einsicht
-  sind explizite Auditgrenzen. Keine Live-Generierung oder DB-Inspektion durchgeführt.
+1. Diagnoseevidenz/Instrumentierung committen. Als gezieltes Experiment ein
+   einfacheres strikt validiertes Entscheidungsprotokoll nur mit eigenem
+   Versionsfingerabdruck evaluieren; bestehender Standard/Schwellen bleiben zu.
+2. Moderation weiterhin NICHT qualifiziert. Fachliche Qualität, vollständige
+   Videolatenz und kostenloses Hosting offen; keine qualification.json erzeugt.
+3. Kontrollierter Wan-Stand/echte Safari-Ausgabe offen. Öffentlicher Community-
+   Endpoint erreichbar geprüft, keine freigegebene Modellkonfiguration.
+4. Nutzer bestätigt am 27.10.: nur EIN reales HF-Konto verfügbar. M17-Zwei-Konten-
+   Abrechnungsnachweis bleibt offen; simulierte Tests sind kein Ersatz.
+5. Vorgeschriebenes MCP `slop_urself` nicht verfügbar. Keine produktiven DB-Checks,
+   Schemas/Migrationen. M18/M24/M26/M28/M44 abhängig davon offen; keine WAF-/Restore-
+   oder Cloudflare-Account-Konfiguration als geprüft behaupten.
+6. Unabhängige Restpakete priorisiert fortsetzen, siehe Implementierungsbericht:
+   M04 laufende gesperrte Archivclips, M31/M32 Recovery, M35 Prompttransparenz,
+   M43/M45 Protokoll/Assets, danach übrige UX/Spielerweiterungen. robots.txt laut
+   Audit erreichbar; keinen unbelegten weiteren robots-Fix einführen.

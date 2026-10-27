@@ -1,14 +1,17 @@
 import { AutoProcessor, AutoModelForVision2Seq, RawImage, Tensor, pipeline, env, InterruptableStoppingCriteria } from '@huggingface/transformers';
 import sharp from 'sharp';
 import { ensureModelArtifacts, modelCacheRoot } from './artifacts.js';
-import { decide, POLICY, type Decision, type ModelLock, type Scores } from './policy.js';
+import { assess, POLICY, type Assessment, type Decision, type ModelLock, type Scores } from './policy.js';
 import { checkAbort, inspectVideo, MAX_MEDIA_EDGE } from './media.js';
 import { configureContextImages } from './preprocessing.js';
 
 // The non-root container cannot write Transformers.js' node_modules cache.
 // Only pinned model weights, never player media, belong in this directory.
 env.cacheDir = modelCacheRoot();
-export async function createEngine(lock: ModelLock, stage: (stage: string) => void | Promise<void> = () => {}) {
+export interface ModelAssessment extends Assessment {
+    format: { generatedTokens: number; atTokenLimit: boolean; fenced: boolean; startsObject: boolean; endsObject: boolean };
+}
+export async function createEngine(lock: ModelLock, stage: (stage: string) => void | Promise<void> = () => {}, observe: (assessment: ModelAssessment) => void = () => {}) {
     await stage('verifying_model_files');
     await ensureModelArtifacts(lock);
     const session_options = { intraOpNumThreads: 2, interOpNumThreads: 1 };
@@ -44,7 +47,12 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
         // Decode only new tokens. JSON in quoted input or the policy template
         // must never be mistaken for the model's classification.
         const output = processor.batch_decode(generated.slice(null, [inputIds.dims[1], generated.dims[1]]), { skip_special_tokens: true })[0];
-        return decide(scores, output.trim());
+        const assessment = assess(scores, output.trim());
+        const generatedTokens = generated.dims[1] - inputIds.dims[1];
+        observe({ ...assessment, format: { generatedTokens, atTokenLimit: generatedTokens >= 96, fenced: output.trim().startsWith('```'),
+            startsObject: output.trim().startsWith('{'), endsObject: output.trim().endsWith('}') } });
+        // Diagnostic callback only; no raw response, and the server sets no observer.
+        return assessment.decision;
     }
     return {
         input: async (image: string, prompt: string, signal?: AbortSignal) => {

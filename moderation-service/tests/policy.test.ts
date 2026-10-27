@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, modelVersion, qualificationValid, POLICY_VERSION } from '../src/policy.js';
+import { assess, decide, modelVersion, qualificationValid, POLICY_VERSION } from '../src/policy.js';
 test('unclear, malformed, sexual and incomplete assessments never approve', () => {
     const safe = { safe: true, sexual: false, sexualMinors: false, nonConsensual: false, graphicAbuse: false, uncertain: false };
     const scores = [{ label: 'normal', score: 0.99 }, { label: 'nsfw', score: 0.01 }];
@@ -12,6 +12,15 @@ test('unclear, malformed, sexual and incomplete assessments never approve', () =
     for (const malformed of [JSON.stringify({ ...safe, reason: 'unexpected' }), JSON.stringify(safe).replace('"safe":true', '"safe":false,"safe":true')]) assert.equal(decide(scores, malformed), 'review');
     assert.equal(decide([{ label: 'nsfw', score: 0.01 }, { label: 'nsfw', score: 0.99 }], JSON.stringify(safe)), 'review');
     assert.equal(decide(scores, JSON.stringify({ ...safe, sexualMinors: true })), 'block');
+});
+test('diagnostic review reasons distinguish protocol failures from actual risk without returning model text', () => {
+    const scores = [{ label: 'normal', score: 0.99 }, { label: 'nsfw', score: 0.01 }];
+    assert.deepEqual(assess(scores, 'private model text'), { decision: 'review', reason: 'context_format' });
+    assert.deepEqual(assess(scores, '{}'), { decision: 'review', reason: 'context_schema' });
+    assert.deepEqual(assess([], '{}'), { decision: 'review', reason: 'classifier_schema' });
+    const context = { safe: true, sexual: false, sexualMinors: false, nonConsensual: false, graphicAbuse: false, uncertain: false };
+    assert.deepEqual(assess(scores, JSON.stringify({ ...context, uncertain: true })), { decision: 'review', reason: 'context_uncertain' });
+    assert.deepEqual(assess(scores, JSON.stringify(context)), { decision: 'allow', reason: 'clear' });
 });
 test('qualification is tied to immutable models, policy, expiry and a real reviewed test report', () => {
     const lock = { nsfw: { id: 'a/model', revision: 'a'.repeat(40) }, vlm: { id: 'b/model', revision: 'b'.repeat(40) } };

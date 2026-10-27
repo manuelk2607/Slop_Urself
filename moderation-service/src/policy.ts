@@ -11,21 +11,27 @@ whose consent or adulthood cannot be established, do not approve. Return only a 
 Set safe=true only when all risk fields are false and the image plus proposed action is clearly benign.`;
 export interface Scores { label: string; score: number }
 export type Decision = 'allow' | 'block' | 'review';
-export function decide(scores: Scores[], context: string): Decision {
-    if (!Array.isArray(scores) || scores.length !== 2 || scores.some(s => typeof s?.label !== 'string' || !Number.isFinite(s.score) || s.score < 0 || s.score > 1)) return 'review';
+export interface Assessment { decision: Decision; reason: 'classifier_schema' | 'classifier_high_risk' | 'classifier_uncertain' | 'context_format' | 'context_schema' | 'context_prohibited' | 'context_sexual' | 'context_uncertain' | 'context_not_safe' | 'clear' }
+export function assess(scores: Scores[], context: string): Assessment {
+    const hold = (reason: Assessment['reason']): Assessment => ({ decision: 'review', reason });
+    if (!Array.isArray(scores) || scores.length !== 2 || scores.some(s => typeof s?.label !== 'string' || !Number.isFinite(s.score) || s.score < 0 || s.score > 1)) return hold('classifier_schema');
     const score = scores.find(s => s.label.toLowerCase() === 'nsfw')?.score;
     const normal = scores.find(s => s.label.toLowerCase() === 'normal')?.score;
-    if (score === undefined || normal === undefined || Math.abs(score + normal - 1) > 0.02) return 'review';
-    if (score >= 0.8) return 'block';
+    if (score === undefined || normal === undefined || Math.abs(score + normal - 1) > 0.02) return hold('classifier_schema');
+    if (score >= 0.8) return { decision: 'block', reason: 'classifier_high_risk' };
     let result: Record<string, unknown>;
-    try { result = JSON.parse(context); } catch { return 'review'; }
+    try { result = JSON.parse(context); } catch { return hold('context_format'); }
     const keys = ['safe', 'sexual', 'sexualMinors', 'nonConsensual', 'graphicAbuse', 'uncertain'];
     const names = [...context.matchAll(/"(safe|sexual|sexualMinors|nonConsensual|graphicAbuse|uncertain)"\s*:/g)].map(m => m[1]);
-    if (!result || Array.isArray(result) || Object.keys(result).length !== keys.length || names.length !== keys.length || new Set(names).size !== keys.length || keys.some(k => typeof result[k] !== 'boolean')) return 'review';
-    if (result.sexualMinors || result.nonConsensual || result.graphicAbuse) return 'block';
-    if (result.sexual || result.uncertain || score >= 0.2 || result.safe !== true) return 'review';
-    return 'allow';
+    if (!result || Array.isArray(result) || Object.keys(result).length !== keys.length || names.length !== keys.length || new Set(names).size !== keys.length || keys.some(k => typeof result[k] !== 'boolean')) return hold('context_schema');
+    if (result.sexualMinors || result.nonConsensual || result.graphicAbuse) return { decision: 'block', reason: 'context_prohibited' };
+    if (result.sexual) return hold('context_sexual');
+    if (result.uncertain) return hold('context_uncertain');
+    if (score >= 0.2) return hold('classifier_uncertain');
+    if (result.safe !== true) return hold('context_not_safe');
+    return { decision: 'allow', reason: 'clear' };
 }
+export function decide(scores: Scores[], context: string): Decision { return assess(scores, context).decision; }
 export interface ModelArtifact { path: string; bytes: number; sha256: string }
 export interface LockedModel { id: string; revision: string; files?: ModelArtifact[] }
 export interface ModelLock { nsfw: LockedModel; vlm: LockedModel }

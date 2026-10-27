@@ -133,6 +133,31 @@ Fortsetzung am **26. Oktober 2026**:
 
 ## Priorisierte Restarbeit
 
+### Abnahme M09/M22 und tatsächlicher CPU-Befund, 27.10.
+
+Angenommene Stimmen ausgeschiedener Wähler zählen nun auch im Fortschrittsnenner;
+ausgeschiedene Nichtwähler werden nicht mehr erwartet. Die ursprüngliche Gruppen-
+vorschau behält ihr 45-Sekunden-Limit, selbst wenn nur der Ersteller übrig bleibt.
+Reine Solo-Vorschau bleibt manuell. Build/189 Units und vier gezielte Browserläufe
+(Chromium/WebKit jeweils Node/workerd) bestanden, inklusive Austritt aller Wähler.
+Unverändert gilt die bisherige Punktesumme; historische Normalisierung wurde nicht
+eingeführt und dauerhaftes Enthaltungs-/Wahlberechtigungsprotokoll bleibt DB-abhängig.
+
+Die Modellreparatur ist mit Exit 0 abgeschlossen; alle vier ONNX-Prüfsummen stimmen.
+Der anschließende echte CPU-Lauf initialisiert beide Modelle. Acht Eingaben liefern
+jedoch ausnahmslos review, auch alle vier harmlosen. Vier zurückgehaltene abstrakte
+Risikotexte belegen damit keine sinnvolle Klassifikationsleistung. Der Fünf-Frame-
+Videofall überschreitet mit 33.997 ms das Budget. **Keine Freigabe.** Evidenz:
+`audits/2026-10-27-moderation-diagnostic.json`. Ein gezielter harmloser Grundtest
+identifiziert `context_format`: Mindestens dort scheitert bereits der strikte
+Ausgabevertrag. Diagnostik enthält nur feste Fehlerkategorien, keine Rohantworten
+oder Nutzereingaben. Schwellen und Freigabebedingungen bleiben unverändert.
+Der Formtest bestätigt acht Ausgabetokens ohne JSON-Objekt oder Codefence; das
+Tokenlimit ist nicht erreicht. Daher keine willkürliche Limiterhöhung oder
+nachträgliche Freigabe natürlichsprachlicher Antworten. Eine einfachere strikt
+validierte Entscheidungsform darf nur separat/versioniert experimentell geprüft
+werden; das ist noch keine Änderung des freigegebenen Betriebs.
+
 ### Laufend am 27.10.: M41 und Moderationslaufzeit
 
 M41 ergänzt ausschließlich tablokale Prompttextentwürfe pro Raum/Spieler/Video mit
