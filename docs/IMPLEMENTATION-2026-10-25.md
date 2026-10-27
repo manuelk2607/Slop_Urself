@@ -461,3 +461,23 @@ und identische Providerwerte. Das ist keine nachgewiesene Verbesserung der echte
 Wan-Videoqualität; dafür gelten weiterhin Moderations-/Modell-/Budgetfreigaben.
 Root-Build/196 Units bestanden; Chromium-Vorschautests auf Node/workerd bestanden,
 WebKit und restliche Gesamtmatrix noch laufend. Neue Prüfungen sind in CI registriert.
+
+
+### Abschluss der unterbrochenen Regressionen, 27.10.
+
+Quellstand **5c12107** wurde nach Verlust des alten Prozesses und seiner temporären
+Logs konsistent mit Node 24.22.1 neu gebaut. **196 Unit-Tests, 15 technische
+Moderationsdiensttests und die vollständige Chromium/WebKit/Node/workerd-Matrix
+bestanden, jeweils Exit 0.** Dazu gehören die neuen Promptvorschau- und KDF-Prüfungen.
+Der frühere gemischte Source-/dist-Lauf gilt weiterhin als fehlgeschlagen; für den
+später verschwundenen Prozess wird kein Ergebnis erfunden. Die aktuelle vollständige
+Prüfung enthält alle Quellpakete bis 5c12107. Logs/Browsercache liegen nun unter
+`.local/`, statt auf einen weiteren Erhalt von `/tmp` angewiesen zu sein.
+
+[Ergebnisnachweis mit Quellstand und Loghashes](audits/2026-10-27-regression-results.json).
+Tests nutzen isolierte Daten und simulierte externe Verträge. **Keine reale HF-
+Abrechnung, keine produktive Datenbank-/WAF-/Backupabnahme, kein Push/Deployment.**
+M02/M03 bleiben mangels bestandener semantischer Moderation und Videolaufzeit offen;
+M05 benötigt den kontrollierten Erzeuger, M17 ein zweites echtes HF-Konto. Das
+vorgeschriebene `slop_urself`-MCP fehlt weiterhin für DB-abhängige Maßnahmen.
+Die neuen lokalen Regressionserfolge heben die KI-Sperre ausdrücklich nicht auf.

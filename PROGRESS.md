@@ -2,101 +2,93 @@
 
 ## Auftrag und Grenzen
 
-Alle offenen Maßnahmen aus `docs/IMPLEMENTATION-2026-10-25.md` und den beiden
-Audits vom 24.10. in getesteten Paketen umsetzen. Branch: `codex/audit-remediation`.
-Keine erneute Gesamtauditphase. Bestehende Arbeit erhalten. Kein Push/Deployment
-in diesem Auftrag. Echte KI bleibt bis belastbarer Moderation, Modellkontrolle
-und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
+Offene Maßnahmen aus `docs/IMPLEMENTATION-2026-10-25.md` und beiden Audits vom
+24.10. priorisiert implementieren. Branch `codex/audit-remediation`; alle vorherigen
+Commits erhalten. Kein Push/Deployment in diesem Auftrag. Echte KI bleibt gesperrt,
+bis Moderation, Modellkontrolle und individuelle HF-Abrechnung qualifiziert sind.
+Keine bezahlten Aufträge, rechtswidrigen Testmedien oder produktiven Datenänderungen.
 
 ## Aktueller Fortsetzungspunkt
 
-- Neu: versioniertes Diagnoseprotokoll `labels-v1`, Standard/Lock unverändert.
-  Dienst-Build/15 technische Tests bestanden. Echter CPU-Lauf **86464 beendet,
-  Exit 2**: alle acht Fälle ungültiges Format (vier harmlose Fehlklassifikationen),
-  Fünf-Frame-Video scheitert nach 27.764ms. Keine semantische Sicherheitsfreigabe.
+- Quellstand **5c12107**, alle bestehenden Commits erhalten. Konsistenter Neubuild
+  und 196 Units **57381 Exit 0**, technischer Moderationsdienst **96633 Exit 0**
+  mit 15 Tests, vollständige Chromium/WebKit/Node/workerd-Matrix **83903 Exit 0**.
+  Alle Prozesse beendet; keine erneute identische Prüfung nötig ohne Codeänderung.
+- Dauerhafte Logs unter `.local/audit-tests`, Browsercache `.local/playwright`.
+  Öffentlicher Ergebnisnachweis mit Code-/Loghashes:
+  `docs/audits/2026-10-27-regression-results.json`. Nur lokale isolierte Abnahme.
+- Prozess 95986 und /tmp-Logs waren nach Unterbrechung verschwunden; kein alter
+  Gesamterfolg behauptet. Fehlgeschlagener Mischstand 42975 bleibt als Vorlauf
+  dokumentiert. Der neue kohärente Gesamtlauf ersetzt diese fehlende Abnahme.
+- Kein Push/Deployment, keine realen HF-/DB-/Speicheraufrufe. Produktive Sicherheit
+  weiterhin nicht freigegeben; semantische Diagnosefehler bleiben offene P0-Grenze.
+- Fortsetzen bei den unten priorisierten offenen Punkten; vorhandene Schutzregeln,
+  getestete UI-/Quota-Pakete und fehlgeschlagene CPU-Versuche nicht wiederholen.
+
+## Neue abgeschlossene Implementierungspakete
+
+- **c9668e7 – M02/M03 Diagnose:** optionales, strikt validiertes labels-v1-Protokoll
+  mit eigenem Fingerprint. Standard und Modell-Lock unverändert. CPU-Test Exit 2:
+  alle acht Bild-/Textfälle ungültiges Antwortformat, inklusive vier harmloser;
+  Fünf-Frame-/5s-Video scheitert nach 27.764ms. Vier kritische Holds wegen Formatfehler
+  sind KEIN semantischer Erkennungsnachweis. Keine Qualifikation, keine GPU.
   Bericht `docs/audits/2026-10-27-moderation-labels-diagnostic.json`.
-- M04 in **59fc356** gesichert: Sperrstatus laufender Archivclips vor Wertung/Ratebonus und per
-  10s-Check erneut prüfen. Gesperrte Clips ohne Punkte überspringen; Statusausfall
-  hält die Wertung zurück. Gemeinsame Regel für Node/DO, Tests für Hibernation,
-  Statusausfall und veraltete asynchrone Ergebnisse ergänzt. Build/191 Units bestanden; vollständige isolierte Browser-/workerd-Matrix läuft.
-- Root-Build+Units **38019 beendet, Exit 0**. Matrix **42975 beendet, Exit 1**: WebKit-Adminfixture nutzte zwischenzeitlich
-  neuen TS-KDF gegen alten dist-Server. Ursache durch Imports in admin-server.ts
-  bestätigt; kein bewiesener Produktfehler. Konsistenter Root-Neubuild+196 Units
-  **27963 Exit 0**. Neue vollständige Matrix läuft, Handle **95986**; keine weiteren
-  Source-Änderungen bis Ende. Logs `/tmp/slop-ci-consistent-2026-10-27.log/.exit`.
-- M31/M32/M33 in **2a0fa6e** gesichert: persönliche Quota-Zuordnung bleibt bis erfolgreicher
-  Jobtoken-Bereinigung bestehen; Regressionen für fehlgeschlagene Bereinigung und
-  Planpersistenz bestehen (22 HF-Tests). Zusätzlicher verlorener Veröffentlichungs-
-  Checkpoint: 29 Room-Tests bestanden, kein neuer GPU-/Tokenaufruf.
-  Neue optionale Passwort-Hashes tragen v1; Bestandsformat bleibt lesbar,
-  unbekannte Version/Kosten werden vor Ableitung verworfen (3 Tests bestanden).
-  KDF-Version zusätzlich in echtem workerd mit Profilpersistenz nach Eviction
-  bestanden. Root-Build/196 Units bestanden; Quota-workerd-Abnahme läuft in CI.
-- M29 teilweise in **2a0fa6e**: unabhängige Kontingent-Leseabfragen unterschiedlicher HF-Subjekte
-  überlappen statt serieller Netzwerkwartezeiten; 23 HF-Units bestehen einschließlich
-  Token-/Restbudgettrennung. Reservierung/Mutation bleiben frisch und serialisiert.
-- M35 in Arbeit: gemeinsame Promptnormalisierung/-aufbereitung für UI, Moderation
-  und Provider. Optionale Klartextvorschau, explizite Änderungen haben Vorrang vor
-  allgemeinen Kontinuitätshinweisen. Zwei Vertragstests bestehen; Browserabnahme
-  Chromium auf Node/workerd bestanden; restliche neue Matrix **95986** läuft.
-  Keine reale Wan-Qualitätsprüfung/keine neue Freigabe.
-- Keine Modelltests aktiv; CI betreibt ausschließlich eigene isolierte Server. Kein Push/Deployment.
+- **59fc356 – M04:** Archiv-Replays prüfen aktuelle Sperre vor Wertung/Ratebonus
+  und alle 10s, auch nach Hibernation. Bans überspringen ohne Punkte und entfernen
+  aktuellen Prompt/Abgaben; Statusausfall hält Wertung zurück. Veraltete asynchrone
+  Antwort verändert keinen neuen Ballot. Unit-/DO-Regressionsprüfungen bestanden.
+  Keine Rückrufzusage für bereits heruntergeladene Bytes; kein Altarchiv-Review.
+- **2a0fa6e – M31/M32/M33, M29 teilweise:** Job-/Eigentümerzuordnung bleibt bis
+  erfolgreicher Tokenbereinigung. Wiederholung nach Bereinigungs-/Planschreibfehler
+  verbraucht kein zweites Budget. Verlorener Veröffentlichungsschritt nutzt denselben
+  fertigen Archivauftrag ohne neue Inferenz/Tokenabruf. Optionale Passwort-Hashes
+  erhalten v1, Legacy-Verifikation bleibt; unbekannte Version/Kosten abgewiesen.
+  KDF-Kosten unverändert. Vor Produktion gemischte Reader-/Rollback-Versionen prüfen.
+  Unabhängige persönliche Quota-Reads überlappen; Mutationen bleiben frisch/seriell.
+- **5c12107 – M35:** gemeinsame Normalisierung/Promptaufbereitung für Vorschau,
+  Moderation und Provider. Optionale Klartextvorschau mit Tastatur/Reload; explizite
+  Verwandlungen/Szenenwechsel werden nicht pauschal übersteuert. Zwei Vertragstests
+  sowie Chromium/WebKit auf Node/workerd bestanden. Keine echte Wan-Qualitätszusage.
 
-## Gesicherte Pakete (Auswahl)
+## Bisherige Basis – nicht erneut implementieren
 
-- a4e896e/f4e28e0: Phasenbindung, angenommene Stimmen bei Austritt, Identitätsbeweis,
-  geschützte Archiv-/Statistikrechte und Eigentümer-/Löschprüfungen.
-- 289846e/b8e2dc9/a1e6d23: fail-closed Moderation, Decoder, Provider-Pinning,
-  Meldung/Sperren, CSP, Request-/Bytegrenzen, sichere Logs, aktive Archivleases.
-- d2a3a94: echte persönliche HF-whoami-Prüfung vor Inferenz, Wan-Parametervertrag,
-  strikte Score-/JSON-Verträge, vollständiger Frame-/Spur-/Abbruchvertrag.
-- d3eca91: 15-MiB-Kapazitätsreservierung vor persönlichem GPU-Budgetbeginn.
-- b49f5da/f37e0da: Vorschau/Enthaltung, Revanche-Race, Releasekorrelation,
-  Inventar-Cache, eindeutige HF-Spieler, 90s-Wiederkehr, Upload-Timeout-Abbruch.
-- eb72950: Freigabe benötigt echten gehashten Messbericht mit nachgerechneten
-  Ergebnissen, Abdeckung und Zeitgrenzen. Keine bloß behauptete SHA/Fallzahl.
-- 9195426: persistente Bearbeitungsstufen/Zeiten nach Reload, korrelierte
-  Archivstufen; Testkonten besitzen eigene Tokens/Kontingente.
-- 07713ba: Vault-Schlüsselrotation/Legacy-Migration ohne Laufzeitverlängerung,
-  16 Einträge pro Profil, Cleanup-Index vor Geheimnissen, Disconnect-Race geschützt.
-- ed248b8: Videofilter nutzt nur paginierte Liste statt Gesamtstatistik/Inventar.
-- 5ebe6a8: kurz gültige tablokale Prompttexte; keine Bild-/Tokenablage.
-- 8001c36: ONNX-Größen/LFS-SHA256, atomare credentialfreie Cache-Reparatur,
-  begrenztes Upscaling mit Splitting und Prüfung nativer Videoauflösung.
+Identitäts-/Archiv-/Löschrechte, Ballotbindung und erhaltene Austrittsstimmen,
+fail-closed Moderations-/Upload-/Providerverträge, Meldung/Sperre/CSP/Rate-Limits,
+sichere Logs, aktive Speicherleases und Reservierung vor GPU, persistente
+Generierungsstufen, eindeutige HF-Spieler, 90s-Wiederkehr, Vault-Rotation und
+Profilgrenzen, paginierte Videofilter, tablokale Promptentwürfe, Hashprüfung und
+atomare Reparatur der ONNX-Artefakte, native Frameauflösung, zugängliche Kontraste,
+Fokusführung, gemeinsame Platzierungen und Vorschau/Enthaltung sind bereits gesichert.
+Ausführliche Grenzen/ältere Tests stehen im Implementierungsbericht.
 
-## Verifikation und echte Moderationsgrenze
+## P0: echte Freigabegrenzen
 
-- Root-Build/189 Unit-Tests bestanden. Vollständige isolierte Chromium/WebKit/
-  workerd-Matrix am 27.10. Exit 0 auf dem 188-Unit-/M41-Stand; neue M09/M22-Korrektur
-  anschließend separat in vier Kombinationen bestanden. Nicht auf unbekannte
-  Produktionsstände oder reale HF-Abrechnung übertragen.
-- Dienst-Build/15 technische Tests bestanden; echte FFmpeg-/sharp-Prüfungen,
-  Protokoll, Hashbindung und Fehlerfälle. Keine Aussage semantischer Zuverlässigkeit.
-- Aktueller Protobuf-Fehler: Decodercache 1.323.696.414 statt 1.450.425.745 Bytes.
-  Reparatur verifizierte alle vier Gewichtsdateien per SHA256; Modelle laden danach.
-  Keine pauschale Erklärung älterer nativer Abstürze.
-- Anschließender echter CPU-Lauf: 8 Eingaben sämtlich review, darunter 4 harmlose;
-  5-Frame-/5s-Video scheitert nach 33.997ms. Kein sinnvoller Qualitätsnachweis.
-  Evidenz `docs/audits/2026-10-27-moderation-diagnostic.json` in 2bc35ba gesichert.
-  Vorverarbeitung: 2048px erzeugte 13–17 Tiles; 1024px fünf, Splitting bleibt aktiv.
-- Lokaler Kaltstart der ungebündelten Node-Module dauerte zeitweise ~57s, deshalb
-  zwei Hilfsteststarts verworfen (einmal Build noch nicht fertig, einmal Timeout).
-  Kein Produkt-Erfolg daraus abgeleitet; finaler Test nutzte bestätigten Mockserver.
+1. **Moderation NICHT qualifiziert.** Nach ONNX-Reparatur laden Modelle, aber
+   beide sichere Diagnoserunden scheitern an Qualität/Format und Videolaufzeit.
+   Keine qualification.json erzeugt. Keine identischen Wiederholungen ohne neue
+   technische Hypothese. Kostenloses Hosting und repräsentative Fachprüfung offen.
+2. **Kontrollierter Wan-Erzeuger nicht abgenommen.** Öffentlicher Community-Space
+   am 26.10. RUNNING/API-kompatibel geprüft, keine freigegebene Modellkonfiguration.
+   SHA-/Replica-Deklaration ist keine kryptografische Gewichtsattestierung.
+   Echte Wan-/Safari-Ausgabe und kostenfreies Overrun-Verhalten bleiben offen.
+3. **M17:** Nutzer bestätigt nur EIN reales HF-Konto. Zwei-Konten-Abrechnungstest
+   nicht möglich. Unit-/workerd-/Browser-Stubs sind kein Providerabrechnungsnachweis.
+4. **MCP `slop_urself` fehlt**, am 27.10. erneut in verfügbaren Tools geprüft.
+   Keine produktive DB-Inspektion/Migration, kein Ersatz über allgemeinen Neon-Zugang.
+   Produktions-WAF, Backups, Logeinstellungen und Dateiretention nicht verifiziert.
 
-## Blocker und nächste Schritte
+## Nächste konkrete Schritte
 
-1. Neues Protokollexperiment mit fehlgeschlagener CPU-Evidenz sichern; keine
-   weiteren identischen Wiederholungen. M04-Paket testen und abschließen.
-2. Moderation weiterhin NICHT qualifiziert. Fachliche Qualität, vollständige
-   Videolatenz und kostenloses Hosting offen; keine qualification.json erzeugt.
-3. Kontrollierter Wan-Stand/echte Safari-Ausgabe offen. Öffentlicher Community-
-   Endpoint erreichbar geprüft, keine freigegebene Modellkonfiguration.
-4. Nutzer bestätigt am 27.10.: nur EIN reales HF-Konto verfügbar. M17-Zwei-Konten-
-   Abrechnungsnachweis bleibt offen; simulierte Tests sind kein Ersatz.
-5. Vorgeschriebenes MCP `slop_urself` nicht verfügbar. Keine produktiven DB-Checks,
-   Schemas/Migrationen. M18/M24/M26/M28/M44 abhängig davon offen; keine WAF-/Restore-
-   oder Cloudflare-Account-Konfiguration als geprüft behaupten.
-6. Unabhängige Restpakete priorisiert fortsetzen, siehe Implementierungsbericht:
-   M04 laufende gesperrte Archivclips, M31/M32 Recovery, M35 Prompttransparenz,
-   M43/M45 Protokoll/Assets, danach übrige UX/Spielerweiterungen. robots.txt laut
-   Audit erreichbar; keinen unbelegten weiteren robots-Fix einführen.
+1. Lokale Pakete vollständig abgenommen und dokumentiert. Keine neue identische
+   Gesamtsuite nötig. Weiter mit P0-Abhängigkeiten beziehungsweise unabhängigem P1-Rest.
+2. P0 mit geeignetem Moderationskandidaten/Hardware und kontrolliertem Wan fortsetzen,
+   ohne Fail-Closed-Gate zu umgehen. Zweites Konto erst nutzen, wenn verfügbar.
+3. P1-Reste: M04 Altarchiv/Einspruch/Status weiterer Spielansichten; M06 Bestands-
+   migration; reale M09/M11-Ausgabe; M18 vollständige Betroffenen-/HF-/DO-Löschung;
+   M19 externer Speicher; produktive M20-Logeinstellungen. DB-Abhängigkeiten beachten.
+4. Unabhängige P2-Pakete danach: übrige M31/M32-Crashfenster, M43 gemeinsame
+   Ereignisverträge, M45 Asset-/Releasekompatibilität, verbleibende M35-Qualitätsabnahme
+   und A11y/Realgeräte. M24/M26/M28/M44 benötigen vorgeschriebenen DB-/Restorezugang.
+5. M22-Normalisierung/Historienwahlliste und M46–M54 nach Sicherheitsabhängigkeiten.
+   Keine kosmetische Priorität vor offenen Sicherheitslücken. robots.txt laut Audit
+   erreichbar und lokale SEO-Regressionen bestehen; keinen unbelegten Fix wiederholen.

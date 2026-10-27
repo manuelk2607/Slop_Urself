@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-27",
+  "scope": "isolated local regression validation; no production release approval",
+  "sourceCommit": "5c12107233990873861a23adae3ec418d3a95105",
+  "runtime": "Node 24.22.1",
+  "build": {
+    "exitCode": 0
+  },
+  "unitTests": {
+    "passed": 196,
+    "failed": 0
+  },
+  "moderationTechnicalTests": {
+    "passed": 15,
+    "failed": 0,
+    "semanticQualification": false
+  },
+  "completeRegressionMatrix": {
+    "exitCode": 0,
+    "browsers": [
+      "chromium",
+      "webkit"
+    ],
+    "backends": [
+      "Node",
+      "workerd"
+    ],
+    "passLogRecords": 96,
+    "coverage": [
+      "HTTP and object authorization",
+      "OAuth/device flow and encrypted persistence",
+      "optional password KDF in workerd",
+      "personal token/quota isolation using stubs",
+      "multiplayer voting and reconnection",
+      "generation progress and prompt preview",
+      "archive selection/deletion/undo and media playback",
+      "responsive and accessibility checks",
+      "public SEO and private noindex"
+    ]
+  },
+  "liveAiCalls": 0,
+  "realDatabaseCalls": 0,
+  "productionWrites": 0,
+  "pushPerformed": false,
+  "deploymentPerformed": false,
+  "generationSafetyApproval": "not granted",
+  "openCritical": [
+    "semantic moderation quality and complete-video latency/hosting",
+    "controlled Wan source/model deployment",
+    "live billing verification with two separate HF accounts"
+  ],
+  "externalLimits": [
+    "only one real HF account available",
+    "required slop_urself MCP unavailable",
+    "no productive DB/WAF/backup/retention verification"
+  ],
+  "evidenceSha256": {
+    "build-resume.log": "8c3f82cfab87560f6fa9c8c19ed22a3ef8d9bbae1c1409600f07914f097eddfe",
+    "unit-resume.log": "81c5fb987a058c4a3f9597f14f7616c7cb3cd099dc31bd698fdba9d6ab7da7fe",
+    "moderation-build-resume.log": "08d10bf1ca56b6dc7b5acc6e1663435b6871a2da9db662e2026734b954953bed",
+    "moderation-test-resume.log": "f52c531e922c34fbb620573baa8e082373cc784392f827065507ea1d5297acd0",
+    "ci-resume.log": "fe1f101efc5e6879ce95903e8665e0f882e9c4968d762f8611d064afd8cb06a8"
+  },
+  "priorRuns": "Missing /tmp logs and vanished process 95986 do not establish a successful prior run. The mixed source/dist run 42975 failed; the current fresh consistent matrix passed."
+}
