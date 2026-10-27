@@ -24,7 +24,7 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
   bestätigt; kein bewiesener Produktfehler. Konsistenter Root-Neubuild+196 Units
   **27963 Exit 0**. Neue vollständige Matrix läuft, Handle **95986**; keine weiteren
   Source-Änderungen bis Ende. Logs `/tmp/slop-ci-consistent-2026-10-27.log/.exit`.
-- M31/M32/M33 in Arbeit: persönliche Quota-Zuordnung bleibt bis erfolgreicher
+- M31/M32/M33 in **2a0fa6e** gesichert: persönliche Quota-Zuordnung bleibt bis erfolgreicher
   Jobtoken-Bereinigung bestehen; Regressionen für fehlgeschlagene Bereinigung und
   Planpersistenz bestehen (22 HF-Tests). Zusätzlicher verlorener Veröffentlichungs-
   Checkpoint: 29 Room-Tests bestanden, kein neuer GPU-/Tokenaufruf.
@@ -32,13 +32,13 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
   unbekannte Version/Kosten werden vor Ableitung verworfen (3 Tests bestanden).
   KDF-Version zusätzlich in echtem workerd mit Profilpersistenz nach Eviction
   bestanden. Root-Build/196 Units bestanden; Quota-workerd-Abnahme läuft in CI.
-- M29 teilweise: unabhängige Kontingent-Leseabfragen unterschiedlicher HF-Subjekte
+- M29 teilweise in **2a0fa6e**: unabhängige Kontingent-Leseabfragen unterschiedlicher HF-Subjekte
   überlappen statt serieller Netzwerkwartezeiten; 23 HF-Units bestehen einschließlich
   Token-/Restbudgettrennung. Reservierung/Mutation bleiben frisch und serialisiert.
 - M35 in Arbeit: gemeinsame Promptnormalisierung/-aufbereitung für UI, Moderation
   und Provider. Optionale Klartextvorschau, explizite Änderungen haben Vorrang vor
   allgemeinen Kontinuitätshinweisen. Zwei Vertragstests bestehen; Browserabnahme
-  läuft nach bestandenem Root-Build in der neuen vollständigen Matrix.
+  Chromium auf Node/workerd bestanden; restliche neue Matrix **95986** läuft.
   Keine reale Wan-Qualitätsprüfung/keine neue Freigabe.
 - Keine Modelltests aktiv; CI betreibt ausschließlich eigene isolierte Server. Kein Push/Deployment.
 

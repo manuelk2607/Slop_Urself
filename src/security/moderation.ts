@@ -1,4 +1,5 @@
 import { boundedJson } from '../server/body';
+export { validatePrompt } from '../shared/video-prompt';
 
 export interface ModerationConfig {
     AI_PROVIDER?: string;
@@ -78,10 +79,4 @@ export async function moderateInput(image: string, prompt: string, config: Moder
 }
 export async function moderateOutput(bytes: Uint8Array, config: ModerationConfig) {
     return evaluate('output', { video: base64(bytes), mime: 'video/mp4' }, config);
-}
-export function validatePrompt(value: unknown) {
-    if (typeof value !== 'string') throw new Error('Bitte gib einen Prompt ein.');
-    const prompt = value.normalize('NFKC').trim();
-    if (!prompt || prompt.length > 150 || /[\p{Cc}\p{Cf}]/u.test(prompt)) throw new Error('Bitte gib einen Prompt mit 1 bis 150 sichtbaren Zeichen ein.');
-    return prompt;
 }

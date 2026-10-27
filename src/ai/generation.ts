@@ -7,6 +7,8 @@ import { approvedProvider, verifyProviderIdentity, verifyWanParameters, Provider
 import { GradioProviderError as AiProviderError, readQueueResult } from './gradio';
 import { logAiEvent, type AiTelemetry } from './telemetry';
 import type { AiProgress } from '../shared/generation';
+import { buildVideoPrompt, VIDEO_NEGATIVE_PROMPT } from '../shared/video-prompt';
+export { buildVideoPrompt } from '../shared/video-prompt';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
 
@@ -66,12 +68,6 @@ interface ApiParameter {
 }
 
 
-export function buildVideoPrompt(prompt: string) {
-    return `${prompt.trim()}. Animate the requested action clearly. Maintain the subject's identity. Continuous natural movement, one shot.`;
-}
-
-const NEGATIVE_PROMPT = 'blurry, distorted, frozen subject, still image, flickering, extra limbs, deformed face, watermark';
-
 export function extractVideoUrl(result: unknown, root: string): string {
     const data = result as { data?: unknown[] };
     const first = data?.data?.[0] ?? result;
@@ -108,7 +104,7 @@ export function buildProviderValues(provider: Provider, prompt: string, image: u
     const seed = Math.floor(Math.random() * 2_147_483_647);
     const duration = videoDuration(config);
     if (provider === 'ltx') return {
-        prompt: buildVideoPrompt(prompt), negative_prompt: NEGATIVE_PROMPT,
+        prompt: buildVideoPrompt(prompt), negative_prompt: VIDEO_NEGATIVE_PROMPT,
         input_image_filepath: image, input_video_filepath: null,
         height_ui: Number(config.LTX_HEIGHT) || 512, width_ui: Number(config.LTX_WIDTH) || 704,
         mode: 'image-to-video', duration_ui: duration,
@@ -118,7 +114,7 @@ export function buildProviderValues(provider: Provider, prompt: string, image: u
     };
     return {
         input_image: image, last_image: null, prompt: buildVideoPrompt(prompt),
-        height: 512, width: 896, negative_prompt: NEGATIVE_PROMPT,
+        height: 512, width: 896, negative_prompt: VIDEO_NEGATIVE_PROMPT,
         duration_seconds: duration, steps: providerSteps(provider),
         guidance_scale: 1, guidance_scale_2: 1, seed, randomize_seed: false,
         quality: 5, scheduler: 'UniPCMultistep', flow_shift: 3,

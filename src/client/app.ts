@@ -8,6 +8,7 @@ import { historyUndo } from './history-undo';
 import { videoPlayback } from './video';
 import { generationNotice } from './generation-notice';
 import { promptDrafts } from './prompt-drafts';
+import { promptPreview } from './prompt-preview';
 import type { GenerationView } from '../shared/generation';
 import { accountManagement } from './accounts';
 import { prepareImage } from './images';
@@ -85,6 +86,7 @@ const waitNoticeText = document.getElementById('waitNoticeText') as HTMLParagrap
 const imageInput = document.getElementById('imageInput') as HTMLInputElement;
 const imagePreview = document.getElementById('imagePreview') as HTMLImageElement;
 const promptInput = document.getElementById('promptInput') as HTMLInputElement;
+const updatePromptPreview = promptPreview(promptInput);
 const drafts = promptDrafts(() => sessionStorage);
 let draftScope = '';
 promptInput.addEventListener('input', () => { if (draftScope) drafts.save(draftScope, promptInput.value); });
@@ -407,7 +409,7 @@ function showCreateState(data: { activeCreatorId?: string; activeCreatorName?: s
     const isMe = Boolean(data.activeCreatorId) && isCurrentSocket(data.activeCreatorId || '');
     if (isGenerating || !isMe) { if (draftScope) drafts.remove(draftScope); draftScope = ''; }
     else draftScope = `${currentRoomId}:${currentPlayerId}:${currentVideoNumber}`;
-    if (data.reset) { clearImagePreview(); promptInput.value = draftScope ? drafts.get(draftScope) : ''; }
+    if (data.reset) { clearImagePreview(); promptInput.value = draftScope ? drafts.get(draftScope) : ''; updatePromptPreview(); }
 
     creatorControls.style.display = !isGenerating && isMe ? 'block' : 'none';
     waitControls.style.display = !isGenerating && !isMe ? 'block' : 'none';

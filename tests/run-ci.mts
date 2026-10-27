@@ -49,6 +49,7 @@ try {
     await run(['tests/e2e/security.e2e.mts', 'http://127.0.0.1:3313']);
     await run(['tests/integration/cloudflare-runtime.mts']);
     await run(['tests/integration/hf-runtime.mts']);
+    await run(['tests/integration/password-runtime.mts']);
     cloudflare = await cloudflareRuntime({ port: 3311 });
     cloudflareProfiles = await cloudflareRuntime({ port: 3314, bindings: { AUTH_MODE: '' } });
     for (const engine of (process.env.TEST_BROWSER_ENGINE ? [process.env.TEST_BROWSER_ENGINE] : ['chromium', 'webkit'])) {
@@ -58,6 +59,7 @@ try {
         for (const port of [3310, 3311]) await run(['tests/e2e/legacy-media.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         for (const port of [3310, 3311]) await run(['tests/e2e/viewing.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         for (const port of [3310, 3311]) await run(['tests/e2e/drafts.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
+        for (const port of [3310, 3311]) await run(['tests/e2e/prompt-preview.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/browser.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/video.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/statistics.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);

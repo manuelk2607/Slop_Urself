@@ -444,3 +444,20 @@ Tokens sowie den knappsten Spieler als Rundengrenze. Reservierungen/Mutationen b
 serialisiert und prüfen frisch. Keine gemessene produktive Beschleunigung, keine
 Erhöhung eines Kontingents und keine reale Abrechnungsabnahme daraus ableiten.
 Dienst-Queue-Messung und weitere Zusammenführung gleichartiger Reads bleiben offen.
+
+
+### M35: nachvollziehbare Promptaufbereitung (27.10.)
+
+`shared/video-prompt.ts` ist die gemeinsame Quelle für Validierung, Normalisierung,
+effektiven Prompt und Negativvorgaben. Vorprüfung und Provider erhalten denselben
+Text wie die optionale, per Tastatur erreichbare Klartextvorschau. Promptinhalt wird
+als Text eingefügt, nicht als HTML interpretiert. Wiederhergestellte Entwürfe aktualisieren
+die Vorschau. Gespeichert wird weiterhin nur die Nutzeranweisung ohne Zusätze.
+
+Die pauschalen Identitäts-/Einzelaufnahmebefehle entfallen zugunsten von Hinweisen,
+die ausdrücklich gewünschte Transformationen und Effekte respektieren. Ein kleiner
+harmloser Vertragskatalog prüft Bewegung, Verwandlung, Szenenwechsel, Normalisierung
+und identische Providerwerte. Das ist keine nachgewiesene Verbesserung der echten
+Wan-Videoqualität; dafür gelten weiterhin Moderations-/Modell-/Budgetfreigaben.
+Root-Build/196 Units bestanden; Chromium-Vorschautests auf Node/workerd bestanden,
+WebKit und restliche Gesamtmatrix noch laufend. Neue Prüfungen sind in CI registriert.
