@@ -1,4 +1,4 @@
-# Audit-Umsetzung – fortgesetzt am 26. Oktober 2026
+# Audit-Umsetzung – fortgesetzt am 27. Oktober 2026
 
 Aktiver Auftrag: Auditpunkte in getesteten Paketen umsetzen; Branch codex/audit-remediation.
 Pakete: 1 Stimmen/Austritte; 2 Identität/Objektrechte/Requestgrenzen;
@@ -7,6 +7,37 @@ Keine produktive Schemaänderung oder Veröffentlichung. MCP slop_urself fehlt;
 deshalb Schemaarbeit offen. Kein validierter kostenloser Moderationsdienst vorhanden:
 fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter ersetzen.
 ## Aktueller Implementierungsstand
+
+### Fortsetzung 27.10. – M33/M32- und M27-Paket
+
+- Ausgangsstand 9195426 sauber; vollständige Browser-/Cloudflare-Matrix vom
+  26.10. tatsächlich mit Exitcode 0 abgeschlossen (Session 7330, Log
+  /tmp/slopurself-ci-final.log). Bezieht sich auf 181-Unit-Stand, nicht neue Pakete.
+- M33: aktueller/vorheriger Vault-Schlüssel, authentifizierte Schlüsselkennungen,
+  kompatibles Lesen alter Formate und kontrollierte Umverschlüsselung. Keine
+  Verlängerung der Token-/Jobablaufzeit; gleichzeitiges Disconnect wird nicht
+  rückgängig gemacht. Vorheriger Schlüssel nur explizit per Setup übertragbar.
+- M33: höchstens 16 neue aktive Vault-Einträge je Profil (global weiter 512),
+  serialisierte parallele Starts und Bereinigung von Eigentümer-/Ablaufindex.
+  Alteinträge werden bei Umverschlüsselung zugeordnet, nicht pauschal gelöscht.
+- M32 teilweise: Cleanup-Indizes werden vor verschlüsselten Geheimnissen
+  geschrieben. Fehler hinterlassen begrenzte leere Slots mit Ablauf statt
+  dauerhafter unindizierter Tokens; gezielte Crash-/Cleanup-Regression ergänzt.
+- M27: Spielerfilter lädt nur paginierte Videohistorie, keine Gesamtstatistik oder
+  erneuten Speicherabgleich; schützt Auswahl, Fokus, Scrollposition und alte
+  verspätete Seiten. Alle acht History-/Statistikprüfungen in Chromium/WebKit
+  jeweils auf Node/workerd bestanden. Fehlendes lokales WebKit-Startskript durch
+  offiziellen Download behoben; Chromium wird ebenfalls wiederhergestellt
+  (Session 60084). Browser-GC künftig via PLAYWRIGHT_SKIP_BROWSER_GC=1 vermeiden.
+- Build/186 Units einschließlich Cap-/Crashergänzungen bestanden. HF-workerd-
+  Prüfung und persönlicher Chromium-HF-Ablauf nach Rotation bestanden; nach
+  finalem Index-Schreibauftrag workerd nochmals bestanden. Ein vorheriger
+  HF-Teststart timeoutete während parallelem Build; Wiederholung bestanden.
+- Nächster Schritt: Commits abschließen, danach tablokale Prompt-
+  Entwürfe (M41). Gezielte CPU-Vorverarbeitungsdiagnose läuft ohne Inferenz in
+  Session 16829 (Log /tmp/slop-moderation-preprocess.log); keine Modell-/Produktions-
+  parameter geändert. P0-Freigabe unverändert
+  gesperrt; keine externen Schreibaktionen und kein Push/Deployment.
 
 ### Aktueller Fortsetzungspunkt (nach f37e0da/eb72950)
 

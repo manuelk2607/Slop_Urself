@@ -562,7 +562,8 @@ function updateHistoryButtons() {
     }
 }
 async function historyRequest<T>(kind: HistoryKind, cursor: string, creator: string): Promise<HistoryPage<T>> {
-    const params = new URLSearchParams({ cursor });
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
     if (kind === 'videos' && creator) params.set('player', creator);
     const response = await fetch(`/api/stats/${kind}?${params}`, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
     const data = await response.json();
@@ -609,6 +610,18 @@ async function loadStatistics(videosOnly = false, retainDepth = false) {
     historyLoading.videos = false; historyLoading.rooms = false; updateHistoryButtons();
 
     try {
+        if (videosOnly) {
+            statsActionNotice.hidden = true;
+            const first = await historyRequest<VideoStats>('videos', '', creator);
+            const videos = await retainHistory('videos', first.items, first.nextCursor, retainDepth ? videoHistory.length : 0, creator, requestId);
+            if (requestId !== statisticsRequest || screenStats.style.display === 'none') return;
+            videoHistory = videos.items; videoCursor = videos.nextCursor;
+            const position = videoPlayerFilter.getBoundingClientRect().top;
+            screenStats.style.minHeight = `${screenStats.offsetHeight}px`;
+            renderVideoStats(videoHistory, videoStorageMode);
+            window.scrollBy(0, videoPlayerFilter.getBoundingClientRect().top - position);
+            return;
+        }
         const response = await fetch(`/api/stats${creator ? `?player=${encodeURIComponent(creator)}` : ''}`, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
         if (!response.ok) throw new Error('Statistik-Request fehlgeschlagen');
 
@@ -632,19 +645,16 @@ async function loadStatistics(videosOnly = false, retainDepth = false) {
         }
 
         const videos = await retainHistory('videos', data.recentVideos, data.videoCursor || null, retainDepth ? videoHistory.length : 0, creator, requestId);
-        const rooms = videosOnly ? null : await retainHistory('rooms', data.rooms || [], data.roomCursor || null, retainDepth ? roomHistory.length : 0, creator, requestId);
+        const rooms = await retainHistory('rooms', data.rooms || [], data.roomCursor || null, retainDepth ? roomHistory.length : 0, creator, requestId);
         if (requestId !== statisticsRequest || screenStats.style.display === 'none') return;
         videoHistory = videos.items; videoCursor = videos.nextCursor;
-        if (rooms) { roomHistory = rooms.items; roomCursor = rooms.nextCursor; }
+        roomHistory = rooms.items; roomCursor = rooms.nextCursor;
         videoStorageMode = data.videoStorageMode;
 
         // Keep focused controls and the content above the filter in place.
-        if (!videosOnly) { renderStatsOverview(data.overview); renderStats(data.players, data.videoCreators); renderRooms(roomHistory); }
+        renderStatsOverview(data.overview); renderStats(data.players, data.videoCreators); renderRooms(roomHistory);
         if (videoPlayerFilter.value !== creator) { void loadStatistics(true); return; }
-        const position = videoPlayerFilter.getBoundingClientRect().top;
-        if (videosOnly) screenStats.style.minHeight = `${screenStats.offsetHeight}px`;
         renderVideoStats(videoHistory, videoStorageMode);
-        if (videosOnly) window.scrollBy(0, videoPlayerFilter.getBoundingClientRect().top - position);
         document.getElementById('archiveUsage')!.innerText = data.archive ? `${data.archive.videoCount} archivierte Videos · ${(data.archive.usedBytes / 1024 / 1024).toFixed(1)} / ${Math.round(data.archive.maxBytes / 1024 / 1024)} MB` : '';
     } catch {
         if (requestId === statisticsRequest) { statsActionNotice.textContent = 'Statistiken konnten nicht geladen werden.'; statsActionNotice.hidden = false; }

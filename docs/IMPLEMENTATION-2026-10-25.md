@@ -133,6 +133,40 @@ Fortsetzung am **26. Oktober 2026**:
 
 ## Priorisierte Restarbeit
 
+### Fortsetzung 27.10. (M33/M32, M27)
+
+Die vollständige isolierte Chromium-/WebKit-/workerd-Matrix von 9195426 wurde
+mit **Exitcode 0** abgeschlossen; die nachfolgenden Pakete sind damit noch nicht
+pauschal abgenommen.
+
+M33 ermöglicht gezielten Vault-Schlüsselwechsel mit vorherigem Leseschlüssel;
+Schlüsselkennung ist Bestandteil der authentifizierten Verschlüsselung. Bestehende
+Verbindungen und gepinnte Jobs werden ohne neue Identität oder verlängerte Laufzeit
+umverschlüsselt. Gleichzeitiges Trennen/Ersetzen darf keinen alten Zugang reaktivieren.
+Altes Format bleibt lesbar; vorheriger Schlüssel wird niemals standardmäßig aus einer
+zurückgelassenen lokalen Konfiguration erneut hochgeladen. Anleitung in HUGGINGFACE.md.
+Neue Vault-Einträge sind pro Profil auf 16 begrenzt, globale Obergrenze bleibt 512.
+Alte Einträge erhalten die Zuordnung bei Migration und laufen regulär ab; es gibt
+keine pauschale Löschung bestehender Verbindungen. Produktiver Schlüsselwechsel
+und gemischte Release-Stände sind nicht verifiziert.
+
+M32 ergänzt geordnetes Schreiben der Ablauf-/Eigentümerindizes vor Geheimnissen.
+Ein Fehler kann einen bis zum Ablauf zählenden leeren Slot hinterlassen, aber kein
+neues dauerhaft unindiziertes Token. Dies ist keine vollständige atomare Multi-Key-
+Transaktion und ersetzt nicht die verbleibenden Crash-/Wiederherstellungstests.
+
+M27 lädt bei Spielerfilterwechsel nur die bereits geschützte paginierte Videoliste;
+globale Aggregationen und Speicherabgleich entfallen. Regression zählt Aggregat-
+Requests und prüft veraltete Antworten sowie Auswahl/Scroll-/Wiedergabeverhalten.
+Alle acht History-/Statistikläufe in Chromium/WebKit auf Node/workerd bestanden;
+fehlendes WebKit-Startskript wurde durch offiziellen Download wiederhergestellt.
+Root-Build/186 Unit-Tests einschließlich Rotation, Legacy-Format, paralleler
+Profilgrenzen und Fehler vor Tokenablage bestanden. HF-workerd und persönlicher
+Chromium-HF-Ablauf nach Rotation bestanden; finaler Schreibablauf zusätzlich in
+workerd erneut bestanden. Der vollständige frühere
+Gesamtlauf bleibt auf 9195426 bezogen und wird nicht auf neue Pakete übertragen.
+Keine produktive Datenbank-, Schlüssel-, Firewall- oder Deploymentänderung.
+
 ### Laufendes Folgepaket nach f37e0da
 
 M36 stellt beim Reload die bekannte Generierungsstufe mit Auftragsbeginn wieder her.

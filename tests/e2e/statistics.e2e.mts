@@ -63,6 +63,10 @@ try {
             await route.fulfill({ json: { ok: true } }); return;
         }
         const creator = url.searchParams.get('player');
+        if (url.pathname === '/api/stats/videos') {
+            await route.fulfill({ json: { items: videos.filter(video => !video.deletedUntil && (!creator || video.creatorId === creator)).map(video => ({ ...video, prompt: 'Eine Person winkt.', videoUrl: '/assets/mock-video.mp4', roundPoints: 5, createdAt: '2026-10-13T00:00:00Z' })), nextCursor: null } });
+            return;
+        }
         await route.fulfill({ json: {
             databaseEnabled: true, videoStorageMode: 'archive',
             overview: { gamesPlayed: rooms.length, completedGames: rooms.filter(room => room.status === 'GAME_OVER').length, roundsPlayed: 2, votesCast: 2, videosArchived: videos.filter(video => !video.deletedUntil).length, highestScore: 5 },

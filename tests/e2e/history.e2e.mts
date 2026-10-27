@@ -16,16 +16,19 @@ const videos = Array.from({ length: 15 }, (_, index) => ({ id: String(200 - inde
 const rooms = Array.from({ length: 53 }, (_, index) => ({ code: `R${String(index).padStart(3, '0')}`, status: 'GAME_OVER',
     winnerName: 'Änne', totalPoints: 5, playerCount: 2, videoCount: 1, createdAt: '2026-10-14T12:00:00Z' }));
 let failMore = true, releaseOldPage: (() => void) | undefined;
+let aggregateReads = 0;
 try {
     await page.route('**/api/stats**', async route => {
         const url = new URL(route.request().url()), creator = url.searchParams.get('player');
         const matching = videos.filter(video => !creator || video.creatorId === creator);
         if (url.pathname === '/api/stats/videos') {
+            if (!url.searchParams.get('cursor')) { await route.fulfill({ json: { items: matching.slice(0, 12), nextCursor: matching.length > 12 ? 'video-page-2' : null } }); return; }
             if (failMore) { failMore = false; await route.fulfill({ status: 503, json: { error: 'Historie vorübergehend nicht erreichbar.' } }); return; }
             if (url.searchParams.get('cursor') === 'slow-page') await new Promise<void>(resolve => { releaseOldPage = resolve; });
             await route.fulfill({ json: { items: matching.slice(12), nextCursor: null } }); return;
         }
         if (url.pathname === '/api/stats/rooms') { await route.fulfill({ json: { items: rooms.slice(50), nextCursor: null } }); return; }
+        aggregateReads++;
         await route.fulfill({ json: { databaseEnabled: true, videoStorageMode: 'archive',
             overview: { gamesPlayed: 53, completedGames: 53, roundsPlayed: 15, votesCast: 15, videosArchived: 14, highestScore: 5 },
             players: [], videoCreators: [{ id: 'a', name: 'Änne' }, { id: 'b', name: 'Jörg' }], recentVideos: matching.slice(0, 12), rooms: rooms.slice(0, 50),
@@ -81,12 +84,14 @@ try {
     await page.locator('#moreVideosButton').waitFor({ state: 'visible' });
     await page.locator('#moreVideosButton').click();
     await page.waitForFunction(() => document.getElementById('moreVideosButton')?.textContent?.includes('Wird geladen'));
+    const readsBeforeFilter = aggregateReads;
     await page.locator('#videoPlayerFilter').selectOption('b');
     await page.waitForFunction(() => document.querySelectorAll('#videoStatsList .video-stat-item').length === 7);
     assert.ok(releaseOldPage); releaseOldPage();
     await page.waitForTimeout(200);
     assert.equal(await page.locator('#videoStatsList .video-stat-item').count(), 7, 'A stale page must not append videos after a creator filter change.');
     assert.doesNotMatch(await page.locator('#videoStatsList').innerText(), /Änne/);
+    assert.equal(aggregateReads, readsBeforeFilter, 'Changing a video filter must not load aggregate statistics or reconcile the archive again.');
     assert.deepEqual(errors, []);
     console.log('PASS: paginated history retains playback/selection, retries failed pages, ignores stale pages, displays evicted videos and downloads MP4 on desktop/mobile.');
 } catch (error) {
