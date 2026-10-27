@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { HfConnections, HfOAuthError, HfRequiredError, hfCookie, hfClient, type HfStorage } from '../../src/auth/huggingface';
+import { HfConnections, HfOAuthError, HfRequiredError, hfCookie, hfClient, HF_VAULT_ACCOUNT_LIMIT, type HfStorage } from '../../src/auth/huggingface';
 import { PlayerQuotaBudget } from '../../src/ai/player-quota';
 import { huggingFaceResponse } from '../../src/server/huggingface';
 import { sessionResponse } from '../../src/auth/session';
@@ -84,6 +84,87 @@ test('HF OAuth uses PKCE, minimal scopes and one-time browser-bound state; secre
     } finally { f.restore(); }
 });
 
+test('HF vault rotates connections and pinned jobs without extending expiry or changing ownership', async () => {
+    const f = fixture();
+    try {
+        const player = await f.connect('rotate', 'hf-rotate');
+        const id = `hf-connection:${player.hfConnectionId}`;
+        const before = await f.connections.credential(player.hfConnectionId, player.accountId);
+        await f.connections.pinJob(player.hfConnectionId, player.accountId, 'job-rotation');
+        const ciphertext = f.data.get(id).data;
+        const config = { ...f.config, HF_OAUTH_ENCRYPTION_KEY: 'new-dedicated-vault-key-at-least-32-characters', HF_OAUTH_PREVIOUS_ENCRYPTION_KEY: f.config.AUTH_COOKIE_SECRET };
+        const rotated = new HfConnections(f.storage, config);
+        assert.deepEqual(await rotated.credential(player.hfConnectionId, player.accountId), before);
+        assert.notEqual(f.data.get(id).data, ciphertext); assert.match(f.data.get(id).keyId, /^[a-f0-9]{16}$/);
+        assert.deepEqual(await rotated.jobCredential('job-rotation'), before);
+        const newOnly = new HfConnections(f.storage, { ...config, HF_OAUTH_PREVIOUS_ENCRYPTION_KEY: undefined });
+        assert.deepEqual(await newOnly.credential(player.hfConnectionId, player.accountId), before);
+        assert.deepEqual(await newOnly.jobCredential('job-rotation'), before);
+        await assert.rejects(f.connections.credential(player.hfConnectionId, player.accountId));
+        f.data.get(id).keyId = '0'.repeat(16);
+        await assert.rejects(rotated.credential(player.hfConnectionId, player.accountId));
+    } finally { f.restore(); }
+});
+
+test('one profile cannot fill the shared HF vault; concurrent starts and expiry preserve capacity for others', async () => {
+    const f = fixture(), originalNow = Date.now; let now = originalNow(); Date.now = () => now;
+    try {
+        const account = { id: 'noisy', name: 'Noisy', identityProof: 'owner' as const, expiresAt: now + 3600_000 };
+        const requests = await Promise.allSettled(Array.from({ length: HF_VAULT_ACCOUNT_LIMIT + 3 }, () => f.connections.start(account, 'https://game.test')));
+        assert.equal(requests.filter(result => result.status === 'fulfilled').length, HF_VAULT_ACCOUNT_LIMIT);
+        assert.equal(requests.filter(result => result.status === 'rejected').length, 3);
+        await f.connections.start({ ...account, id: 'other', name: 'Other' }, 'https://game.test');
+        assert.equal(Object.keys(f.data.get('hf-entry-owners')).length, HF_VAULT_ACCOUNT_LIMIT + 1);
+        now += 10 * 60_000 + 1; await f.connections.cleanup();
+        assert.equal(Object.keys(f.data.get('hf-entry-owners')).length, 0);
+        await f.connections.start(account, 'https://game.test');
+        assert.equal(Object.keys(f.data.get('hf-entry-owners')).length, 1);
+    } finally { Date.now = originalNow; f.restore(); }
+});
+
+test('failed vault writes are indexed for cleanup before reusable secrets could become orphaned', async () => {
+    const f = fixture(), originalNow = Date.now; let now = originalNow(); Date.now = () => now;
+    try {
+        const writes: string[] = [];
+        const connections = new HfConnections({ ...f.storage, put: async (id, value) => {
+            writes.push(id);
+            if (id.startsWith('hf-pending:')) throw new Error('fixture storage failure');
+            await f.storage.put(id, value);
+        } }, f.config);
+        await assert.rejects(connections.start({ id: 'crash', name: 'Crash', expiresAt: now + 3600_000, identityProof: 'owner' }, 'https://game.test'), /storage failure/);
+        assert.deepEqual(writes.slice(0, 2), ['hf-expiries', 'hf-entry-owners']);
+        assert.equal(Object.keys(f.data.get('hf-expiries')).length, 1);
+        assert.equal([...f.data.keys()].some(id => id.startsWith('hf-pending:')), false);
+        now += 10 * 60_000 + 1; await connections.cleanup();
+        assert.deepEqual(f.data.get('hf-expiries'), {}); assert.deepEqual(f.data.get('hf-entry-owners'), {});
+    } finally { Date.now = originalNow; f.restore(); }
+});
+
+test('legacy vault entries migrate with authenticated IDs; a concurrent disconnect is never undone', async () => {
+    const f = fixture();
+    try {
+        const player = await f.connect('legacy', 'hf-legacy'), id = `hf-connection:${player.hfConnectionId}`;
+        const value = await f.connections.credential(player.hfConnectionId, player.accountId);
+        const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.config.AUTH_COOKIE_SECRET), 'HKDF', false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('slopurself-hf-v1'), info: new TextEncoder().encode('oauth-vault') }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(id) }, key, new TextEncoder().encode(JSON.stringify(value)));
+        const encode = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64url');
+        const legacy = { iv: encode(iv), data: encode(new Uint8Array(data)), expiresAt: value.expiresAt };
+        f.data.set(id, structuredClone(legacy));
+        assert.deepEqual(await f.connections.credential(player.hfConnectionId, player.accountId), value);
+        assert.ok(f.data.get(id).keyId);
+        f.data.set(id, structuredClone(legacy));
+        let reads = 0;
+        const racing = new HfConnections({ ...f.storage, get: async <T>(name: string) => {
+            if (name === id && ++reads === 2) f.data.delete(id);
+            return await f.storage.get<T>(name);
+        } }, f.config);
+        await assert.rejects(racing.credential(player.hfConnectionId, player.accountId), /geändert/);
+        assert.equal(f.data.has(id), false);
+    } finally { f.restore(); }
+});
+
 test('HF device approval survives reload, throttles provider polling, binds the browser and profile, and encrypts credentials', async () => {
     const f = fixture(), originalNow = Date.now;
     let now = originalNow(); Date.now = () => now;
@@ -151,7 +232,7 @@ test('concurrent vault writes preserve the expiry index and callback/device oper
     const f = fixture();
     try {
         const account = { id: 'a', name: 'a', identityProof: 'owner' as const, expiresAt: Date.now() + 60_000 }, origin = 'https://game.test';
-        await Promise.all(Array.from({ length: 20 }, () => f.connections.start(account, origin)));
+        await Promise.all(Array.from({ length: 20 }, (_, i) => f.connections.start({ ...account, id: `batch-${i % 4}`, name: `batch-${i % 4}` }, origin)));
         assert.equal(Object.keys(f.data.get('hf-expiries')).length, 20);
         const start = await f.connections.start(account, origin), state = new URL(start.url).searchParams.get('state');
         await f.connect('a', 'hf-a');
@@ -159,7 +240,7 @@ test('concurrent vault writes preserve the expiry index and callback/device oper
         const result = await Promise.allSettled([f.connections.finish(state, 'code', start.nonce, origin), f.connections.finish(state, 'code', start.nonce, origin)]);
         assert.equal(result.filter(r => r.status === 'fulfilled').length, 1);
         assert.equal(f.exchanges(), before + 1);
-        assert.deepEqual(Object.keys(f.data.get('hf-expiries')).sort(), [...f.data.keys()].filter(key => key !== 'hf-expiries' && key !== 'hf-profile-bindings').sort());
+        assert.deepEqual(Object.keys(f.data.get('hf-expiries')).sort(), [...f.data.keys()].filter(key => !['hf-expiries', 'hf-profile-bindings', 'hf-entry-owners'].includes(key)).sort());
     } finally { f.restore(); }
 });
 

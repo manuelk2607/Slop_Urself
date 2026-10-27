@@ -156,9 +156,34 @@ npm run cf:deploy
 werden. Dann funktioniert dieselbe Konfiguration nicht unter einer anderen
 Origin, etwa localhost. `HF_OAUTH_ENCRYPTION_KEY` ist optional und muss
 mindestens 32 Zeichen haben; ohne diesen Wert wird mit separater HKDF-
-Schlüsselableitung der bestehende `AUTH_COOKIE_SECRET` verwendet. Eine
-Rotation des verwendeten Schlüssels macht alte HF-Verbindungen unlesbar;
-Spieler müssen sich dann erneut verbinden.
+Schlüsselableitung der bestehende `AUTH_COOKIE_SECRET` verwendet. Für neue
+Installationen einen unabhängigen zufälligen Vault-Schlüssel verwenden.
+
+Kontrollierter Schlüsselwechsel (nur vorbereitet, nicht automatisch ausgeführt):
+
+1. Neuen zufälligen `HF_OAUTH_ENCRYPTION_KEY` und vorübergehend den bisherigen
+   Schlüssel als `HF_OAUTH_PREVIOUS_ENCRYPTION_KEY` setzen. Bei bisheriger HKDF-
+   Ableitung ist der alte Wert von `AUTH_COOKIE_SECRET` der vorherige Schlüssel.
+2. Beide gezielt übertragen und die geprüfte neue Software veröffentlichen:
+   `npm run cf:secrets -- HF_OAUTH_ENCRYPTION_KEY HF_OAUTH_PREVIOUS_ENCRYPTION_KEY`.
+   Neue Zugänge nutzen nur den aktuellen Schlüssel. Bestehende Verbindungen,
+   OAuth-Zwischenstände und gepinnte Aufträge werden beim Lesen umverschlüsselt;
+   ihre Ablaufzeit, Identität und Kontingentzuordnung bleiben erhalten.
+3. Nach vollständigem Wechsel aller Instanzen und Ablauf der alten Zugänge
+   (maximal acht Stunden) den vorherigen Schlüssel aus Cloudflare und der lokalen
+   Konfiguration entfernen. Er wird vom Standard-Secret-Upload nicht mitgesendet.
+
+Bei kompromittiertem Schlüssel keine Übergangsfrist verwenden, sondern sofort
+entfernen und betroffene Nutzer neu verbinden lassen. Ohne vorherigen Schlüssel
+bleiben alte verschlüsselte Einträge gesperrt. Eine Rückkehr zu alter Software ohne
+Unterstützung des neuen Vault-Formats erfordert ebenfalls erneute HF-Anmeldung;
+Spielprofile und Statistiken sind davon unabhängig. Produktive Rotation und
+gemischte Deployments müssen vor Freigabe gesondert abgenommen werden.
+
+Pro Profil sind höchstens 16 neue aktive Vault-Einträge für Verbindungen,
+Anmeldezwischenstände und gepinnte Aufträge erlaubt; insgesamt bleibt die Grenze
+bei 512. Einträge verfallen regulär und werden beim Trennen/Bereinigen entfernt.
+Vorhandene Alteinträge werden bei Migration zugeordnet, nicht pauschal gelöscht.
 
 ### Alternative ohne manuelle App-Registrierung
 

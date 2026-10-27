@@ -32,3 +32,14 @@ test('Targeted secret setup only uploads selected secrets and rejects unknown na
     assert.throws(() => prepareSecrets({ AUTH_COOKIE_SECRET: key }, ['AUTH_COOKIE_SECRET_TYPO']), { message: 'Unbekannte Secrets: AUTH_COOKIE_SECRET_TYPO' });
     assert.throws(() => prepareSecrets({}, ['AUTH_COOKIE_SECRET']), { message: 'Fehlende Werte in .env.local: AUTH_COOKIE_SECRET' });
 });
+
+test('retired vault keys require explicit selection and valid current/previous secrets', () => {
+    const current = 'current-test-vault-key-at-least-32-characters', previous = 'previous-test-vault-key-at-least-32-characters';
+    const env = { DATABASE_URL: 'fixture', AUTH_COOKIE_SECRET: current, AWS_ACCESS_KEY_ID: 'fixture', AWS_SECRET_ACCESS_KEY: 'fixture',
+        HF_OAUTH_ENCRYPTION_KEY: current, HF_OAUTH_PREVIOUS_ENCRYPTION_KEY: previous };
+    assert.equal('HF_OAUTH_PREVIOUS_ENCRYPTION_KEY' in prepareSecrets(env), false);
+    assert.deepEqual(prepareSecrets(env, ['HF_OAUTH_PREVIOUS_ENCRYPTION_KEY']), { HF_OAUTH_PREVIOUS_ENCRYPTION_KEY: previous });
+    for (const change of [{ HF_OAUTH_ENCRYPTION_KEY: '' }, { HF_OAUTH_PREVIOUS_ENCRYPTION_KEY: 'short' }]) {
+        assert.throws(() => prepareSecrets({ ...env, ...change }, ['HF_OAUTH_PREVIOUS_ENCRYPTION_KEY']), /mindestens 32/);
+    }
+});

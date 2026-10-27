@@ -5,6 +5,7 @@ export interface HfConfig extends AuthConfig {
     HF_OAUTH_CLIENT_ID?: string;
     HF_OAUTH_ORIGIN?: string;
     HF_OAUTH_ENCRYPTION_KEY?: string;
+    HF_OAUTH_PREVIOUS_ENCRYPTION_KEY?: string;
 }
 export interface HfStorage {
     get<T>(key: string): Promise<T | undefined>;
@@ -24,7 +25,8 @@ export class HfOAuthError extends Error {
 interface Pending { account: Account; verifier: string; nonce: string; origin: string; expiresAt: number }
 interface ReceivedGrant { access_token: string; expires_in: number; token_type: string; receivedAt: number; connection: string }
 interface PendingDevice { account: Account; origin: string; client: string; deviceCode: string; userCode: string; verificationUrl: string; interval: number; nextPollAt: number; expiresAt: number; grant?: ReceivedGrant; completed?: { connection: string; expiresAt: number } }
-interface Sealed { iv: string; data: string; expiresAt: number }
+interface Sealed { iv: string; data: string; expiresAt: number; keyId?: string }
+export const HF_VAULT_ACCOUNT_LIMIT = 16;
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const decode = (value: string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0));
 const random = () => encode(crypto.getRandomValues(new Uint8Array(32)));
@@ -61,24 +63,39 @@ export class HfConnections {
         void settled.then(() => { if (this.operations.get(key) === settled) this.operations.delete(key); });
         return result;
     }
-    private async key() {
-        const secret = this.config.HF_OAUTH_ENCRYPTION_KEY || this.config.AUTH_COOKIE_SECRET;
+    private async key(secret = this.config.HF_OAUTH_ENCRYPTION_KEY || this.config.AUTH_COOKIE_SECRET) {
         if (!secret || secret.length < 32) throw new Error('HF-Verbindung ist noch nicht eingerichtet.');
         const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'HKDF', false, ['deriveKey']);
         return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new TextEncoder().encode('slopurself-hf-v1'), info: new TextEncoder().encode('oauth-vault') }, material,
             { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
     }
-    private save(id: string, value: Pending | PendingDevice | HfCredential) {
+    private async keyId(secret = this.config.HF_OAUTH_ENCRYPTION_KEY || this.config.AUTH_COOKIE_SECRET) {
+        if (!secret || secret.length < 32) throw new Error('HF-Verbindung ist noch nicht eingerichtet.');
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`slop-vault-key-id:${secret}`));
+        return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    }
+    private async write<T extends { expiresAt: number }>(id: string, value: T) {
+        await this.prune();
+        const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
+        const owners = await this.storage.get<Record<string, string>>('hf-entry-owners') || {};
+        const owner = 'accountId' in value ? value.accountId : 'account' in value && value.account && typeof value.account === 'object' && 'id' in value.account ? value.account.id : undefined;
+        if (typeof owner !== 'string' || !owner || owner.length > 128) throw new Error('HF-Zugang hat keinen gültigen Profilinhaber.');
+        if (!expiries[id] && Object.values(owners).filter(accountId => accountId === owner).length >= HF_VAULT_ACCOUNT_LIMIT) throw new Error('Zu viele aktive HF-Verbindungen für dieses Profil. Bitte unbenutzte Verbindungen trennen oder später erneut versuchen.');
+        if (!expiries[id] && Object.keys(expiries).length >= 512) throw new Error('Zu viele HF-Verbindungen. Bitte später erneut versuchen.');
+        const keyId = await this.keyId(), iv = crypto.getRandomValues(new Uint8Array(12));
+        const bytes = new TextEncoder().encode(JSON.stringify(value));
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(`${id}:${keyId}`) }, await this.key(), bytes);
+        expiries[id] = value.expiresAt;
+        owners[id] = owner;
+        // Register cleanup before writing reusable secrets. A crash may leave
+        // a bounded empty slot, never an unindexed encrypted token indefinitely.
+        await this.storage.put('hf-expiries', expiries);
+        await this.storage.put('hf-entry-owners', owners);
+        await this.storage.put(id, { iv: encode(iv), data: encode(new Uint8Array(data)), expiresAt: value.expiresAt, keyId });
+    }
+    private save<T extends { expiresAt: number }>(id: string, value: T) {
         return this.serial('vault', async () => {
-            await this.prune();
-            const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
-            if (!expiries[id] && Object.keys(expiries).length >= 512) throw new Error('Zu viele HF-Verbindungen. Bitte später erneut versuchen.');
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const bytes = new TextEncoder().encode(JSON.stringify(value));
-            const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(id) }, await this.key(), bytes);
-            await this.storage.put(id, { iv: encode(iv), data: encode(new Uint8Array(data)), expiresAt: value.expiresAt });
-            expiries[id] = value.expiresAt;
-            await this.storage.put('hf-expiries', expiries);
+            await this.write(id, value);
         });
     }
     cleanup() { return this.serial('vault', () => this.prune()); }
@@ -88,6 +105,11 @@ export class HfConnections {
         let changed = false;
         for (const [id, expiresAt] of Object.entries(expiries)) if (expiresAt <= Date.now()) { await this.storage.delete(id); delete expiries[id]; changed = true; }
         if (changed) await this.storage.put('hf-expiries', expiries);
+        const owners = await this.storage.get<Record<string, string>>('hf-entry-owners');
+        if (owners) {
+            const retained = Object.fromEntries(Object.entries(owners).filter(([id]) => Object.hasOwn(expiries, id)));
+            if (Object.keys(retained).length !== Object.keys(owners).length) await this.storage.put('hf-entry-owners', retained);
+        }
         return Object.keys(expiries).length ? Math.min(...Object.values(expiries)) : undefined;
     }
     private remove(id: string) {
@@ -96,17 +118,39 @@ export class HfConnections {
             const expiries = await this.storage.get<Record<string, number>>('hf-expiries') || {};
             delete expiries[id];
             await this.storage.put('hf-expiries', expiries);
+            const owners = await this.storage.get<Record<string, string>>('hf-entry-owners');
+            if (owners?.[id]) { delete owners[id]; await this.storage.put('hf-entry-owners', owners); }
         });
     }
     private async load<T extends { expiresAt: number }>(id: string): Promise<T | undefined> {
         const sealed = await this.storage.get<Sealed>(id);
         if (!sealed) return;
         if (sealed.expiresAt <= Date.now()) { await this.remove(id); return; }
-        try {
-            const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(sealed.iv), additionalData: new TextEncoder().encode(id) }, await this.key(), decode(sealed.data));
-            const value = JSON.parse(new TextDecoder().decode(bytes)) as T;
-            if (value.expiresAt > Date.now()) return value;
-        } catch { throw new Error('HF-Verbindung muss erneut hergestellt werden.'); }
+        const active = this.config.HF_OAUTH_ENCRYPTION_KEY || this.config.AUTH_COOKIE_SECRET;
+        const previous = this.config.HF_OAUTH_PREVIOUS_ENCRYPTION_KEY;
+        if (previous && previous.length < 32) throw new Error('Der vorherige HF-Schlüssel ist ungültig konfiguriert.');
+        for (const secret of [...new Set([active, previous].filter((value): value is string => Boolean(value)))]) {
+            if (sealed.keyId && sealed.keyId !== await this.keyId(secret)) continue;
+            let value: T;
+            try {
+                const aad = sealed.keyId ? `${id}:${sealed.keyId}` : id;
+                const bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(sealed.iv), additionalData: new TextEncoder().encode(aad) }, await this.key(secret), decode(sealed.data));
+                value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as T;
+            } catch { continue; }
+            if (!Number.isFinite(value?.expiresAt) || value.expiresAt <= Date.now()) return;
+            if (!sealed.keyId || secret !== active) {
+                const migrated = await this.serial('vault', async () => {
+                    const current = await this.storage.get<Sealed>(id);
+                    // A delayed read must not recreate a disconnected/deleted token,
+                    // or overwrite a newer credential after another request updated it.
+                    if (current?.iv !== sealed.iv || current.data !== sealed.data || current.keyId !== sealed.keyId) return false;
+                    await this.write(id, value); return true;
+                });
+                if (!migrated) throw new Error('Die HF-Verbindung hat sich während der Prüfung geändert. Bitte erneut versuchen.');
+            }
+            return value;
+        }
+        throw new Error('HF-Verbindung muss erneut hergestellt werden.');
     }
     async start(account: Account, requestOrigin: string) {
         const origin = hfOrigin(requestOrigin, this.config), client = hfClient(origin, this.config);
