@@ -426,7 +426,7 @@ function endPhase(room: Room) {
 const phaseClock = setInterval(() => {
     for (const room of rooms.values()) {
         if (room.phaseDeadline && room.phaseDeadline <= Date.now()) endPhase(room);
-        else if (room.state === 'VOTING' && room.players.length > 1 && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { checkVotingComplete(room, true); broadcast(room); }
+        else if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { checkVotingComplete(room, true); broadcast(room); }
     }
 }, 500);
 phaseClock.unref();

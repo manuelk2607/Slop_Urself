@@ -62,7 +62,7 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         emit('finishPreview', { ballotId: snapshot.ballotId, currentRound: snapshot.currentRound, videoNumber: snapshot.videoNumber });
     }
     function previewPlayed(video: HTMLVideoElement) {
-        if (!snapshot?.previewDeadline || snapshot.previewConfirmed || (snapshot.players?.length || 0) < 2 || !Number.isFinite(video.duration) || video.duration <= 0) return;
+        if (!snapshot?.previewDeadline || snapshot.previewConfirmed || !Number.isFinite(video.duration) || video.duration <= 0) return;
         let played = 0; for (let i = 0; i < video.played.length; i++) played += video.played.end(i) - video.played.start(i);
         if (played >= Math.min(9, video.duration) - 0.2) preview(false);
     }

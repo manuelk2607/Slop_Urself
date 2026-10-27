@@ -177,6 +177,7 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         archiveAuthor: isArchiveGame(room) ? room.archiveCurrent?.creatorName : undefined,
         archiveResults: room.archiveResults,
         votedPlayerIds: Object.keys(room.currentVotes),
+        voting: ballotProgress(room),
         hasAbstained: viewerId ? room.currentVotes[viewerId] === 0 : false,
         previewDeadline: room.previewDeadline, previewConfirmed: room.previewConfirmed,
         options: gameOptions(room.options),
@@ -194,6 +195,16 @@ export function generationView(room: Room): GenerationView | undefined {
     const startedAt = room.generationStartedAt || room.generationJob?.submittedAt;
     if (room.state !== 'GENERATING' || !room.generationId || !Number.isSafeInteger(startedAt) || !startedAt || startedAt < 0) return undefined;
     return { id: room.generationId, startedAt, stage: room.generationJob?.status === 'complete' ? 'archive' : room.generationStage || 'result' };
+}
+
+export function ballotProgress(room: Room) {
+    const includesCreator = gameOptions(room.options).mode === 'archive-vote';
+    const creator = activeCreator(room)?.id;
+    const submitted = Object.keys(room.currentVotes).filter(id => includesCreator || id !== creator);
+    // Departed voters retain their accepted vote and place in the denominator;
+    // only a departed uncast vote ceases to be due. Spectators never enter it.
+    const eligible = new Set([...room.players.filter(player => includesCreator || player.id !== creator).map(player => player.id), ...submitted]);
+    return { voted: submitted.length, total: eligible.size };
 }
 
 export function finalStandings(room: Room) {
@@ -262,8 +273,8 @@ export function finishVoting(room: Room, confirmedSolo = false, abstainMissing =
     if (confirmedSolo) room.previewConfirmed = true;
     if (abstainMissing) for (const voter of voters) room.currentVotes[voter.id] ??= 0;
     if (voters.some(p => room.currentVotes[p.id] === undefined)) return false;
-    if (!voters.length && !confirmedSolo) return false;
-    if (voters.length && room.previewDeadline && !room.previewConfirmed && !abstainMissing) {
+    if (!voters.length && !confirmedSolo && !room.previewDeadline) return false;
+    if (room.previewDeadline && !room.previewConfirmed && !abstainMissing) {
         if (now < room.previewDeadline) return false;
         room.previewConfirmed = true;
     }

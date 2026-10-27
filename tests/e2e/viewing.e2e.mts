@@ -33,6 +33,16 @@ try {
     await guest.waitForFunction(() => document.getElementById('votingStatusText')?.textContent?.includes('2/2'));
     await guest.locator('#finishPreviewButton').click(); await Promise.all(pages.map(p => visible(p, 'screenResult')));
     assert.match(await guest.locator('#resultPointsSummary').innerText(), /0 Punkte.*2 Enthaltungen/);
+    await host.locator('#nextRoundButton').click(); await visible(third, 'creatorControls');
+    await third.locator('#imageInput').setInputFiles({ name: 'safe.png', mimeType: 'image/png', buffer: testImage(320,240) });
+    await visible(third, 'imagePreview'); await third.locator('#promptInput').fill('The subject waves.'); await third.locator('#uploadButton').click();
+    await visible(host, 'screenVoting'); await visible(guest, 'screenVoting');
+    await guest.locator('[data-points="4"]').click(); await guest.locator('#leaveRoomButton').click(); await visible(guest, 'screenLobby');
+    await host.locator('#abstainVoteButton').click(); await host.locator('#leaveRoomButton').click(); await visible(host, 'screenLobby');
+    await third.waitForFunction(() => document.getElementById('votingStatusText')?.textContent?.includes('2/2'));
+    assert.equal(await third.locator('#screenVoting').isVisible(), true);
+    await third.locator('#finishPreviewButton').click(); await visible(third, 'screenGameOver');
+    assert.match(await third.locator('#finalScoreList').innerText(), /4 Pkt/);
     assert.deepEqual(errors, []);
     console.log('PASS: rapid votes wait for creator preview across reload; explicit abstention and failed playback resolve without false ratings.');
 } finally { await browser.close(); }

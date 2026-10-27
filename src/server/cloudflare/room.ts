@@ -692,7 +692,7 @@ export class RoomDurableObject {
             }
             const room = this.room;
             if (room) {
-                if (room.state === 'VOTING' && room.players.length > 1 && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) await this.checkVotingComplete(true);
+                if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) await this.checkVotingComplete(true);
                 if (room.phaseDeadline && room.phaseDeadline <= Date.now()) await this.endPhase();
                 if (room.sharedImage && room.sharedImage.expiresAt <= Date.now()) {
                     await deleteSharedImage(this.state.storage, room.sharedImage); room.sharedImage = undefined; resetReady(room);
@@ -730,7 +730,7 @@ export class RoomDurableObject {
         for (const meta of this.sockets.values()) if (!meta.playerId && meta.acceptedAt) deadlines.push(meta.acceptedAt + 60_000);
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
-        if (this.room?.state === 'VOTING' && this.room.players.length > 1 && this.room.previewDeadline && !this.room.previewConfirmed) deadlines.push(this.room.previewDeadline);
+        if (this.room?.state === 'VOTING' && this.room.previewDeadline && !this.room.previewConfirmed) deadlines.push(this.room.previewDeadline);
         if (this.room?.currentVideoUrl.startsWith('/api/videos/') && this.room.state !== 'GAME_OVER') deadlines.push(this.archiveLeaseRenewAt || Date.now() + 100);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);
         if (this.quotaReleases.length) deadlines.push(Date.now() + 15_000);

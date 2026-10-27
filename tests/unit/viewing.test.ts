@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { beginViewing, confirmPreview, finishVoting, recordVote, roomSnapshot, startRounds, type Room } from '../../src/game/rules';
+import { beginViewing, confirmPreview, finishVoting, recordVote, roomSnapshot, startRounds, removePlayer, type Room } from '../../src/game/rules';
 import { roundInput } from '../../src/game/persistence';
 function game(): Room {
     const room: Room = { code: 'TEST', hostId: 'a', players: ['a', 'b', 'c'].map(id => ({ id, name: id, sessionId: id, score: 0, connected: true })), state: 'LOBBY', activeCreatorIndex: 0, currentVotes: {}, currentRound: 1, maxRounds: 2, currentVideoUrl: '/video', currentPrompt: 'wave' };
@@ -16,6 +16,17 @@ test('early votes wait for creator preview confirmation and survive reload; no i
     assert.equal(confirmPreview(restored, restored.players[0], context), true);
     assert.equal(finishVoting(restored, false, false, 2000), true); assert.equal(restored.players[0].score, 9);
     assert.equal(finishVoting(room, false, false, 46_000), true, 'After the bounded window a missing creator acknowledgement cannot deadlock.');
+});
+test('departed accepted votes stay in progress totals and group preview retains its deadline with only its creator left', () => {
+    const room = game(), context = roomSnapshot(room);
+    recordVote(room, room.players[1], { ...context, points: 4 });
+    removePlayer(room, 'b');
+    assert.deepEqual(roomSnapshot(room).voting, { voted: 1, total: 2 });
+    removePlayer(room, 'c');
+    assert.deepEqual(roomSnapshot(room).voting, { voted: 1, total: 1 });
+    assert.equal(finishVoting(room, false, false, 2000), false);
+    assert.equal(finishVoting(room, false, false, 46_000), true);
+    assert.equal(room.players[0].score, 4); assert.deepEqual(room.currentVotes, { b: 4 });
 });
 test('explicit abstention is video-bound, irreversible like a vote and never persisted as a zero-star rating', () => {
     const room = game(), context = roomSnapshot(room);
