@@ -8,6 +8,37 @@ deshalb Schemaarbeit offen. Kein validierter kostenloser Moderationsdienst vorha
 fehlende Prüfung muss geschlossen bleiben, niemals durch Allow-Platzhalter ersetzen.
 ## Aktueller Implementierungsstand
 
+### Aktuell laufend – M41 und gezieltes P0-CPU-Paket (27.10.)
+
+- M41 uncommittet: nur Prompttext im aktuellen Tab, nach Raum/Spieler/Video
+  getrennt, 15 Minuten Gültigkeit, maximal zehn Einträge. Keine Bilder/Tokens/
+  Sitzungsgeheimnisse. Angenommene Generierung und Verlassen löschen Entwürfe;
+  blockierter/defekter Speicher verhindert Spielen nicht. Build/188 Units bestanden.
+- Vollständige CI mit vier Draft-Prüfungen bestanden, Exitcode 0 (Session 15291
+  abgeschlossen; /tmp/slopurself-ci-2026-10-27.log/.exit). Alle Chromium-/WebKit-/
+  workerd-Strecken einschließlich M33/M27 und Entwürfen grün. Root-Build/188 Units.
+- P0-Diagnose ohne Inferenz belegt 13–17 Kontext-Tiles bei 2048px gegenüber fünf
+  bei 1024px; ohne Splitting nur ein Tile, diese unsicherere Variante NICHT übernommen.
+  Alle akzeptierten Quellbilder <=1024px. Jetzt begrenztes Upscaling bei erhaltenem
+  Splitting; jede Quelle behält native Auflösung, kein 320px-Video-Vorabschrumpfen.
+  Gemeinsame Kantenbegrenzung und harte Prüfung erwarteter Prozessorparameter;
+  Runtime-Fingerprint enthält neues preprocessing.ts. Dienst-Build/11 Tests PASS.
+- CPU-Diagnose 59519 beendet: Exit 1 beim Kontextmodell-Laden, 0 semantische Fälle,
+  „Protobuf parsing failed“. Aktuelle Decoderdatei nur 1.323.696.414 statt der
+  per gepinnter HF-Metadaten bestätigten 1.450.425.745 Bytes. Dies belegt einen
+  unvollständigen aktuellen Cache, erklärt nicht pauschal ältere native Abstürze.
+- P0: manifeste ONNX-Größen/LFS-SHA256 im Lock, Streaming-Prüfung vor Modellladen,
+  öffentliche credentialfreie Reparatur mit Bytegrenze/Hash und atomarer Übernahme.
+  Abbruch/Fehler ersetzt den alten Cache nicht. Service-Build/13 Tests PASS.
+- Kontrollierte Cache-Reparatur läuft in Session 69609; Log/Exitdatei
+  /tmp/slop-model-repair-2026-10-27.log/.exit. Erst nach bestätigtem Abschluss
+  EINEN neuen CPU-Diagnoselauf starten. Keine GPU-Aufträge/Qualifikation/Freigabe.
+- Nutzer bestätigt: derzeit nur EIN reales HF-Konto verfügbar. M17-Zwei-Konten-
+  Abrechnungsnachweis bleibt deshalb extern blockiert, keine Ersatzbehauptung.
+- Nächster Schritt: M41 committen, technische P0-Korrekturen dokumentieren/sichern;
+  Reparaturprozess abwarten, anschließend geänderten Moderator mit überprüftem
+  Cache testen. Weitere priorisierte Restmaßnahmen währenddessen unabhängig.
+
 ### Fortsetzung 27.10. – M33/M32- und M27-Paket
 
 - Ausgangsstand 9195426 sauber; vollständige Browser-/Cloudflare-Matrix vom

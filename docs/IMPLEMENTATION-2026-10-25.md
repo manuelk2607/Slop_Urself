@@ -133,6 +133,41 @@ Fortsetzung am **26. Oktober 2026**:
 
 ## Priorisierte Restarbeit
 
+### Laufend am 27.10.: M41 und Moderationslaufzeit
+
+M41 ergänzt ausschließlich tablokale Prompttextentwürfe pro Raum/Spieler/Video mit
+15 Minuten Gültigkeit. Es werden keine Bilder oder Zugangsdaten gespeichert;
+akzeptierte Generierung, Raumverlassen und Abmeldung löschen den Text. Ablauf wird
+beim nächsten Zugriff bereinigt; eine sofortige physische Löschung im pausierten
+Browserhintergrund wird nicht zugesichert. Bounded Speicher und Fehlerbehandlung
+sind mit zwei Regressionen abgedeckt; Root-Build/188 Unit-Tests bestanden.
+Vollständiger Chromium-/WebKit-/workerd-Lauf mit vier zusätzlichen Reload-/Entwurfs-
+tests am 27.10. mit **Exitcode 0 bestanden**, einschließlich neuer Vault-/Filterpfade.
+
+Gezielte P0-CPU-Diagnose (keine erneute Gesamtauditphase): Der festgeschriebene
+SmolVLM-Prozessor erzeugt durch 2048px-Upscaling 13–17 Kontextausschnitte aus unseren
+begrenzten Medien. Eine 1024px-Grenze liefert fünf Ausschnitte und hält Splitting
+aktiv. Keine akzeptierte Quelle wird unter ihre native Auflösung verkleinert.
+Video-Frames werden nun ebenfalls ohne vorherige 320px-Verkleinerung geprüft.
+Die Grenze ist mit der Upload-/Videoprüfung gemeinsam; geänderte Prozessor-Defaults
+werden zurückgewiesen und der Runtime-Hash umfasst den Code. Dienst-Build/11
+technische Tests bestanden, einschließlich echtem vollständigem 640×360-Decode.
+Ein neuer beaufsichtigter Node-24-Lauf scheiterte vor der Inferenz mit „Protobuf
+parsing failed“. Der aktuelle Decoder-Cache ist nachweislich unvollständig:
+1.323.696.414 statt 1.450.425.745 Bytes laut festgeschriebener HF-Revision. Dies ist
+ein konkreter Defekt im beim Fehler verwendeten Cache; die Reparatur samt erneutem
+Modellladen muss den Zusammenhang noch abschließend bestätigen. Daraus folgt keine
+pauschale Erklärung der älteren Abstürze oder bisherigen Qualitäts-/Laufzeitprobleme.
+ONNX-Dateigrößen und LFS-SHA256 sind jetzt im Lock enthalten; jedes Modell prüft
+die tatsächlichen Cachebytes vor dem Laden. Öffentliche Downloads werden ohne
+Spielertoken gestreamt, begrenzt/gehasht und erst vollständig atomar übernommen.
+Defekte/abgebrochene Downloads ersetzen keine bestehenden Dateien. Dienst-Build/
+13 technische Tests bestanden; gezielte Reparatur läuft. Bis zur anschließenden
+realen Diagnose keine neue Wirksamkeits-, Zeit- oder Sicherheitsfreigabe.
+
+M17 bleibt extern blockiert: Nutzer bestätigt am 27.10., dass nur ein persönliches
+HF-Konto verfügbar ist. Zwei getrennte echte Belastungen sind damit nicht prüfbar.
+
 ### Fortsetzung 27.10. (M33/M32, M27)
 
 Die vollständige isolierte Chromium-/WebKit-/workerd-Matrix von 9195426 wurde

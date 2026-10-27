@@ -1,19 +1,22 @@
 import { AutoProcessor, AutoModelForVision2Seq, RawImage, Tensor, pipeline, env, InterruptableStoppingCriteria } from '@huggingface/transformers';
 import sharp from 'sharp';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { ensureModelArtifacts, modelCacheRoot } from './artifacts.js';
 import { decide, POLICY, type Decision, type ModelLock, type Scores } from './policy.js';
-import { checkAbort, inspectVideo } from './media.js';
+import { checkAbort, inspectVideo, MAX_MEDIA_EDGE } from './media.js';
+import { configureContextImages } from './preprocessing.js';
 
 // The non-root container cannot write Transformers.js' node_modules cache.
 // Only pinned model weights, never player media, belong in this directory.
-env.cacheDir = process.env.MODEL_CACHE_DIR || join(tmpdir(), 'slop-model-cache');
+env.cacheDir = modelCacheRoot();
 export async function createEngine(lock: ModelLock, stage: (stage: string) => void | Promise<void> = () => {}) {
+    await stage('verifying_model_files');
+    await ensureModelArtifacts(lock);
     const session_options = { intraOpNumThreads: 2, interOpNumThreads: 1 };
     await stage('loading_classifier');
     const classifier = await pipeline('image-classification', lock.nsfw.id, { revision: lock.nsfw.revision, device: 'cpu', dtype: 'fp32', session_options });
     await stage('loading_context_model');
     const processor = await AutoProcessor.from_pretrained(lock.vlm.id, { revision: lock.vlm.revision });
+    configureContextImages(processor.image_processor);
     const model = await AutoModelForVision2Seq.from_pretrained(lock.vlm.id, { revision: lock.vlm.revision, device: 'cpu', dtype: 'fp32', session_options });
     await stage('models_ready');
     async function inspect(bytes: Uint8Array, prompt: string, signal?: AbortSignal): Promise<Decision> {
@@ -50,7 +53,8 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
             const bytes = Buffer.from(match[1], 'base64');
             if (!bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) throw new Error('Expected actual PNG');
             const metadata = await sharp(bytes, { limitInputPixels: 832 * 832, failOn: 'error' }).metadata();
-            if (metadata.format !== 'png' || (metadata.pages || 1) !== 1) throw new Error('Expected a single decoded image');
+            if (metadata.format !== 'png' || (metadata.pages || 1) !== 1 || !metadata.width || !metadata.height
+                || metadata.width > MAX_MEDIA_EDGE || metadata.height > MAX_MEDIA_EDGE) throw new Error('Expected a bounded single decoded image');
             return { decision: await inspect(bytes, prompt, signal), decodeComplete: true };
         },
         output: (video: string, signal?: AbortSignal) => inspectVideo(video, (frame, signal) => inspect(frame, 'Classify this video frame under the same safety policy.', signal), signal)

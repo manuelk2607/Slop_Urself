@@ -26,7 +26,9 @@ export function decide(scores: Scores[], context: string): Decision {
     if (result.sexual || result.uncertain || score >= 0.2 || result.safe !== true) return 'review';
     return 'allow';
 }
-export interface ModelLock { nsfw: { id: string; revision: string }; vlm: { id: string; revision: string } }
+export interface ModelArtifact { path: string; bytes: number; sha256: string }
+export interface LockedModel { id: string; revision: string; files?: ModelArtifact[] }
+export interface ModelLock { nsfw: LockedModel; vlm: LockedModel }
 export function modelVersion(lock: ModelLock, implementation: string) {
     if (!/^[a-f0-9]{64}$/.test(implementation)) throw new Error('A runtime implementation fingerprint is required');
     for (const model of [lock.nsfw, lock.vlm]) if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(model.id) || !/^[a-f0-9]{40}$/.test(model.revision)) throw new Error('Models require immutable repository revisions');

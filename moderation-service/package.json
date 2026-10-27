@@ -7,6 +7,7 @@
     "start": "node dist/server.js",
     "test": "node --import tsx --test tests/*.test.ts",
     "models:resolve": "node --import tsx src/resolve-models.ts",
+    "models:prepare": "node dist/prepare-models.js",
     "evaluate:local": "node --import tsx src/evaluate-runner.ts"
   },
   "dependencies": {

@@ -36,6 +36,13 @@ angelegt oder veröffentlicht und kein Schutzversprechen für die Modelle abgege
    Basismodellen prüfen. Änderungen erfolgen durch einen neuen geprüften Lock.
 3. Einen unabhängigen zufälligen MODERATION_SECRET mit mindestens 32 Zeichen als
    Secret setzen. Keine Spiel-/HF-/Admin-Schlüssel wiederverwenden.
+   Vor lokalen Diagnosen einmal `npm run build && npm run models:prepare` ausführen.
+   Der Server bereitet den Cache beim Start ebenfalls vor und bleibt bis dahin
+   nicht bereit. Alle vier ONNX-Dateien müssen Größe und LFS-SHA256 des Locks
+   erfüllen, bevor native Modellinitialisierung beginnt. Der Cachepfad enthält
+   die Modellrevision. Downloads nutzen keine Spielertokens, ersetzen Dateien
+   erst nach vollständiger Prüfung und können beim ersten Start mehrere Minuten
+   dauern. Ein abgebrochener großer Download ist kein gültiger Cache.
 4. Auf kostenloser CPU-Infrastruktur zunächst nur `/evaluate` mit harmlosen,
    lizenzierten oder synthetischen Fixtures testen. Kein echtes Missbrauchsmaterial
    beschaffen. Deutsch/Englisch, nicht sexuelle Familienbilder, Illustrationen,
@@ -100,6 +107,15 @@ zurückgehaltene harmlose Fälle und Laufzeitüberschreitungen). Kein Einsatz vo
 Missbrauchsmaterial, keine semantische Sicherheitsfreigabe. Technische Regressionen
 prüfen zusätzlich echten FFmpeg-Decode aller Frames, Ton-/Zusatzspur-Ablehnung,
 Abbruch und Ablauf der Qualifikation; diese Tests sind keine Wirksamkeitsquote.
+
+27.10.: Beim aktuellen Protobuf-Ladefehler wurde ein abgeschnittener lokaler
+Decoder-Download nachgewiesen (rund 127 MB fehlen gegenüber dem festgelegten
+Original). Reparatur und erneutes Laden müssen den Zusammenhang noch abschließend
+bestätigen. Größen-/SHA256-Prüfung und atomare Reparatur verhindern die Annahme
+solcher Dateien. Der Kontextprozessor behält Splitting und native Quelldetails,
+vermeidet jedoch unnötiges 2048px-Upscaling begrenzter Medien. Videoprüfung behält
+die ursprüngliche Frameauflösung. Das ändert den Runtime-Fingerprint und braucht
+eine neue Qualitätsabnahme; keine bestehende oder automatisch erteilte Freigabe.
 
 Quellen: [NSFW-ONNX-Modell](https://huggingface.co/onnx-community/nsfw_image_detection-ONNX),
 [SmolVLM](https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct),

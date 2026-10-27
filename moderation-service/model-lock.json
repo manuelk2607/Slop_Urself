@@ -1,10 +1,16 @@
 {
   "nsfw": {
     "id": "onnx-community/nsfw_image_detection-ONNX",
-    "revision": "1ceb3c7fe1e9f3f2507e6df577437f23a9149fd5"
+    "revision": "1ceb3c7fe1e9f3f2507e6df577437f23a9149fd5",
+    "files": [{ "path": "onnx/model.onnx", "bytes": 343401688, "sha256": "a4316a4fb750169ac4fcabaabee1fcbd982b0ee8c0cc63fe3e944954bb9a7d9c" }]
   },
   "vlm": {
     "id": "HuggingFaceTB/SmolVLM-500M-Instruct",
-    "revision": "a7da5b986cb59b408707209984f360a5f4ad7e47"
+    "revision": "a7da5b986cb59b408707209984f360a5f4ad7e47",
+    "files": [
+      { "path": "onnx/decoder_model_merged.onnx", "bytes": 1450425745, "sha256": "1d4dc5a8464c92cf151be233e23da809992e111f5596ba245fe1eca28e838b7b" },
+      { "path": "onnx/embed_tokens.onnx", "bytes": 189235499, "sha256": "6fe00a73de387cbe52cdb78f1b7c8bcda6bcb9974e40dc1b143315fc9f7e79af" },
+      { "path": "onnx/vision_encoder.onnx", "bytes": 393190865, "sha256": "7ecd87031065252c5e3419f9a75db938a92cd5d55d2c22024d8815efd980104f" }
+    ]
   }
 }

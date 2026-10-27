@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Decision } from './policy.js';
 const execute = promisify(execFile);
+export const MAX_MEDIA_EDGE = 1024;
 export function checkAbort(signal?: AbortSignal) { signal?.throwIfAborted(); }
 export async function inspectVideo(video: string, inspect: (frame: Uint8Array, signal?: AbortSignal) => Promise<Decision>, signal?: AbortSignal) {
     checkAbort(signal);
@@ -22,10 +23,10 @@ export async function inspectVideo(video: string, inspect: (frame: Uint8Array, s
         if (info.streams?.length !== 1 || !stream || stream.codec_type !== 'video' || !Number.isFinite(duration) || duration < 5 || duration > 9
             || !Number.isInteger(frames) || frames < 1 || frames > 240 || stream.codec_name !== 'h264' || stream.pix_fmt !== 'yuv420p'
             || !Number.isSafeInteger(stream.width) || !Number.isSafeInteger(stream.height) || stream.width < 1 || stream.height < 1
-            || stream.width > 1024 || stream.height > 1024 || stream.width * stream.height > 832 * 832) throw new Error('Unsupported decoded video');
+            || stream.width > MAX_MEDIA_EDGE || stream.height > MAX_MEDIA_EDGE || stream.width * stream.height > 832 * 832) throw new Error('Unsupported decoded video');
         checkAbort(signal);
         await execute('ffmpeg', ['-nostdin', '-v', 'error', '-xerror', '-err_detect', 'explode', '-protocol_whitelist', 'file,pipe', '-threads', '1', '-max_alloc', '33554432', '-i', path,
-            '-map', '0:v:0', '-vf', 'scale=320:-2', '-fps_mode', 'passthrough', '-frames:v', '241', join(directory, 'frame-%04d.png')], { signal, timeout: 15_000, maxBuffer: 65536 });
+            '-map', '0:v:0', '-fps_mode', 'passthrough', '-frames:v', '241', join(directory, 'frame-%04d.png')], { signal, timeout: 15_000, maxBuffer: 65536 });
         const files = (await readdir(directory)).filter(f => /^frame-\d{4}\.png$/.test(f)).sort();
         if (files.length !== frames) throw new Error('Incomplete video decode');
         let decision: Decision = 'allow';

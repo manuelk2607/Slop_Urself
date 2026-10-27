@@ -4,6 +4,7 @@ import { qualificationValid, type ModelLock } from './policy.js';
 import { runtimeVersion } from './version.js';
 import { moderationServer } from './http.js';
 import { qualificationEvidence, type QualificationEvidence } from './evidence.js';
+import { ensureModelArtifacts } from './artifacts.js';
 
 const lock = JSON.parse(await readFile('model-lock.json', 'utf8')) as ModelLock;
 const version = await runtimeVersion(lock);
@@ -17,5 +18,8 @@ const server = moderationServer({ secret: process.env.MODERATION_SECRET || '', v
 server.requestTimeout = 30_000; server.headersTimeout = 10_000; server.maxHeadersCount = 32;
 server.listen(Number(process.env.PORT || 7860), '0.0.0.0');
 console.info(JSON.stringify({ event: 'moderation_start', modelVersion: version, qualified: qualificationValid(qualification, version, Date.now(), evidence) }));
-try { engine = await createEngine(lock); console.info(JSON.stringify({ event: 'models_ready' })); }
+try {
+    await ensureModelArtifacts(lock, true, (role, file, result) => console.info(JSON.stringify({ event: 'model_artifact', role, file, result })));
+    engine = await createEngine(lock); console.info(JSON.stringify({ event: 'models_ready' }));
+}
 catch { console.error(JSON.stringify({ event: 'model_load_failed' })); }
