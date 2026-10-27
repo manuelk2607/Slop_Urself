@@ -464,6 +464,65 @@ test('a pinned job token must match its reserved player and HF identity', async 
     } finally { f.restore(); }
 });
 
+test('quota completion retries failed token cleanup and a lost plan write without double consumption', async () => {
+    const f = fixture();
+    try {
+        const a = await f.connect('a', 'hf-a');
+        const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        await budget.reserve('TEST', 2, 1, 'economy', [a]);
+        await budget.begin('TEST', 2, 'cleanup-job', a.id, 2, a);
+        const originalForget = f.connections.forgetJob.bind(f.connections);
+        let offline = true;
+        f.connections.forgetJob = async id => { if (offline) throw new Error('credential cleanup unavailable'); await originalForget(id); };
+        await assert.rejects(budget.consume('TEST', 'cleanup-job'), /cleanup unavailable/);
+        assert.equal(f.data.get('quota-plan:TEST').jobs['cleanup-job'], a.id);
+        const hold = () => f.data.get('hf-budget:hf-a:reservations')['TEST:a'];
+        assert.equal(hold().rounds, 1); assert.equal(hold().active, 0);
+        offline = false;
+        const originalPut = f.storage.put.bind(f.storage);
+        let failPlan = true;
+        f.storage.put = async (key, value) => {
+            if (key === 'quota-plan:TEST' && failPlan) { failPlan = false; throw new Error('lost plan write'); }
+            await originalPut(key, value);
+        };
+        await assert.rejects(budget.consume('TEST', 'cleanup-job'), /lost plan write/);
+        assert.equal(f.data.get('quota-plan:TEST').jobs['cleanup-job'], a.id);
+        await assert.rejects(f.connections.jobCredential('cleanup-job'), /abgelaufen/);
+        await new PlayerQuotaBudget(f.storage, f.config, f.connections).consume('TEST', 'cleanup-job');
+        assert.equal(f.data.get('quota-plan:TEST').jobs['cleanup-job'], undefined);
+        assert.equal(hold().rounds, 1); assert.equal(hold().active, 0);
+        assert.ok(await f.connections.credential(a.hfConnectionId, a.accountId), 'The live account connection is retained.');
+        await budget.consume('TEST', 'cleanup-job'); assert.equal(hold().rounds, 1);
+    } finally { f.restore(); }
+});
+
+test('read-only capacity overlaps distinct players without sharing their token or quota', async () => {
+    const f = fixture();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        const a = await f.connect('a', 'hf-a'), b = await f.connect('b', 'hf-b');
+        f.seconds['hf-b'] = 80;
+        const fixtureFetch = globalThis.fetch, tokens: string[] = [];
+        let waiting = 0, maxWaiting = 0;
+        globalThis.fetch = async (input, options) => {
+            if (!String(input).endsWith('/zero-gpu/quota')) return fixtureFetch(input, options);
+            tokens.push(new Headers(options?.headers).get('authorization') || '');
+            maxWaiting = Math.max(maxWaiting, ++waiting);
+            if (waiting === 2) release();
+            await gate;
+            try { return await fixtureFetch(input, options); } finally { waiting--; }
+        };
+        timer = setTimeout(release, 1000); // A sequential regression fails instead of hanging.
+        const budget = new PlayerQuotaBudget(f.storage, f.config, f.connections);
+        const result = await budget.capacity(2, 'economy', [a, b]);
+        assert.equal(maxWaiting, 2);
+        assert.equal(new Set(tokens).size, 2); assert.equal(tokens.some(token => token === 'Bearer central'), false);
+        assert.equal(result.aiRoundLimit, 1); assert.equal(result.sharedQuota, false);
+    } finally { release(); if (timer) clearTimeout(timer); f.restore(); }
+});
+
 test('live token identity is rechecked before inference even when sealed job metadata still matches', async () => {
     const f = fixture();
     try {

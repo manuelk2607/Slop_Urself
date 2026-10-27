@@ -15,12 +15,16 @@ async function fixture() {
         method: 'POST', headers: { origin: 'https://game.test' }, body: JSON.stringify({ username, password, mode }) }), config, profiles);
     return { profiles, owner, config, login };
 }
-test('PBKDF2 has unique 16-byte salts, exactly 100000 iterations and rejects malformed hashes', async () => {
+test('versioned PBKDF2 retains legacy verification and rejects unsupported versions or work factors', async () => {
     const a = await hashPassword('a sufficiently long password'), b = await hashPassword('a sufficiently long password');
-    assert.match(a, /^pbkdf2-sha256\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/); assert.notEqual(a, b);
+    assert.match(a, /^pbkdf2-sha256-v1\$100000\$[a-f0-9]{32}\$[a-f0-9]{64}$/); assert.notEqual(a, b);
     assert.equal(await checkPassword('a sufficiently long password', a), true);
     assert.equal(await checkPassword('a different long password', a), false);
     assert.equal(await checkPassword('a sufficiently long password', 'broken'), false);
+    assert.equal(await checkPassword('a sufficiently long password', a.replace('-v1$', '$')), true);
+    for (const invalid of [a.replace('-v1$', '-v2$'), a.replace('$100000$', '$1000000000$'), a.replace('$100000$', '$99999$'), a.replace('sha256', 'sha1'), null, {}, 123]) {
+        assert.equal(await checkPassword('a sufficiently long password', invalid), false);
+    }
     await assert.rejects(hashPassword('short')); await assert.rejects(hashPassword('x'.repeat(201)));
 });
 test('open profiles remain username-only; protected registrations require passwords and never expose hashes', async () => {

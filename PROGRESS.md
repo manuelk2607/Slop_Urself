@@ -15,12 +15,31 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
   Exit 2**: alle acht Fälle ungültiges Format (vier harmlose Fehlklassifikationen),
   Fünf-Frame-Video scheitert nach 27.764ms. Keine semantische Sicherheitsfreigabe.
   Bericht `docs/audits/2026-10-27-moderation-labels-diagnostic.json`.
-- In Arbeit M04: Sperrstatus laufender Archivclips vor Wertung/Ratebonus und per
+- M04 in **59fc356** gesichert: Sperrstatus laufender Archivclips vor Wertung/Ratebonus und per
   10s-Check erneut prüfen. Gesperrte Clips ohne Punkte überspringen; Statusausfall
   hält die Wertung zurück. Gemeinsame Regel für Node/DO, Tests für Hibernation,
   Statusausfall und veraltete asynchrone Ergebnisse ergänzt. Build/191 Units bestanden; vollständige isolierte Browser-/workerd-Matrix läuft.
-- Root-Build+Units **38019 beendet, Exit 0**. Vollständige Matrix **42975** läuft;
-  `/tmp/slop-ci-ban-2026-10-27.log/.exit`. Keine Produktivdienste beteiligt.
+- Root-Build+Units **38019 beendet, Exit 0**. Matrix **42975 beendet, Exit 1**: WebKit-Adminfixture nutzte zwischenzeitlich
+  neuen TS-KDF gegen alten dist-Server. Ursache durch Imports in admin-server.ts
+  bestätigt; kein bewiesener Produktfehler. Konsistenter Root-Neubuild+196 Units
+  **27963 Exit 0**. Neue vollständige Matrix läuft, Handle **95986**; keine weiteren
+  Source-Änderungen bis Ende. Logs `/tmp/slop-ci-consistent-2026-10-27.log/.exit`.
+- M31/M32/M33 in Arbeit: persönliche Quota-Zuordnung bleibt bis erfolgreicher
+  Jobtoken-Bereinigung bestehen; Regressionen für fehlgeschlagene Bereinigung und
+  Planpersistenz bestehen (22 HF-Tests). Zusätzlicher verlorener Veröffentlichungs-
+  Checkpoint: 29 Room-Tests bestanden, kein neuer GPU-/Tokenaufruf.
+  Neue optionale Passwort-Hashes tragen v1; Bestandsformat bleibt lesbar,
+  unbekannte Version/Kosten werden vor Ableitung verworfen (3 Tests bestanden).
+  KDF-Version zusätzlich in echtem workerd mit Profilpersistenz nach Eviction
+  bestanden. Root-Build/196 Units bestanden; Quota-workerd-Abnahme läuft in CI.
+- M29 teilweise: unabhängige Kontingent-Leseabfragen unterschiedlicher HF-Subjekte
+  überlappen statt serieller Netzwerkwartezeiten; 23 HF-Units bestehen einschließlich
+  Token-/Restbudgettrennung. Reservierung/Mutation bleiben frisch und serialisiert.
+- M35 in Arbeit: gemeinsame Promptnormalisierung/-aufbereitung für UI, Moderation
+  und Provider. Optionale Klartextvorschau, explizite Änderungen haben Vorrang vor
+  allgemeinen Kontinuitätshinweisen. Zwei Vertragstests bestehen; Browserabnahme
+  läuft nach bestandenem Root-Build in der neuen vollständigen Matrix.
+  Keine reale Wan-Qualitätsprüfung/keine neue Freigabe.
 - Keine Modelltests aktiv; CI betreibt ausschließlich eigene isolierte Server. Kein Push/Deployment.
 
 ## Gesicherte Pakete (Auswahl)

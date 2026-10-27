@@ -409,3 +409,38 @@ zurückgerufen werden; neue Medienabrufe bleiben wie bisher sofort gesperrt.
 Build/191 Units bestanden, einschließlich Persistenz/Wiederanlauf und Statusausfall.
 Die vollständige isolierte Chromium/WebKit/workerd-Matrix läuft noch; keine
 produktive Verifikation und keine vollständige Moderationsabnahme daraus ableiten.
+
+
+### M31/M32/M33: wiederholbare Tokenbereinigung und KDF-Version (27.10.)
+
+Persönliche Kontingentpläne behalten die Auftrags-/Eigentümerzuordnung, bis der
+angeheftete Jobtoken tatsächlich entfernt ist. Fehler beim Entfernen oder beim
+anschließenden Planschreiben werden beim nächsten Abschluss erneut verarbeitet;
+das persönliche Budget wird dabei nicht doppelt verbraucht. Die normale HF-
+Verbindung bleibt bestehen. Regression injiziert beide Speicherfehler und einen
+Neustart. Eine weitere DO-Regression verliert gezielt den Veröffentlichungsschritt
+nach fertiger Generierung: Neustart verwendet denselben Archivauftrag, ohne neuen
+Tokenabruf, Upload oder GPU-Auftrag. Bereits vorhandene Archivtests prüfen dessen
+idempotenten Objektschlüssel. Das ersetzt nicht sämtliche Crashfenster von M31.
+
+Neue optionale Passwort-Hashes tragen einen expliziten v1-Vertrag. Alte Hashes
+bleiben lesbar; unbekannte Versionen, Algorithmen und Kosten werden vor Berechnung
+abgelehnt. Die bestehenden 100.000 PBKDF2-SHA256-Iterationen bleiben unverändert;
+keine unbelegte Erhöhung oberhalb des Worker-Vertrags. Dies macht Passwörter nicht
+verpflichtend. Vor einem produktiven Rollout müssen alle lesenden Instanzen das
+neue Format verstehen; ein Rollback auf einen alten Reader nach neuen v1-Schreibungen
+ist nicht abgenommen. Keine Passwort-/DB-/Secretänderung in Produktion erfolgt.
+
+Root-Build und 196 Units bestanden. Zusätzlich KDF-Anmeldung mit echtem workerd,
+falschem/fehlendem Passwort und Profilpersistenz nach DO-Eviction bestanden. Die
+vollständige konsistente Browser-/workerd-Matrix läuft noch.
+
+### M29: unabhängige persönliche Kontingentansichten (27.10., teilweise)
+
+Lesende Abfragen für unterschiedliche bestätigte HF-Subjekte laufen parallel statt
+jeweils auf die vorige Netzwerkantwort zu warten. Gemeinsame Identitäten bleiben
+vorher gruppiert. Regression erzwingt überlappende Requests und prüft zwei getrennte
+Tokens sowie den knappsten Spieler als Rundengrenze. Reservierungen/Mutationen bleiben
+serialisiert und prüfen frisch. Keine gemessene produktive Beschleunigung, keine
+Erhöhung eines Kontingents und keine reale Abrechnungsabnahme daraus ableiten.
+Dienst-Queue-Messung und weitere Zusammenführung gleichartiger Reads bleiben offen.

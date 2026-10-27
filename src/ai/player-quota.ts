@@ -34,8 +34,11 @@ export class PlayerQuotaBudget {
     private async capacityFor(owners: Owner[], quality: GenerationQuality): Promise<QuotaCapacity> {
         const groups = new Map<string, Owner[]>();
         for (const owner of owners) groups.set(owner.subject, [...groups.get(owner.subject) || [], owner]);
-        const capacities: QuotaCapacity[] = [];
-        for (const members of groups.values()) capacities.push(await (await this.budget(members[0])).capacity(members.length, quality));
+        // Each group has a different HF subject and reservation namespace.
+        // Read-only status calls need not wait for other players' network RTTs;
+        // mutations still use the service's serialized fresh-capacity checks.
+        const capacities = await Promise.all([...groups.values()].map(async members =>
+            (await this.budget(members[0])).capacity(members.length, quality)));
         const unavailable = capacities.find(c => c.quotaMode === 'unavailable');
         if (unavailable) return { aiRoundLimit: 0, playerCount: owners.length, quotaMode: 'unavailable', sharedQuota: false, error: 'Mindestens eine HF-Verbindung ist nicht erreichbar. Bitte erneut verbinden.' };
         return { ...(capacities.length === 1 ? capacities[0] : {}), aiRoundLimit: Math.min(...capacities.map(c => c.aiRoundLimit)), playerCount: owners.length, quotaMode: 'live', sharedQuota: false };
@@ -159,9 +162,11 @@ export class PlayerQuotaBudget {
         const owner = plan.owners.find(p => p.id === plan.jobs[jobId || '']);
         if (!owner || !jobId) return;
         await (await this.budget(owner, false)).consume(this.key(code, owner), jobId);
+        // Keep the durable owner mapping until the pinned credential is gone.
+        // If cleanup fails, the room's release queue can retry both idempotently.
+        await this.connections.forgetJob(jobId);
         delete plan.jobs[jobId];
         await this.storage.put(`quota-plan:${code}`, plan);
-        await this.connections.forgetJob(jobId);
     }
     async release(code: string) {
         const plan = await this.storage.get<Plan>(`quota-plan:${code}`);

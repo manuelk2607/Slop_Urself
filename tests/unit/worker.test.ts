@@ -57,7 +57,7 @@ async function fixture(stateName: Room['state'] = 'VOTING', overrides: Partial<E
         await ready;
         return restored;
     };
-    return { worker, sockets, outsider, data, pending, message, recreate, alarms };
+    return { worker, sockets, outsider, data, pending, message, recreate, alarms, storage: state.storage };
 }
 
 test('Worker preserves a mobile participant for 90 seconds, resumes safely and expires the new disconnect at its boundary', async () => {
@@ -523,6 +523,37 @@ test('Worker retains completed output after archive failure and recovers without
     assert.equal((f.data.get('room') as Room).state, 'VOTING');
     assert.equal(paths.filter(p => p === '/archive').length, 2);
     assert.equal(paths.includes('/quota/token'), false); assert.equal(paths.includes('/quota/attempt'), false);
+});
+
+test('Worker recovers a lost publication checkpoint from completed output without new inference or token use', async () => {
+    const paths: string[] = [], artifacts: unknown[] = [];
+    const SERVICES = { idFromName: () => 'global', get: () => ({ fetch: async (request: Request) => {
+        const path = new URL(request.url).pathname; paths.push(path);
+        if (path === '/archive') {
+            artifacts.push((await request.json() as { artifact: unknown }).artifact);
+            return Response.json({ url: '/api/videos/videos/1792000000000-checkpoint.mp4' });
+        }
+        return Response.json({});
+    } }) } as unknown as Env['SERVICES'];
+    const f = await fixture('GENERATING', { SERVICES }, 1, { generationId: 'publication-job',
+        generationJob: fakeJob({ status: 'complete', videoUrl: 'https://test.hf.space/finished.mp4' }), currentVideoUrl: '' });
+    const originalPut = f.storage.put;
+    let failPublication = true;
+    f.storage.put = async (key, value) => {
+        if (key === 'room' && (value as Room).state === 'VOTING' && failPublication) {
+            failPublication = false; throw new Error('simulated publication checkpoint outage');
+        }
+        await originalPut(key, value);
+    };
+    await new Promise(resolve => setTimeout(resolve, 110)); await f.worker.alarm(); await Promise.all(f.pending);
+    assert.equal((f.data.get('room') as Room).state, 'GENERATING');
+    assert.equal((f.data.get('room') as Room).generationJob?.status, 'complete');
+    const restored = await f.recreate(); await new Promise(resolve => setTimeout(resolve, 110));
+    await Promise.all([restored.alarm(), restored.alarm()]); await Promise.all(f.pending);
+    assert.equal((f.data.get('room') as Room).state, 'VOTING');
+    assert.equal(artifacts.length, 2); assert.deepEqual(artifacts[0], artifacts[1], 'Archive retry retains the same deterministic artifact identity.');
+    assert.equal(paths.some(path => ['/quota/token', '/quota/attempt', '/quota/begin'].includes(path)), false);
+    assert.equal((f.data.get('room') as Room).currentVideoUrl, '/api/videos/videos/1792000000000-checkpoint.mp4');
 });
 
 test('Worker restart resumes a persisted job once without another upload or quota reservation', async () => {
