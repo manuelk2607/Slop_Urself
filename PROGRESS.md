@@ -10,25 +10,19 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
 
 ## Aktueller Fortsetzungspunkt
 
-- M09/M22-Folgepaket in **da0934e** gesichert:
-  Abgaben ausgeschiedener Wähler bleiben auch im Fortschrittsnenner; ursprüngliche
-  Gruppenvorschau behält 45s-Ablauf, selbst wenn nur der Ersteller bleibt.
-  Echte Solo-Vorschau bleibt manuell. Build/189 Units und vier zusätzliche
-  Chromium/WebKit-Tests auf Node/workerd bestanden.
-- Uncommittete Moderationsdiagnostik liefert feste Review-Gründe statt Rohtext.
-  Entscheidungslogik/Schwellen unverändert. Dienst-Build und 14 technische Tests
-  bestanden. `--case` erlaubt einen gezielten Fall ohne Gesamtwiederholung.
-- Realer CPU-Grundtest **58858 beendet, Exit 2**, Node24, kompilierter Dienst,
-  nur `benign-en-motion`: review wegen `context_format`, 10.941 ms. Report/Log
-  `/tmp/slop-moderation-reason-2026-10-27.json` bzw. `.log`. Kein erneuter identischer
-  Lauf; als nächstes nur Ausgabeform/Tokenlimit datensparsam eingrenzen. Keine GPU,
-  keine Nutzerbilder, keine Qualifikation. Einzel-Formtest 80840 ebenfalls Exit 2:
-  nur 8 Ausgabetokens, kein JSON-Objekt/Fencing, Limit nicht erreicht. Keine blinde
-  Tokenbudget-Erhöhung und keine Freigabe natürlichsprachlicher Modellantworten.
-  `/tmp/slop-moderation-format-2026-10-27.json/.log`; keine Prozesse mehr aktiv.
-- Beendete Testprozesse: 15291 vollständige CI Exit 0; 19452 Vierfach-Austrittstest
-  Exit 0; 69609 Modellreparatur Exit 0; 3601 vollständige CPU-Diagnose Exit 2.
-  Isolierter Diagnose-Webserver 3380 (TTY 13243) wurde gestoppt. Keine Tests laufen.
+- Neu: versioniertes Diagnoseprotokoll `labels-v1`, Standard/Lock unverändert.
+  Dienst-Build/15 technische Tests bestanden. Echter CPU-Lauf **86464 beendet,
+  Exit 2**: alle acht Fälle ungültiges Format (vier harmlose Fehlklassifikationen),
+  Fünf-Frame-Video scheitert nach 27.764ms. Keine semantische Sicherheitsfreigabe.
+  Bericht `docs/audits/2026-10-27-moderation-labels-diagnostic.json`.
+- In Arbeit M04: Sperrstatus laufender Archivclips vor Wertung/Ratebonus und per
+  10s-Check erneut prüfen. Gesperrte Clips ohne Punkte überspringen; Statusausfall
+  hält die Wertung zurück. Gemeinsame Regel für Node/DO, Tests für Hibernation,
+  Statusausfall und veraltete asynchrone Ergebnisse ergänzt. Noch nicht abgenommen.
+- Aktueller Root-Build+Units: **38019**; Logs
+  `/tmp/slop-build-ban-2026-10-27.log` und `/tmp/slop-unit-ban-2026-10-27.log`.
+  Erster Build meldete fehlende neue FailureStage; korrigiert, Folgeprüfung läuft.
+- Keine Modelltests oder Testwebserver mehr aktiv. Kein Push/Deployment.
 
 ## Gesicherte Pakete (Auswahl)
 
@@ -58,14 +52,14 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
   workerd-Matrix am 27.10. Exit 0 auf dem 188-Unit-/M41-Stand; neue M09/M22-Korrektur
   anschließend separat in vier Kombinationen bestanden. Nicht auf unbekannte
   Produktionsstände oder reale HF-Abrechnung übertragen.
-- Dienst-Build/14 technische Tests bestanden; echte FFmpeg-/sharp-Prüfungen,
+- Dienst-Build/15 technische Tests bestanden; echte FFmpeg-/sharp-Prüfungen,
   Protokoll, Hashbindung und Fehlerfälle. Keine Aussage semantischer Zuverlässigkeit.
 - Aktueller Protobuf-Fehler: Decodercache 1.323.696.414 statt 1.450.425.745 Bytes.
   Reparatur verifizierte alle vier Gewichtsdateien per SHA256; Modelle laden danach.
   Keine pauschale Erklärung älterer nativer Abstürze.
 - Anschließender echter CPU-Lauf: 8 Eingaben sämtlich review, darunter 4 harmlose;
   5-Frame-/5s-Video scheitert nach 33.997ms. Kein sinnvoller Qualitätsnachweis.
-  Evidenz `docs/audits/2026-10-27-moderation-diagnostic.json` noch uncommittet.
+  Evidenz `docs/audits/2026-10-27-moderation-diagnostic.json` in 2bc35ba gesichert.
   Vorverarbeitung: 2048px erzeugte 13–17 Tiles; 1024px fünf, Splitting bleibt aktiv.
 - Lokaler Kaltstart der ungebündelten Node-Module dauerte zeitweise ~57s, deshalb
   zwei Hilfsteststarts verworfen (einmal Build noch nicht fertig, einmal Timeout).
@@ -73,9 +67,8 @@ und individueller HF-Abnahme gesperrt. Keine bezahlten Aufträge autorisiert.
 
 ## Blocker und nächste Schritte
 
-1. Diagnoseevidenz/Instrumentierung committen. Als gezieltes Experiment ein
-   einfacheres strikt validiertes Entscheidungsprotokoll nur mit eigenem
-   Versionsfingerabdruck evaluieren; bestehender Standard/Schwellen bleiben zu.
+1. Neues Protokollexperiment mit fehlgeschlagener CPU-Evidenz sichern; keine
+   weiteren identischen Wiederholungen. M04-Paket testen und abschließen.
 2. Moderation weiterhin NICHT qualifiziert. Fachliche Qualität, vollständige
    Videolatenz und kostenloses Hosting offen; keine qualification.json erzeugt.
 3. Kontrollierter Wan-Stand/echte Safari-Ausgabe offen. Öffentlicher Community-

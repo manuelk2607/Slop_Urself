@@ -110,8 +110,9 @@ Abbruch und Ablauf der Qualifikation; diese Tests sind keine Wirksamkeitsquote.
 
 27.10.: Beim aktuellen Protobuf-Ladefehler wurde ein abgeschnittener lokaler
 Decoder-Download nachgewiesen (rund 127 MB fehlen gegenüber dem festgelegten
-Original). Reparatur und erneutes Laden müssen den Zusammenhang noch abschließend
-bestätigen. Größen-/SHA256-Prüfung und atomare Reparatur verhindern die Annahme
+Original). Die atomare Reparatur hat alle vier ONNX-Dateien per SHA256 bestätigt;
+beide Modelle laden danach erfolgreich. Damit ist dieser Ladefehler behoben,
+nicht die fachliche Eignung des Moderators. Größen-/SHA256-Prüfung und atomare Reparatur verhindern die Annahme
 solcher Dateien. Der Kontextprozessor behält Splitting und native Quelldetails,
 vermeidet jedoch unnötiges 2048px-Upscaling begrenzter Medien. Videoprüfung behält
 die ursprüngliche Frameauflösung. Das ändert den Runtime-Fingerprint und braucht
@@ -120,3 +121,13 @@ eine neue Qualitätsabnahme; keine bestehende oder automatisch erteilte Freigabe
 Quellen: [NSFW-ONNX-Modell](https://huggingface.co/onnx-community/nsfw_image_detection-ONNX),
 [SmolVLM](https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct),
 [Transformers.js](https://huggingface.co/docs/transformers.js/).
+
+
+Der gezielte Vergleich vom 27.10. mit `--protocol labels-v1` ist ebenfalls
+fehlgeschlagen: Alle acht Bild-/Textfälle liefern ein ungültiges Antwortformat,
+einschließlich aller vier harmlosen Fälle; das Fünf-Frame-Video überschreitet 25s.
+Zurückhalten kritischer Fälle allein durch Formatfehler beweist keine Erkennung.
+Das optionale Diagnoseprotokoll akzeptiert nur eine vollständige Enum-Antwort und
+besitzt einen anderen Freigabefingerprint. `model-lock.json` und der aktive
+JSON-Standard bleiben unverändert. Keine Qualifikation und kein Hosting-Freigang.
+Weitere identische Läufe sind ohne neue technische Hypothese nicht sinnvoll.

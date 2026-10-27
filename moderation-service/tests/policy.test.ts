@@ -22,6 +22,18 @@ test('diagnostic review reasons distinguish protocol failures from actual risk w
     assert.deepEqual(assess(scores, JSON.stringify({ ...context, uncertain: true })), { decision: 'review', reason: 'context_uncertain' });
     assert.deepEqual(assess(scores, JSON.stringify(context)), { decision: 'allow', reason: 'clear' });
 });
+test('experimental labels require the whole enum and preserve classifier holds and distinct version identity', () => {
+    const scores = [{ label: 'normal', score: 0.99 }, { label: 'nsfw', score: 0.01 }];
+    assert.equal(assess(scores, 'ALLOW', 'labels-v1').decision, 'allow');
+    assert.equal(assess(scores, 'BLOCK', 'labels-v1').decision, 'block');
+    assert.equal(assess(scores, 'REVIEW', 'labels-v1').decision, 'review');
+    for (const value of ['not ALLOW', 'ALLOW because', 'BLOCK ALLOW', '```ALLOW```', '{"decision":"ALLOW"}']) assert.equal(assess(scores, value, 'labels-v1').decision, 'review');
+    assert.equal(assess([{ label: 'normal', score: 0.6 }, { label: 'nsfw', score: 0.4 }], 'ALLOW', 'labels-v1').decision, 'review');
+    assert.equal(assess([{ label: 'normal', score: 0.1 }, { label: 'nsfw', score: 0.9 }], 'ALLOW', 'labels-v1').decision, 'block');
+    assert.equal(assess(scores, 'ALLOW').decision, 'review', 'Default JSON protocol never silently accepts an experiment.');
+    const lock = { nsfw: { id: 'a/model', revision: 'a'.repeat(40) }, vlm: { id: 'b/model', revision: 'b'.repeat(40) } };
+    assert.notEqual(modelVersion(lock, 'a'.repeat(64)), modelVersion({ ...lock, decisionProtocol: 'labels-v1' }, 'a'.repeat(64)));
+});
 test('qualification is tied to immutable models, policy, expiry and a real reviewed test report', () => {
     const lock = { nsfw: { id: 'a/model', revision: 'a'.repeat(40) }, vlm: { id: 'b/model', revision: 'b'.repeat(40) } };
     const version = modelVersion(lock, 'a'.repeat(64)); assert.equal(qualificationValid(undefined, version), false);

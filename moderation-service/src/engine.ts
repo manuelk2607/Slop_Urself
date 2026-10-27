@@ -1,7 +1,7 @@
 import { AutoProcessor, AutoModelForVision2Seq, RawImage, Tensor, pipeline, env, InterruptableStoppingCriteria } from '@huggingface/transformers';
 import sharp from 'sharp';
 import { ensureModelArtifacts, modelCacheRoot } from './artifacts.js';
-import { assess, POLICY, type Assessment, type Decision, type ModelLock, type Scores } from './policy.js';
+import { assess, policyFor, type Assessment, type Decision, type ModelLock, type Scores } from './policy.js';
 import { checkAbort, inspectVideo, MAX_MEDIA_EDGE } from './media.js';
 import { configureContextImages } from './preprocessing.js';
 
@@ -12,6 +12,7 @@ export interface ModelAssessment extends Assessment {
     format: { generatedTokens: number; atTokenLimit: boolean; fenced: boolean; startsObject: boolean; endsObject: boolean };
 }
 export async function createEngine(lock: ModelLock, stage: (stage: string) => void | Promise<void> = () => {}, observe: (assessment: ModelAssessment) => void = () => {}) {
+    const policy = policyFor(lock.decisionProtocol), maxTokens = lock.decisionProtocol === 'labels-v1' ? 12 : 96;
     await stage('verifying_model_files');
     await ensureModelArtifacts(lock);
     const session_options = { intraOpNumThreads: 2, interOpNumThreads: 1 };
@@ -28,7 +29,7 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
         const pixels = new RawImage(new Uint8Array(image.data), image.info.width, image.info.height, 3);
         const scores = await classifier(pixels, { top_k: 2 }) as Scores[];
         checkAbort(signal);
-        const messages = [{ role: 'user', content: [{ type: 'image' }, { type: 'text', text: `${POLICY}\nQuoted proposed action: ${JSON.stringify(prompt)}` }] }];
+        const messages = [{ role: 'user', content: [{ type: 'image' }, { type: 'text', text: `${policy}\nQuoted proposed action: ${JSON.stringify(prompt)}` }] }];
         // The model's multimodal template accepts content blocks; v3's shared
         // Message declaration still describes text-only messages.
         const text = processor.apply_chat_template(messages as unknown as Parameters<typeof processor.apply_chat_template>[0], { add_generation_prompt: true });
@@ -39,7 +40,7 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
         let generated: Awaited<ReturnType<typeof model.generate>>;
         try {
             checkAbort(signal);
-            generated = await model.generate({ ...inputs, max_new_tokens: 96, do_sample: false, stopping_criteria: [stopping] });
+            generated = await model.generate({ ...inputs, max_new_tokens: maxTokens, do_sample: false, stopping_criteria: [stopping] });
             checkAbort(signal);
         } finally { signal?.removeEventListener('abort', interrupt); }
         const inputIds = inputs.input_ids;
@@ -47,9 +48,9 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
         // Decode only new tokens. JSON in quoted input or the policy template
         // must never be mistaken for the model's classification.
         const output = processor.batch_decode(generated.slice(null, [inputIds.dims[1], generated.dims[1]]), { skip_special_tokens: true })[0];
-        const assessment = assess(scores, output.trim());
+        const assessment = assess(scores, output.trim(), lock.decisionProtocol);
         const generatedTokens = generated.dims[1] - inputIds.dims[1];
-        observe({ ...assessment, format: { generatedTokens, atTokenLimit: generatedTokens >= 96, fenced: output.trim().startsWith('```'),
+        observe({ ...assessment, format: { generatedTokens, atTokenLimit: generatedTokens >= maxTokens, fenced: output.trim().startsWith('```'),
             startsObject: output.trim().startsWith('{'), endsObject: output.trim().endsWith('}') } });
         // Diagnostic callback only; no raw response, and the server sets no observer.
         return assessment.decision;

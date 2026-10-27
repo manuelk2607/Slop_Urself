@@ -380,3 +380,18 @@ keine GPU-Aufträge, keine produktiven Änderungen und keine juristische Zusage.
    abnahme (M44–M45). M21/M38/M40 sind im Code mit Regressionen umgesetzt.
 5. Optionale Spielerweiterungen M46–M54 bleiben hinter den Sicherheitsabhängigkeiten.
    Bestehende öffentliche SEO-Endpunkte benötigen keinen weiteren robots-Fix.
+
+
+### Fortsetzung 27.10.: Moderationsprotokoll (M02/M03), keine Sicherheitsfreigabe
+
+Ein strikt versionierter, optionaler `labels-v1`-Diagnosemodus wurde gegen dieselben
+acht synthetischen Bild-/Textfälle und ein stummes Fünf-Frame-Video geprüft. Alle
+acht Textentscheidungen scheitern am vollständigen Enum-Vertrag; alle vier harmlosen
+Fälle bleiben damit fälschlich zurückgehalten. Das Video endet nach 27.764ms mit
+technischem Fehler. Vier formal bestandene kritische Holds sind wegen des gemeinsamen
+Formatfehlers **kein** Beleg semantischer Erkennung. Dienst-Build und 15 technische
+Tests bestanden. Der Standard bleibt striktes JSON, der tatsächliche Modell-Lock
+unverändert; andere Protokolle haben eigene Versionsfingerabdrücke. Kein kostenpflichtiger
+Aufruf, keine GPU, kein Deployment, keine Qualifikation. Weitere identische Messungen
+ohne neue technische Hypothese werden nicht wiederholt. Evidenz:
+[ausschließlich synthetischer CPU-Bericht](audits/2026-10-27-moderation-labels-diagnostic.json).

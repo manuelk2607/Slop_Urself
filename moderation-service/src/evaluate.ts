@@ -10,6 +10,8 @@ import { evaluationCases } from './evaluation-cases.js';
 const selected = process.argv.includes('--case') ? process.argv[process.argv.indexOf('--case') + 1] : undefined;
 const selectable: readonly string[] = [...evaluationCases.map(item => item.id), 'benign-five-second-video'];
 if (process.argv.includes('--case') && (!selected || !selectable.includes(selected))) throw new Error('Unknown diagnostic case');
+const protocol = process.argv.includes('--protocol') ? process.argv[process.argv.indexOf('--protocol') + 1] : undefined;
+if (process.argv.includes('--protocol') && !['json-v1', 'labels-v1'].includes(protocol || '')) throw new Error('Unknown diagnostic protocol');
 const target = process.argv[process.argv.indexOf('--report') + 1];
 if (!process.argv.includes('--report') || !target) throw new Error('Use --report with a new report path. This opt-in command downloads pinned public CPU models.');
 // The benchmark needs no personal HF credential and must not accidentally use one.
@@ -31,6 +33,7 @@ const watchdog = setTimeout(() => {
 }, 10 * 60_000);
 try {
     const lock = JSON.parse(await readFile('model-lock.json', 'utf8'));
+    if (protocol) { lock.decisionProtocol = protocol; report.limitations.push(`Experimental decision protocol: ${protocol}; separate implementation fingerprint, no release.`); }
     report.modelVersion = await runtimeVersion(lock);
     let lastAssessment: ModelAssessment | undefined;
     const engine = await createEngine(lock, async stage => { report.status = stage; await checkpoint(); console.info(JSON.stringify({ stage })); }, assessment => { lastAssessment = assessment; });
