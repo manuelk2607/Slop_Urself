@@ -7,7 +7,7 @@ import { generateAiVideo, resumeAiVideo, AiPendingError, AiExpiredError, AI_RETR
 import { qualityConfig } from '../../ai/providers';
 import { preparedImageSize } from '../../ai/images';
 import { gameOptions } from '../../game/options';
-import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent } from '../../game/archive-play';
+import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent, needsContentCheck } from '../../game/archive-play';
 import { closePhase, syncPhase } from '../../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse } from '../../game/images';
 import { logAiEvent } from '../../ai/telemetry';
@@ -595,7 +595,8 @@ export class RoomDurableObject {
             });
             if (result === 'skipped') {
                 await this.saveRoom(); this.broadcastRoomUpdate();
-                this.broadcast('roomNotice', 'Ein gesperrtes Archivvideo wurde ohne Wertung übersprungen.');
+                this.broadcast('roomNotice', 'Ein gesperrtes Video wurde ohne Wertung übersprungen.');
+                if (!isArchiveGame(room) && room.state === 'GAME_OVER') await this.queueFinal();
             }
             return result === 'allowed';
         } catch (error) {
@@ -756,7 +757,7 @@ export class RoomDurableObject {
         for (const meta of this.sockets.values()) if (!meta.playerId && meta.acceptedAt) deadlines.push(meta.acceptedAt + 60_000);
         if (this.room?.sharedImage) deadlines.push(this.room.sharedImage.expiresAt);
         if (this.room?.phaseDeadline) deadlines.push(this.room.phaseDeadline);
-        if (this.room && isArchiveGame(this.room) && ['VOTING', 'GUESS_REVIEW'].includes(this.room.state)) deadlines.push(this.contentCheckAt || Date.now() + 100);
+        if (this.room && needsContentCheck(this.room)) deadlines.push(this.contentCheckAt || Date.now() + 100);
         if (this.room?.state === 'VOTING' && this.room.previewDeadline && !this.room.previewConfirmed) deadlines.push(this.room.previewDeadline);
         if (this.room?.currentVideoUrl.startsWith('/api/videos/') && this.room.state !== 'GAME_OVER') deadlines.push(this.archiveLeaseRenewAt || Date.now() + 100);
         if (this.pendingRounds.length) deadlines.push(Date.now() + 30_000);

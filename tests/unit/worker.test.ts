@@ -255,6 +255,32 @@ test('Worker rechecks active archive bans before scores and after hibernation, h
     assert.ok(f.alarms.some(time => time <= Date.now() + 10_100));
 });
 
+test('Worker stops scoring a newly banned classic video after hibernation and preserves a failed status check', async () => {
+    let denied = false, unavailable = true;
+    const paths: string[] = [];
+    const services = { idFromName: () => 'global', get: () => ({ fetch: async (request: Request) => {
+        const path = new URL(request.url).pathname; paths.push(path);
+        if (path === '/security/content/blocked') return Response.json(unavailable ? {} : { blocked: denied }, { status: unavailable ? 503 : 200 });
+        return Response.json({ ok: true, aiRoundLimit: 0 });
+    } }) } as unknown as Env['SERVICES'];
+    const f = await fixture('GUESS_REVIEW', { SERVICES: services }, 1, {
+        options: gameOptions({ guessPrompt: true }), currentVideoUrl: '/api/videos/videos/1792000000000-abcd-aabbcc.mp4',
+        pendingCreators: ['a'], roundPlayers: ['a', 'b', 'c'], currentVotes: { b: 5, c: 4 },
+        guesses: { b: { text: 'wave', correct: true }, c: { text: 'dance', correct: false } }, guessesReviewed: false
+    });
+    const restored = await f.recreate(); await restored.alarm();
+    let r = f.data.get('room') as Room;
+    assert.equal(r.state, 'GUESS_REVIEW'); assert.equal(r.players.every(p => p.score === 0), true);
+    assert.equal(r.currentVotes.b, 5);
+    unavailable = false; denied = true;
+    const restarted = await f.recreate(); await restarted.alarm();
+    r = f.data.get('room') as Room;
+    assert.equal(r.state, 'GAME_OVER'); assert.equal(r.currentVideoUrl, ''); assert.equal(r.currentPrompt, '');
+    assert.deepEqual(r.currentVotes, {}); assert.deepEqual(r.guesses, {});
+    assert.equal(r.players.every(p => p.score === 0), true); assert.ok(paths.includes('/quota/release'));
+    assert.deepEqual(f.data.get('pendingRounds') || [], []);
+});
+
 test('Worker restores private tasks, chunked common images and creator-only guess review after recreation', async () => {
     const f = await fixture('LOBBY', {}, 1, { imageProfile: 'bounded', options: gameOptions({ sharedImage: true, secretTasks: true, guessPrompt: true }) });
     await f.message(f.sockets[1], 'setSharedImage', { imageBase64: testImageData(832, 624) });

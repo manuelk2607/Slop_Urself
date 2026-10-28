@@ -32,7 +32,7 @@ import { generationSafetyReady, moderateInput, validatePrompt } from '../securit
 import { archiveRecovery } from '../ai/recovery';
 import { approvedProvider } from '../ai/provider-trust';
 import { gameOptions } from '../game/options';
-import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent } from '../game/archive-play';
+import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent, needsContentCheck } from '../game/archive-play';
 import { closePhase, syncPhase } from '../game/phases';
 import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, type ImageStorage } from '../game/images';
 import { ArchiveConfig, archiveVideo, serveVideo, archiveEnabled, deleteArchivedVideo, type ArchiveArtifact } from '../storage/archive';
@@ -400,14 +400,19 @@ function persistMembers(room: Room) {
 const contentChecks = new WeakMap<Room, Promise<boolean>>();
 const contentCheckAt = new WeakMap<Room, number>();
 function archiveContentReady(room: Room): Promise<boolean> {
-    if (!isArchiveGame(room) || !['VOTING', 'GUESS_REVIEW'].includes(room.state)) return Promise.resolve(true);
+    if (!needsContentCheck(room)) return Promise.resolve(true);
     const pending = contentChecks.get(room); if (pending) return pending;
     contentCheckAt.set(room, Date.now() + 10_000);
     const check = checkArchiveContent(room, url => reports.blocked(url)).then(result => {
         if (rooms.get(room.code) !== room) return false;
         if (result === 'skipped') {
             broadcast(room);
-            io.to(room.code).emit('roomNotice', 'Ein gesperrtes Archivvideo wurde ohne Wertung übersprungen.');
+            io.to(room.code).emit('roomNotice', 'Ein gesperrtes Video wurde ohne Wertung übersprungen.');
+            if (!isArchiveGame(room) && room.state === 'GAME_OVER') {
+                void withBudget(() => budget.release(room.code));
+                persist(room, () => markRoomFinished(room.code, finalStandings(room)));
+                void refreshLobbyQuota(room);
+            }
         }
         return result === 'allowed';
     }).catch(error => {
@@ -418,7 +423,7 @@ function archiveContentReady(room: Room): Promise<boolean> {
     contentChecks.set(room, check); return check;
 }
 async function checkVotingComplete(room: Room, confirmedSolo = false) {
-    if (isArchiveGame(room) && !await archiveContentReady(room)) return;
+    if (!await archiveContentReady(room)) return;
     if (!finishVoting(room, confirmedSolo)) return;
     completeVoting(room);
 }
@@ -432,7 +437,7 @@ function completeVoting(room: Room) {
 
 async function endPhase(room: Room) {
     const key = room.phaseKey;
-    if (isArchiveGame(room) && (!await archiveContentReady(room) || room.phaseKey !== key)) return;
+    if (!await archiveContentReady(room) || room.phaseKey !== key) return;
     const creatorId = activeCreator(room)?.id;
     const result = closePhase(room);
     if (result === 'voted') completeVoting(room);
@@ -448,7 +453,7 @@ async function endPhase(room: Room) {
 }
 const phaseClock = setInterval(() => {
     for (const room of rooms.values()) {
-        if (isArchiveGame(room) && ['VOTING', 'GUESS_REVIEW'].includes(room.state) && (contentCheckAt.get(room) || 0) <= Date.now()) void archiveContentReady(room);
+        if (needsContentCheck(room) && (contentCheckAt.get(room) || 0) <= Date.now()) void archiveContentReady(room);
         if (room.phaseDeadline && room.phaseDeadline <= Date.now()) void endPhase(room);
         else if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { void checkVotingComplete(room, true).then(() => broadcast(room)); }
     }
@@ -709,7 +714,7 @@ io.on('connection', (socket: Socket) => {
     });
     on('judgeGuesses', async payload => {
         const { room, player } = member(socket, payload);
-        if (isArchiveGame(room) && !await archiveContentReady(room)) return;
+        if (!await archiveContentReady(room)) return;
         if (judgeGuesses(room, player, payload)) { await checkVotingComplete(room); broadcast(room); }
     });
 

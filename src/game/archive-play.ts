@@ -25,10 +25,12 @@ export function playArchiveVideo(room: Room) {
     room.currentPrompt = clip.prompt; room.currentVideoUrl = clip.videoUrl; room.state = 'VOTING';
 }
 
-// Recheck immediately before tallying and periodically while a replay is open.
+export const needsContentCheck = (room: Room) => ['VOTING', 'GUESS_REVIEW'].includes(room.state)
+    && Boolean(room.currentVideoUrl) && (isArchiveGame(room) || room.currentVideoUrl.startsWith('/api/videos/'));
+// Recheck immediately before tallying and periodically while a clip is open.
 // A media ban already denies GET/HEAD/Range; this also keeps the game moving.
 export async function checkArchiveContent(room: Room, blocked: (url: string) => Promise<boolean>): Promise<'allowed' | 'skipped' | 'stale'> {
-    if (!isArchiveGame(room) || !['VOTING', 'GUESS_REVIEW'].includes(room.state) || !room.currentVideoUrl) return 'allowed';
+    if (!needsContentCheck(room)) return 'allowed';
     const url = room.currentVideoUrl, ballot = room.ballotId;
     const denied = await blocked(url);
     // Node can receive a leave/next-turn event during the storage read.
