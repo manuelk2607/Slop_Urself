@@ -7,7 +7,20 @@ const repo = (value: string | undefined): value is string => Boolean(value && /^
 const revision = (value: string | undefined): value is string => Boolean(value && /^[a-f0-9]{40}$/.test(value));
 export function approvedProvider(config: ProviderConfig): ProviderIdentity {
     if (!repo(config.WAN_SPACE_ID) || !repo(config.WAN_MODEL_ID) || !revision(config.WAN_SPACE_REVISION) || !revision(config.WAN_MODEL_REVISION)) throw new ProviderTrustError();
+    if ([config.WAN_SPACE_ID, config.WAN_MODEL_ID].some(id => id.split('/').some(part => part === '.' || part === '..'))) throw new ProviderTrustError();
     return { spaceId: config.WAN_SPACE_ID, spaceRevision: config.WAN_SPACE_REVISION, modelId: config.WAN_MODEL_ID, modelRevision: config.WAN_MODEL_REVISION };
+}
+
+export async function verifyPinnedProvider(identity: ProviderIdentity, root: string, get: (url: string) => Promise<unknown>) {
+    if (!/^https:\/\/[a-z0-9-]+\.hf\.space(?:\/--replicas\/[a-z0-9][a-z0-9-]{0,79})?$/.test(root)) throw new ProviderTrustError();
+    const pinned = { WAN_SPACE_ID: identity.spaceId, WAN_SPACE_REVISION: identity.spaceRevision, WAN_MODEL_ID: identity.modelId, WAN_MODEL_REVISION: identity.modelRevision };
+    approvedProvider(pinned);
+    const metadata = await get(`https://huggingface.co/api/spaces/${identity.spaceId}`);
+    const host = (metadata as { host?: unknown } | null)?.host;
+    // Resolve the actual Space host before sending credentials to a saved root.
+    if (typeof host !== 'string' || !/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(host) || new URL(root).origin !== host) throw new ProviderTrustError();
+    const settings = await get(`${root}/config`);
+    return verifyProviderIdentity(pinned, metadata, settings);
 }
 export function verifyProviderIdentity(config: ProviderConfig, metadata: unknown, settings: unknown) {
     const expected = approvedProvider(config);

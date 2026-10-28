@@ -3,7 +3,8 @@ import { preparedImageSize } from './images';
 import { validateImage } from './image-input';
 import { normalizeImage } from '../security/images';
 import { moderateInput, validatePrompt, type ModerationConfig } from '../security/moderation';
-import { approvedProvider, verifyProviderIdentity, verifyWanParameters, ProviderTrustError, type ProviderIdentity } from './provider-trust';
+import { approvedProvider, verifyProviderIdentity, verifyWanParameters, verifyPinnedProvider, ProviderTrustError, type ProviderIdentity } from './provider-trust';
+import { boundedJson } from '../server/body';
 import { GradioProviderError as AiProviderError, readQueueResult } from './gradio';
 import { logAiEvent, type AiTelemetry } from './telemetry';
 import type { AiProgress } from '../shared/generation';
@@ -150,18 +151,30 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: AiPr
     }
     // A lost POST response is ambiguous. Never issue another GPU job blindly.
     if (!job.eventId) throw new AiPendingError(job);
+    const verify = async () => {
+        if (config.AI_PROVIDER === 'mock') return;
+        if (!job.providerIdentity) throw new ProviderTrustError();
+        await verifyPinnedProvider(job.providerIdentity, job.root, async url => {
+            const response = await fetch(url, { redirect: 'manual', headers: config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {}, signal: AbortSignal.timeout(15_000) });
+            if (!response.ok) { await response.body?.cancel(); throw new ProviderTrustError(); }
+            return boundedJson(response, 512 * 1024);
+        });
+    };
     progress('Videoerstellung wird fortgesetzt...', 'result');
     logAiEvent('result_requested', jobFields(job, lifecycle));
     try {
+        await verify();
         const resultUrl = job.sessionHash ? `${job.root}/gradio_api/queue/data?session_hash=${encodeURIComponent(job.sessionHash)}`
             : `${job.root}/gradio_api/call${job.endpoint}/${job.eventId}`;
         const response = await fetch(resultUrl, {
+            redirect: 'manual',
             headers: config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {},
             signal: AbortSignal.timeout(lifecycle.resultTimeoutMs || 180_000)
         });
         if (!response.ok) throw new AiHttpError(response.status);
         const result = job.sessionHash ? await readQueueResult(response, job.eventId, progress) : parseServerSentResult(await response.text());
         const videoUrl = extractVideoUrl(result, job.root);
+        await verify();
         const completed: AiJob = { ...job, status: 'complete', videoUrl };
         await lifecycle.saveJob?.(completed);
         logAiEvent('completed', jobFields(completed, lifecycle));
@@ -190,7 +203,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
     approvedProvider(config);
     if (config.HF_TOKEN) {
         const response = await fetch('https://huggingface.co/api/whoami-v2', {
-            headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(15_000)
+            headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, redirect: 'manual', signal: AbortSignal.timeout(15_000)
         });
         if (response.status === 401 || response.status === 403) throw new Error('Der Hugging-Face-Zugang ist ungültig oder abgelaufen. Bitte die persönliche HF-Verbindung oder den Serverzugang erneuern.');
         if (!response.ok) throw new Error('Hugging-Face-Anmeldung ist momentan nicht erreichbar.');
@@ -214,12 +227,12 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const space = providerSpace(provider, config);
             const headers: Record<string, string> = config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {};
             const get = async (url: string, init?: RequestInit) => {
-                const response = await fetch(url, { ...init, signal: controller.signal, headers: { ...headers, ...init?.headers } });
+                const response = await fetch(url, { ...init, redirect: 'manual', signal: controller.signal, headers: { ...headers, ...init?.headers } });
                 if (!response.ok) throw new AiHttpError(response.status);
                 return response;
             };
             stage = 'metadata';
-            const metadata = await (await get(`https://huggingface.co/api/spaces/${space}`)).json() as { host?: string };
+            const metadata = await boundedJson(await get(`https://huggingface.co/api/spaces/${space}`), 512 * 1024) as { host?: string };
             if (!metadata.host || !/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(metadata.host)) throw new Error('Space ist nicht erreichbar.');
             let root = metadata.host;
             const endpoint = providerEndpoint(provider, config);
@@ -228,14 +241,14 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const replica = infoResponse.headers.get('x-proxied-replica');
             // Uploads, queue state and generated files are local to the selected replica.
             if (replica && /^[a-z0-9][a-z0-9-]{0,79}$/.test(replica)) root += `/--replicas/${replica}`;
-            const info = await infoResponse.json() as { named_endpoints: Record<string, { parameters: ApiParameter[] }> };
+            const info = await boundedJson(infoResponse, 512 * 1024) as { named_endpoints: Record<string, { parameters: ApiParameter[] }> };
             const parameters = info.named_endpoints[endpoint]?.parameters;
             if (!parameters) throw new Error('Space bietet den erwarteten Video-Endpunkt nicht an.');
             const queue = provider === 'wan22' || provider === 'wan22-fast';
             let fnIndex: number | undefined;
             let providerIdentity: ProviderIdentity | undefined;
             if (queue) {
-                const settings = await (await get(`${root}/config`)).json() as { dependencies?: { id?: number; api_name?: string }[] };
+                const settings = await boundedJson(await get(`${root}/config`), 512 * 1024) as { dependencies?: { id?: number; api_name?: string }[] };
                 fnIndex = settings.dependencies?.find(dependency => dependency.api_name === endpoint.slice(1))?.id;
                 if (typeof fnIndex !== 'number' || !Number.isInteger(fnIndex) || fnIndex < 0) throw new Error('Space bietet die erwartete Video-Queue nicht an.');
                 providerIdentity = verifyProviderIdentity(config, metadata, settings);
@@ -251,8 +264,11 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const filename = `input.${image.mime.split('/')[1]}`;
             form.append('files', new Blob([bytes], { type: image.mime }), filename);
             stage = 'upload';
-            const uploaded = await (await get(`${root}/gradio_api/upload`, { method: 'POST', body: form })).json() as string[];
-            if (!uploaded[0]) throw new Error('Hugging Face hat keinen Upload-Pfad geliefert.');
+            const uploaded = await boundedJson(await get(`${root}/gradio_api/upload`, { method: 'POST', body: form }), 16_384) as unknown;
+            if (!Array.isArray(uploaded) || uploaded.length !== 1 || typeof uploaded[0] !== 'string' || !uploaded[0] || uploaded[0].length > 4096 || /[\p{Cc}\p{Cf}]/u.test(uploaded[0])) throw new Error('Hugging Face hat keinen gültigen Upload-Pfad geliefert.');
+            // Upload can outlast a deployment. Recheck before the irreversible
+            // generation POST; do not silently run a newly merged model.
+            await verifyPinnedProvider(providerIdentity!, root, async url => boundedJson(await get(url), 512 * 1024));
             const file = { path: uploaded[0], orig_name: filename, mime_type: image.mime, meta: { _type: 'gradio.FileData' } };
             const data = orderProviderValues(parameters, buildProviderValues(provider, prompt, file, config));
             job = { provider, providerIdentity, root, endpoint, submittedAt: Date.now(), status: 'submitting',
@@ -261,9 +277,9 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
                 steps: providerSteps(provider), durationSeconds: videoDuration(config) };
             await lifecycle.saveJob?.(job);
             stage = 'submit';
-            const started = await (await get(`${root}/gradio_api/${queue ? 'queue/join' : `call${endpoint}`}`, {
+            const started = await boundedJson(await get(`${root}/gradio_api/${queue ? 'queue/join' : `call${endpoint}`}`, {
                 method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(queue ? { data, fn_index: fnIndex, session_hash: job.sessionHash } : { data })
-            })).json() as { event_id?: string };
+            }), 16_384) as { event_id?: string };
             if (!started.event_id) throw new Error('Hugging Face hat keine Event-ID geliefert.');
             job = { ...job, eventId: started.event_id, status: 'running' };
             await lifecycle.saveJob?.(job);

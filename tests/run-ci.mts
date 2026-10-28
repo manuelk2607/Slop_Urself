@@ -48,6 +48,7 @@ try {
     await start(3310, false); await start(3312, true); await start(3313, false);
     await run(['tests/e2e/security.e2e.mts', 'http://127.0.0.1:3313']);
     await run(['tests/integration/cloudflare-runtime.mts']);
+    await run(['tests/integration/hf-boundaries-runtime.mts']);
     await run(['tests/integration/hf-runtime.mts']);
     await run(['tests/integration/password-runtime.mts']);
     cloudflare = await cloudflareRuntime({ port: 3311 });

@@ -134,7 +134,7 @@ export class PlayerQuotaBudget {
         if (credential.accountId !== owner.accountId || credential.subject !== owner.subject) throw new HfRequiredError();
         // Verify the token itself, not only the metadata sealed alongside it.
         // A swapped/stale credential must never charge another HF identity.
-        const identity = await fetch('https://huggingface.co/api/whoami-v2', { headers: { authorization: `Bearer ${credential.token}` }, redirect: 'error', signal: AbortSignal.timeout(10_000) });
+        const identity = await fetch('https://huggingface.co/api/whoami-v2', { headers: { authorization: `Bearer ${credential.token}` }, redirect: 'manual', signal: AbortSignal.timeout(10_000) });
         if ([401, 403].includes(identity.status)) throw new HfRequiredError();
         if (!identity.ok) throw new Error('Die persönliche HF-Identität ist vorübergehend nicht prüfbar. Es wurde kein Videoauftrag gestartet.');
         let user: { id?: unknown };

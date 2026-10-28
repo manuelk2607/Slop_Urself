@@ -52,10 +52,10 @@ async function evaluate(stage: 'input' | 'output', payload: Record<string, unkno
     const work = (async () => {
         let verdict: Verdict;
         try {
-            const response = await fetch(config.MODERATION_URL!, { method: 'POST', redirect: 'error',
+            const response = await fetch(config.MODERATION_URL!, { method: 'POST', redirect: 'manual',
                 headers: { authorization: `Bearer ${config.MODERATION_SECRET}`, 'content-type': 'application/json', 'x-content-sha256': digest },
                 body, signal: AbortSignal.timeout(30_000) });
-            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw unavailable();
+            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) { await response.body?.cancel(); throw unavailable(); }
             verdict = await boundedJson(response, 16_384) as Verdict;
         } catch { throw unavailable(); }
         if (!verdict || verdict.evaluationOnly !== undefined || verdict.digest !== digest || verdict.policyVersion !== config.MODERATION_POLICY_VERSION || verdict.modelVersion !== config.MODERATION_MODEL_VERSION) throw unavailable();

@@ -1,4 +1,5 @@
 import { ProviderConfig, ProviderBudget, providerBudgets, providerGpuSeconds, qualityConfig, type GenerationQuality } from './providers';
+import { boundedJson } from '../server/body';
 
 export interface QuotaConfig extends ProviderConfig { HF_TOKEN?: string; AI_ROUND_LIMIT?: string }
 export interface GpuQuota { base: number; current: number; resetsAt: string | null; runs?: { remaining: number; resetsAt?: string } }
@@ -34,14 +35,19 @@ export function roundsForPlayers(generations: number, players: number) {
 export async function fetchGpuQuota(config: QuotaConfig): Promise<GpuQuota> {
     if (!config.HF_TOKEN) throw new Error('HF_TOKEN fehlt.');
     const response = await fetch('https://huggingface.co/api/spaces/zero-gpu/quota', {
-        headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, signal: AbortSignal.timeout(10_000)
+        headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, redirect: 'manual', signal: AbortSignal.timeout(10_000)
     });
-    if (!response.ok) throw new GpuQuotaError(response.status);
-    const quota = await response.json() as GpuQuota;
+    if (!response.ok) { await response.body?.cancel(); throw new GpuQuotaError(response.status); }
+    const quota = await boundedJson(response, 16_384) as GpuQuota | null;
+    if (!quota || typeof quota !== 'object' || Array.isArray(quota)) throw new Error('Ungültiges KI-Kontingent.');
     if (!Number.isFinite(quota.current) || quota.current < 0 || !Number.isFinite(quota.base) || quota.base < 0 ||
         (quota.runs && (!Number.isInteger(quota.runs.remaining) || quota.runs.remaining < 0)) ||
-        (quota.resetsAt !== null && (typeof quota.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.resetsAt))))) throw new Error('Ungültiges KI-Kontingent.');
-    return quota;
+        (quota.resetsAt !== null && (typeof quota.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.resetsAt))))
+        || (quota.runs?.resetsAt !== undefined && (typeof quota.runs.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.runs.resetsAt))))) throw new Error('Ungültiges KI-Kontingent.');
+    // Never propagate unrelated billing/profile fields received from upstream.
+    return { base: quota.base, current: quota.current, resetsAt: quota.resetsAt === null ? null : new Date(quota.resetsAt).toISOString(),
+        ...(quota.runs ? { runs: { remaining: quota.runs.remaining,
+            ...(quota.runs.resetsAt ? { resetsAt: new Date(quota.runs.resetsAt).toISOString() } : {}) } } : {}) };
 }
 export const requiredGpuSeconds = (duration: number) => providerGpuSeconds('wan22', { LTX_DURATION: String(duration) });
 export const secondsPerRound = (config: QuotaConfig) => Math.min(...providerBudgets(config).map(p => p.gpuSeconds));
@@ -75,7 +81,10 @@ export class QuotaBudget {
         const quota = await fetchGpuQuota(this.config);
         const reservations = await this.storage.get<Record<string, Reservation>>('reservations') || {};
         for (const [code, entry] of Object.entries(reservations)) {
-            if (entry.expiresAt < Date.now() || (entry.reset && entry.reset !== quota.resetsAt && Date.parse(entry.reset) <= Date.now())) delete reservations[code];
+            const active = entry.active > 0 || Object.keys(entry.activeJobs || {}).length > 0;
+            // A provider reset is not proof that an unknown/running job ended.
+            // Keep its hold until completion or the existing conservative TTL.
+            if (entry.expiresAt < Date.now() || (!active && entry.reset && entry.reset !== quota.resetsAt && Date.parse(entry.reset) <= Date.now())) delete reservations[code];
             else entry.reset = quota.resetsAt;
         }
         return { quota, reservations };
