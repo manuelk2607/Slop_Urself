@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "scope": "read-only HF plus local reservation simulation",
+  "checkedAt": "2026-10-28T16:54:06.115Z",
+  "distinctAccounts": true,
+  "foreignCredentialRejected": true,
+  "jobOwnersVerified": true,
+  "swappedJobRejected": true,
+  "before": {
+    "A": {
+      "base": 300,
+      "remaining": 175.592746,
+      "resetsAt": "2026-10-28T18:50:25.827Z",
+      "runs": 7,
+      "observedAt": "2026-10-28T16:54:04.020Z"
+    },
+    "B": {
+      "base": 300,
+      "remaining": 300,
+      "resetsAt": null,
+      "runs": 8,
+      "observedAt": "2026-10-28T16:54:03.890Z"
+    }
+  },
+  "after": {
+    "A": {
+      "base": 300,
+      "remaining": 175.592746,
+      "resetsAt": "2026-10-28T18:50:26.041Z",
+      "runs": 7,
+      "observedAt": "2026-10-28T16:54:06.114Z"
+    },
+    "B": {
+      "base": 300,
+      "remaining": 300,
+      "resetsAt": null,
+      "runs": 8,
+      "observedAt": "2026-10-28T16:54:06.115Z"
+    }
+  },
+  "liveGenerationCalls": 0,
+  "billingVerified": false,
+  "generationRelease": false,
+  "limitation": "Authentication and quota snapshots do not prove per-job debit. No inference endpoint is allowed."
+}

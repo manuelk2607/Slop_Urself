@@ -1,0 +1,17 @@
+{
+  "source": "read-only-public-HF-and-local-vault-index",
+  "checkedAt": "2026-10-28T16:43:52.256Z",
+  "spaceId": "Saravutw/WAN2.2_I2V_LIGHTNING_4-8step_custom",
+  "modelIdentityConfigured": false,
+  "providerReachable": true,
+  "sourceAndModelMatch": false,
+  "apiContractCompatible": true,
+  "runtimeStage": "RUNNING",
+  "sourceRevision": "fca7f5a33da3057bae497de5cd70f49ce75e6c02",
+  "activeLocalConnections": 0,
+  "productionConnectionsVerified": false,
+  "billingVerified": false,
+  "moderationQualified": false,
+  "generationRelease": false,
+  "gpuCalls": 0
+}
