@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Decision } from './policy.js';
+import { createHash } from 'node:crypto';
 const execute = promisify(execFile);
 export const MAX_MEDIA_EDGE = 1024;
 export function checkAbort(signal?: AbortSignal) { signal?.throwIfAborted(); }
@@ -30,13 +31,24 @@ export async function inspectVideo(video: string, inspect: (frame: Uint8Array, s
         const files = (await readdir(directory)).filter(f => /^frame-\d{4}\.png$/.test(f)).sort();
         if (files.length !== frames) throw new Error('Incomplete video decode');
         let decision: Decision = 'allow';
+        // Only byte-identical, fully decoded native frames within this request
+        // share a result. No perceptual similarity, resizing or cross-user cache.
+        const checked = new Map<string, Decision>();
         for (const file of files) {
             checkAbort(signal);
-            const result = await inspect(await readFile(join(directory, file)), signal);
+            const bytes = await readFile(join(directory, file));
+            const digest = createHash('sha256').update(bytes).digest('hex');
+            let result = checked.get(digest);
+            if (!result) {
+                result = await inspect(bytes, signal); checkAbort(signal);
+                if (!['allow', 'review', 'block'].includes(result)) throw new Error('Incomplete frame assessment');
+                checked.set(digest, result);
+            }
             if (!['allow', 'review', 'block'].includes(result)) throw new Error('Incomplete frame assessment');
             if (result === 'block') decision = 'block'; else if (result === 'review' && decision !== 'block') decision = 'review';
         }
         checkAbort(signal);
-        return { decision, decodeComplete: true, durationSeconds: duration, codec: stream.codec_name, pixelFormat: stream.pix_fmt, frameCount: frames, framesChecked: files.length };
+        return { decision, decodeComplete: true, durationSeconds: duration, codec: stream.codec_name, pixelFormat: stream.pix_fmt,
+            frameCount: frames, framesChecked: files.length, uniqueFramesChecked: checked.size };
     } finally { await rm(directory, { recursive: true, force: true }); }
 }

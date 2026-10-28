@@ -48,3 +48,18 @@ test('qualification is tied to immutable models, policy, expiry and a real revie
     assert.equal(qualificationValid(value, 'wrong'), false);
     assert.equal(qualificationValid(value, modelVersion(lock, 'b'.repeat(64))), false, 'Changed runtime cannot reuse an old review.');
 });
+
+test('separate v2 label protocol accepts bounded punctuation but never contradictory text or extracts a partial allow', () => {
+    const scores = [{ label: 'normal', score: 0.99 }, { label: 'nsfw', score: 0.01 }];
+    for (const label of ['ALLOW', '"ALLOW"', "'ALLOW'", 'ALLOW.', ' allow! ']) {
+        assert.equal(assess(scores, label, 'labels-v2').decision, 'allow');
+        if (label.trim().toUpperCase() !== 'ALLOW') assert.equal(assess(scores, label, 'labels-v1').decision, 'review');
+        assert.equal(assess(scores, label).decision, 'review');
+    }
+    for (const text of ['ALLOW BLOCK', 'ALLOW\nREVIEW', 'ALLOW because safe', '"ALLOW\'', '"ALLOW".', 'ALLOW!!', 'NOT ALLOW', '```ALLOW```', '{"label":"ALLOW"}', 'ALLOW\u200b', 'ＡＬＬＯＷ']) assert.equal(assess(scores, text, 'labels-v2').decision, 'review');
+    assert.equal(assess(scores, 'BLOCK.', 'labels-v2').decision, 'block');
+    assert.equal(assess(scores, '"REVIEW"', 'labels-v2').decision, 'review');
+    assert.equal(assess([{ label: 'normal', score: 0.6 }, { label: 'nsfw', score: 0.4 }], 'ALLOW.', 'labels-v2').decision, 'review');
+    const lock = { nsfw: { id: 'a/model', revision: 'a'.repeat(40) }, vlm: { id: 'b/model', revision: 'b'.repeat(40) } };
+    assert.notEqual(modelVersion({ ...lock, decisionProtocol: 'labels-v1' }, 'a'.repeat(64)), modelVersion({ ...lock, decisionProtocol: 'labels-v2' }, 'a'.repeat(64)));
+});

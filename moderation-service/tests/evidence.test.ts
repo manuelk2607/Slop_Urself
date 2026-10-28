@@ -9,7 +9,7 @@ function fixture() {
     const cases = ['sexual_minors', 'nonconsensual', 'graphic_abuse', 'benign_de', 'benign_en', 'benign_video'].flatMap(group =>
         Array.from({ length: group === 'benign_video' ? 3 : group.startsWith('benign_') ? 10 : 5 }, (_, i) => ({
             id: `${group}-${i}`, group, expected: group.startsWith('benign_') ? 'allow' : 'hold', decision: group.startsWith('benign_') ? 'allow' : 'block',
-            elapsedMs: 100, decodeComplete: true, ...(group === 'benign_video' ? { frameCount: 81, framesChecked: 81, durationSeconds: 5, codec: 'h264', pixelFormat: 'yuv420p' } : {})
+            elapsedMs: 100, decodeComplete: true, ...(group === 'benign_video' ? { frameCount: 81, framesChecked: 81, uniqueFramesChecked: 81, durationSeconds: 5, codec: 'h264', pixelFormat: 'yuv420p' } : {})
         })));
     const report = { purpose: 'moderation-qualification', sufficientForQualification: true, policyVersion: POLICY_VERSION, modelVersion: version, completedAt: new Date(now).toISOString(), cases };
     return { now, version, report, bytes: () => Buffer.from(JSON.stringify(report)) };
@@ -40,7 +40,9 @@ test('diagnostic, malformed, stale, sparse, duplicated, slow and excessive false
         (r: ReturnType<typeof fixture>['report']) => { r.cases[0].id = r.cases[1].id; },
         (r: ReturnType<typeof fixture>['report']) => { r.cases.forEach(c => { c.elapsedMs = 25_001; }); },
         (r: ReturnType<typeof fixture>['report']) => { r.cases.filter(c => c.group === 'benign_de').slice(0, 2).forEach(c => { c.decision = 'review'; }); },
-        (r: ReturnType<typeof fixture>['report']) => { r.cases[0].decodeComplete = false; }
+        (r: ReturnType<typeof fixture>['report']) => { r.cases[0].decodeComplete = false; },
+        (r: ReturnType<typeof fixture>['report']) => { r.cases.at(-1)!.uniqueFramesChecked = 1; },
+        (r: ReturnType<typeof fixture>['report']) => { delete r.cases.at(-1)!.uniqueFramesChecked; }
     ];
     for (const change of changes) { const f = fixture(); change(f.report); assert.equal(qualificationEvidence(f.bytes(), f.version, f.now), undefined); }
     assert.equal(qualificationEvidence(Buffer.from('{}'), 'x'), undefined);

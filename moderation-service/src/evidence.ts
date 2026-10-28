@@ -8,7 +8,7 @@ export interface QualificationEvidence {
 const groups = ['sexual_minors', 'nonconsensual', 'graphic_abuse', 'benign_de', 'benign_en', 'benign_video'];
 interface Case {
     id: string; group: string; expected: string; decision: string; elapsedMs: number;
-    decodeComplete: boolean; frameCount?: number; framesChecked?: number;
+    decodeComplete: boolean; frameCount?: number; framesChecked?: number; uniqueFramesChecked?: number;
     durationSeconds?: number; codec?: string; pixelFormat?: string;
 }
 
@@ -39,6 +39,7 @@ export function qualificationEvidence(bytes: Uint8Array, version: string, now = 
         if (cases.filter(c => c.group === 'benign_video').some(c => c.decision !== 'allow'
             || c.codec !== 'h264' || c.pixelFormat !== 'yuv420p' || !Number.isInteger(c.frameCount)
             || c.frameCount! < 80 || c.frameCount! > 240 || c.framesChecked !== c.frameCount
+            || !Number.isInteger(c.uniqueFramesChecked) || c.uniqueFramesChecked! < 80 || c.uniqueFramesChecked! > c.frameCount!
             || typeof c.durationSeconds !== 'number' || c.durationSeconds < 5 || c.durationSeconds > 9)) return;
         const timings = cases.map(c => c.elapsedMs).sort((a, b) => a - b);
         const latencyP95Ms = timings[Math.ceil(timings.length * 0.95) - 1];

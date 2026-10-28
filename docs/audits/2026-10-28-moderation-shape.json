@@ -1,0 +1,37 @@
+{
+  "runId": "7c7bf1bb-37ea-4661-8c1a-e0689d9e684f",
+  "qualified": false,
+  "sufficientForQualification": false,
+  "gpuCalls": 0,
+  "status": "diagnostic_failed",
+  "cases": [
+    {
+      "id": "benign-en-motion",
+      "expected": "allow",
+      "decision": "review",
+      "assessment": {
+        "decision": "review",
+        "reason": "context_format",
+        "format": {
+          "generatedTokens": 4,
+          "atTokenLimit": false,
+          "fenced": false,
+          "startsObject": false,
+          "endsObject": false,
+          "shape": "decorated_label"
+        }
+      },
+      "passed": false,
+      "elapsedMs": 12372
+    }
+  ],
+  "limitations": [
+    "Synthetic nonsexual drawings only; no real-person/illegal media.",
+    "No hosting, legal consent, CSAM detection or real HF video billing qualification.",
+    "Five-frame diagnostic video is not an 81-frame Wan performance benchmark.",
+    "One selected diagnostic case only; no representative quality claim.",
+    "Experimental decision protocol: labels-v1; separate implementation fingerprint, no release."
+  ],
+  "modelVersion": "d3a0e9d0e43961098feb34f353b86951fe44035b9102f49d906e31890bc43b98",
+  "elapsedMs": 19687
+}

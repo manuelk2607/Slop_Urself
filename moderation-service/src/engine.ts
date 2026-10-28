@@ -1,18 +1,19 @@
-import { AutoProcessor, AutoModelForVision2Seq, RawImage, Tensor, pipeline, env, InterruptableStoppingCriteria } from '@huggingface/transformers';
+import { AutoProcessor, AutoModelForVision2Seq, RawImage, pipeline, env, InterruptableStoppingCriteria } from '@huggingface/transformers';
 import sharp from 'sharp';
 import { ensureModelArtifacts, modelCacheRoot } from './artifacts.js';
 import { assess, policyFor, type Assessment, type Decision, type ModelLock, type Scores } from './policy.js';
 import { checkAbort, inspectVideo, MAX_MEDIA_EDGE } from './media.js';
 import { configureContextImages } from './preprocessing.js';
+import { snapshotInput, newContextTokens, responseShape } from './context-output.js';
 
 // The non-root container cannot write Transformers.js' node_modules cache.
 // Only pinned model weights, never player media, belong in this directory.
 env.cacheDir = modelCacheRoot();
 export interface ModelAssessment extends Assessment {
-    format: { generatedTokens: number; atTokenLimit: boolean; fenced: boolean; startsObject: boolean; endsObject: boolean };
+    format: { generatedTokens: number; atTokenLimit: boolean; fenced: boolean; startsObject: boolean; endsObject: boolean; shape: ReturnType<typeof responseShape> };
 }
 export async function createEngine(lock: ModelLock, stage: (stage: string) => void | Promise<void> = () => {}, observe: (assessment: ModelAssessment) => void = () => {}) {
-    const policy = policyFor(lock.decisionProtocol), maxTokens = lock.decisionProtocol === 'labels-v1' ? 12 : 96;
+    const policy = policyFor(lock.decisionProtocol), maxTokens = lock.decisionProtocol?.startsWith('labels-') ? 12 : 96;
     await stage('verifying_model_files');
     await ensureModelArtifacts(lock);
     const session_options = { intraOpNumThreads: 2, interOpNumThreads: 1 };
@@ -34,6 +35,7 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
         // Message declaration still describes text-only messages.
         const text = processor.apply_chat_template(messages as unknown as Parameters<typeof processor.apply_chat_template>[0], { add_generation_prompt: true });
         const inputs = await processor(text, pixels);
+        const input = snapshotInput(inputs.input_ids);
         const stopping = new InterruptableStoppingCriteria();
         const interrupt = () => stopping.interrupt();
         signal?.addEventListener('abort', interrupt, { once: true });
@@ -43,15 +45,15 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
             generated = await model.generate({ ...inputs, max_new_tokens: maxTokens, do_sample: false, stopping_criteria: [stopping] });
             checkAbort(signal);
         } finally { signal?.removeEventListener('abort', interrupt); }
-        const inputIds = inputs.input_ids;
-        if (!(generated instanceof Tensor) || !(inputIds instanceof Tensor) || inputIds.dims.length !== 2) throw new Error('Unexpected model output');
         // Decode only new tokens. JSON in quoted input or the policy template
         // must never be mistaken for the model's classification.
-        const output = processor.batch_decode(generated.slice(null, [inputIds.dims[1], generated.dims[1]]), { skip_special_tokens: true })[0];
+        const tokens = newContextTokens(generated, input, maxTokens);
+        const output = processor.batch_decode(tokens, { skip_special_tokens: true })[0];
+        if (typeof output !== 'string') throw new Error('Unexpected context text');
         const assessment = assess(scores, output.trim(), lock.decisionProtocol);
-        const generatedTokens = generated.dims[1] - inputIds.dims[1];
+        const generatedTokens = tokens.dims[1];
         observe({ ...assessment, format: { generatedTokens, atTokenLimit: generatedTokens >= maxTokens, fenced: output.trim().startsWith('```'),
-            startsObject: output.trim().startsWith('{'), endsObject: output.trim().endsWith('}') } });
+            startsObject: output.trim().startsWith('{'), endsObject: output.trim().endsWith('}'), shape: responseShape(output) } });
         // Diagnostic callback only; no raw response, and the server sets no observer.
         return assessment.decision;
     }
