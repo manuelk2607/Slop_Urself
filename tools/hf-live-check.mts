@@ -11,7 +11,7 @@ await checkLiveEvidence(evidencePath);
 const unlock = await lockLiveEvidence(evidencePath);
 await checkLiveEvidence(evidencePath);
 const origin = 'https://slopurself.maki26.workers.dev';
-const evidence: LiveEvidence = { version: 1, expectedUsername: expected, origin, profile: `HF_${randomUUID().slice(0, 10)}`, stage: 'preflight' };
+const evidence: LiveEvidence = { version: 1, expectedUsername: expected, origin, profile: `HF_${randomUUID().slice(0, 10)}`, stage: 'preflight', billingVerified: false };
 let browser: import('playwright').Browser | undefined, context: import('playwright').BrowserContext | undefined;
 let ownProfile = false;
 try {
@@ -84,8 +84,11 @@ try {
     evidence.after = await quota(); assert.equal(evidence.after.username, evidence.before.username); assert.equal(evidence.after.total, evidence.before.total);
     evidence.debit = evidence.before.remaining - evidence.after.remaining;
     assert.ok(evidence.debit > 0, 'Keine tatsächliche persönliche Kontingentabbuchung beobachtet.');
+    // The quota endpoint exposes an account aggregate, not a per-job receipt.
+    // Concurrent use elsewhere may contribute; do not qualify attribution here.
+    evidence.quotaObservation = 'aggregate-only'; evidence.afterObservedAt = new Date().toISOString();
     evidence.success = true; evidence.stage = 'complete';
-    console.log(`Nachweis erfolgreich: ein archiviertes Video, ${evidence.debit} persönliche GPU-Sekunden abgebucht.`);
+    console.log(`Videoablauf erfolgreich; Kontingentdifferenz ${evidence.debit} Sekunden beobachtet. Jobgenaue Abrechnung bleibt unbestätigt.`);
 } catch {
     evidence.success = false; console.error(`Nachweis nicht vollständig. Prüfphase: ${evidence.stage}. Kein automatischer Neuversuch.`); process.exitCode = 1;
 } finally {

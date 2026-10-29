@@ -56,7 +56,7 @@ async function evaluate(stage: 'input' | 'output', payload: Record<string, unkno
         let verdict: Verdict;
         try {
             verdict = await moderationRequest(config.MODERATION_URL!, config.MODERATION_SECRET!, body, digest, undefined,
-                stage === 'output' && config.moderationJournal ? { journal: config.moderationJournal, key: await sha256(new TextEncoder().encode(key)) } : undefined) as Verdict;
+                config.moderationJournal ? { journal: config.moderationJournal, key: await sha256(new TextEncoder().encode(key)) } : undefined) as Verdict;
         } catch { throw unavailable(); }
         if (!verdict || verdict.evaluationOnly !== undefined || verdict.digest !== digest || verdict.policyVersion !== config.MODERATION_POLICY_VERSION || verdict.modelVersion !== config.MODERATION_MODEL_VERSION) throw unavailable();
         if (verdict.decision === 'block') throw new ModerationError('content_blocked', 'Dieser Inhalt kann nach den Spielregeln nicht verarbeitet werden. Bitte wähle ein anderes Bild oder einen anderen Prompt.');

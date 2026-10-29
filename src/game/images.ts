@@ -8,11 +8,12 @@ export interface ImageStorage { get<T>(key: string): Promise<T | undefined>; put
 const CHUNK_SIZE = 64 * 1024;
 export const IMAGE_TTL = 2 * 60 * 60_000;
 const key = (image: SharedImage, part: number) => `image:${image.id}:${part}`;
-export async function writeSharedImage(storage: ImageStorage, data: unknown, config?: ModerationConfig): Promise<SharedImage> {
+export async function writeSharedImage(storage: ImageStorage, data: unknown, config?: ModerationConfig, beforeWrite?: (image: SharedImage) => Promise<void>): Promise<SharedImage> {
     const text = await normalizeImage(data);
     const image = validateImage(text); preparedImageSize(image.base64);
     if (config) await moderateInput(text, '', config);
     const meta = { id: crypto.randomUUID(), chunks: Math.ceil(text.length / CHUNK_SIZE), expiresAt: Date.now() + IMAGE_TTL };
+    await beforeWrite?.(meta);
     try { for (let part = 0; part < meta.chunks; part++) await storage.put(key(meta, part), text.slice(part * CHUNK_SIZE, (part + 1) * CHUNK_SIZE)); }
     catch (error) { await deleteSharedImage(storage, meta); throw error; }
     return meta;

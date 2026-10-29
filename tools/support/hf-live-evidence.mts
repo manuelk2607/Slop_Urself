@@ -6,6 +6,7 @@ export interface LiveEvidence {
     before?: { username: string; remaining: number; total: number };
     after?: { username: string; remaining: number; total: number };
     rangeVerified?: boolean; playbackVerified?: boolean; debit?: number; success?: boolean;
+    billingVerified?: false; quotaObservation?: 'aggregate-only'; afterObservedAt?: string;
 }
 export async function checkLiveEvidence(path: string) {
     try {

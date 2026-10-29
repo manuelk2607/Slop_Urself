@@ -1,7 +1,8 @@
-export type GenerationStage = 'preparing' | 'queue' | 'inference' | 'result' | 'archive' | 'retry';
+export type GenerationStage = 'moderation' | 'preparing' | 'queue' | 'inference' | 'result' | 'archive' | 'retry';
 export type AiProgress = (message: string, stage?: GenerationStage) => void;
 export interface GenerationView { id: string; startedAt: number; stage: GenerationStage }
 const labels: Record<GenerationStage, string> = {
+    moderation: 'Bild und Prompt werden geprüft. Die Videoerstellung hat noch nicht begonnen.',
     preparing: 'Bild und Auftrag werden vorbereitet.', queue: 'Warte auf einen kostenlosen GPU-Platz.',
     inference: 'Die KI berechnet das Video.', result: 'Der vorhandene Auftrag wird abgefragt.',
     archive: 'Video wird geprüft und gespeichert.', retry: 'Der Auftragsstatus ist noch unklar und wird erneut abgefragt.'

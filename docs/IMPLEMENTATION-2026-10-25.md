@@ -4,6 +4,24 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Lokales Eingabe-Recovery-Paket, 30.10.
+
+M02/M03/M12/M31: Cloudflare-Spielzüge speichern private Eingabechunks und einen
+vorherigen Intent mit Ablaufalarm. Ein Room-Neustart setzt denselben Moderationsjob
+fort; Netzwerkpolling blockiert die Raumqueue nicht. Vor Quota-Beginn werden
+Creator-/Profil-/Ballot-/Sitzungsbindung erneut geprüft. Der spätere HF-Checkpoint
+ersetzt die Eingabedaten. Abbruch/Ablauf/Staging-/Speicherfehler und alte Antworten
+bereinigen beziehungsweise verweigern Freigabe. 222 Units und Workerd-Grenz-/Archiv-
+integration bestanden; externe Dienste simuliert, keine neue volle Browsermatrix.
+Lobby-Gemeinschaftsbilder und Node-Entwicklungsbetrieb bleiben synchron. Das Paket
+ist noch nicht produktiv veröffentlicht; vorherige UUID bleibt maßgeblich.
+
+Live-Abrechnungstool weist beobachtete Quota-Differenz nur als aggregate-only aus,
+ausdrücklich billingVerified=false. Keine neue reale Generierung. Offizielle
+Diffusers-/Wan-/LightX2V-Dokumentation erneut geprüft: Basis-I2V ist dokumentiert,
+aber ein tatsächlich kompatibles, fest versioniertes Lightning-Rezept samt gratis
+Hardware und dessen Abnahme sind weiter offen. Keine unbelegte Producer-Freigabe.
+
 ### Release-Arbeitspaket 29.–30.10. – lokal abgenommen
 
 M02/M03/M12/M31: Services persistiert Ausgabe-Moderationstickets und vorab den

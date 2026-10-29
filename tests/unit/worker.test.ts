@@ -9,6 +9,8 @@ import { testImageData } from '../support/images';
 import { gameOptions } from '../../src/game/options';
 import { testHfPlayers, heldHfVideos } from '../support/hf-fixture';
 import { normalizeImage } from '../../src/security/images';
+import { testModerationConfig } from '../support/moderation-fixture';
+import { PendingInputs } from '../../src/security/pending-input';
 
 class TestSocket {
     get readyState() { return this.closed ? 3 : 1; }
@@ -729,4 +731,97 @@ test('Worker retries the final write before the continuation marker after a data
         assert.ok(transactions[2].some(sql => sql.includes('final_rank = null')));
         assert.equal((f.data.get('room') as Room).players[0].score, 9);
     } finally { globalThis.fetch = original; }
+});
+
+test('private input moderation survives Room recreation, starts budget only after approval and never exposes private media/tickets', async () => {
+    const original = globalThis.fetch; let approved = false, posts = 0, gets = 0;
+    const calls: string[] = [], ticket = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const services = { idFromName: () => ({}), get: () => ({ fetch: async (request: Request) => {
+        const path = new URL(request.url).pathname; calls.push(path);
+        const data = await request.json() as { name?: string };
+        return Response.json(path === '/profiles/find' ? { profile: { id: `account-${data.name}`, name: data.name } } : { ok: true });
+    } }) };
+    globalThis.fetch = async (input, options) => {
+        assert.ok(String(input).startsWith('https://moderation.test/'), 'No HF/GPU calls in this fixture');
+        const digest = new Headers(options?.headers).get('x-content-sha256');
+        if (options?.method === 'POST') { posts++; return Response.json({ id: ticket, digest, status: 'pending' }, { status: 202 }); }
+        gets++; return approved ? Response.json({ decision: 'allow', digest, decodeComplete: true,
+            policyVersion: testModerationConfig.MODERATION_POLICY_VERSION, modelVersion: testModerationConfig.MODERATION_MODEL_VERSION })
+            : Response.json({ digest, status: 'pending' }, { status: 202 });
+    };
+    try {
+        const f = await fixture('IDLE', { ...testModerationConfig, MODERATION_URL: 'https://moderation.test/jobs/validate', AI_PROVIDER: 'wan22', AUTH_MODE: '',
+            AUTH_COOKIE_SECRET: 'fixture-owner-proof-at-least-32-characters', SERVICES: services as never,
+            WAN_SPACE_ID: 'fixture/producer', WAN_SPACE_REVISION: 'a'.repeat(40), WAN_MODEL_ID: 'fixture/model', WAN_MODEL_REVISION: 'b'.repeat(40),
+            AWS_ACCESS_KEY_ID: 'fixture', AWS_SECRET_ACCESS_KEY: 'fixture', AWS_ENDPOINT_URL_S3: 'https://storage.test' });
+        const worker = f.worker as any, room = worker.room as Room;
+        room.players.forEach(p => { p.accountId = `account-${p.id}`; });
+        f.sockets.slice(0, 3).forEach(s => { s.attachment.account = { id: `account-${s.attachment.playerId}`, name: s.attachment.playerId, identityProof: 'owner', expiresAt: Date.now() + 60_000 }; });
+        let generations = 0; worker.runGeneration = () => { generations++; };
+        await worker.sendImage(room.players[0], { imageBase64: testImageData(832, 624), prompt: 'Private harmless animation' });
+        await Promise.all(f.pending);
+        assert.equal(posts, 1); assert.equal(generations, 0); assert.ok(!calls.includes('/quota/begin'));
+        const snapshot = JSON.stringify(roomSnapshot(room, 'b'));
+        assert.ok(!snapshot.includes('Private harmless animation')); assert.ok(!snapshot.includes('data:image')); assert.ok(!snapshot.includes(ticket));
+        assert.equal((f.data.get('room') as Room).generationStage, 'moderation');
+        const restored = await f.recreate() as any;
+        restored.runGeneration = () => { generations++; };
+        restored.input.retryAt = 0; await restored.alarm(); await Promise.all(f.pending);
+        assert.equal(posts, 1); assert.equal(gets, 1); assert.equal(generations, 0);
+        approved = true; restored.input.retryAt = 0; await restored.alarm(); await Promise.all(f.pending);
+        assert.equal(posts, 1); assert.equal(generations, 1); assert.equal(calls.filter(path => path === '/quota/begin').length, 1);
+        restored.room.generationJob = { status: 'submitting' };
+        await restored.saveRoom();
+        assert.equal(f.data.has('pendingInput'), false); assert.equal([...f.data.keys()].some(key => key.startsWith('image:')), false);
+    } finally { globalThis.fetch = original; }
+});
+
+test('expired, staging and newly disabled private input jobs are cleaned without external moderation or GPU submission', async () => {
+    const original = globalThis.fetch; globalThis.fetch = async () => { throw new Error('Unexpected external request'); };
+    try {
+        for (const mode of ['expired', 'staging', 'blocked']) {
+            const calls: string[] = [];
+            const services = { idFromName: () => ({}), get: () => ({ fetch: async (r: Request) => { calls.push(new URL(r.url).pathname); return Response.json({ ok: true }); } }) };
+            const f = await fixture('IDLE', { ...testModerationConfig, AI_PROVIDER: 'wan22', AI_GENERATION_RELEASE: mode === 'blocked' ? 'blocked' : undefined,
+                SERVICES: services as never });
+            const worker = f.worker as any, room = worker.room as Room;
+            room.players[0].accountId = 'account-a';
+            const input = await new PendingInputs(f.storage).create({ id: crypto.randomUUID(), code: room.code, creatorId: 'a', accountId: 'account-a', ballotId: room.ballotId, prompt: 'Private expired prompt' }, testImageData(832, 624));
+            if (mode === 'expired') input.expiresAt = Date.now() - 1;
+            if (mode === 'staging') input.stage = 'staging';
+            await f.storage.put('pendingInput', input);
+            room.state = 'GENERATING'; room.generationId = input.id; room.currentPrompt = input.prompt;
+            await worker.saveRoom();
+            const restored = await f.recreate() as any;
+            if (restored.input) { restored.input.retryAt = 0; await restored.alarm(); await Promise.all(f.pending); }
+            assert.equal(f.data.has('pendingInput'), false, mode);
+            assert.equal([...f.data.keys()].some(key => key.startsWith('image:')), false, mode);
+            assert.equal((f.data.get('room') as Room).state, 'IDLE', mode);
+            assert.equal((f.data.get('room') as Room).currentPrompt, '', mode);
+            assert.ok(!calls.includes('/quota/begin'), mode);
+        }
+    } finally { globalThis.fetch = original; }
+});
+
+test('approval arriving after the creator turn changes cannot restore private input or begin a generation', async () => {
+    const original = globalThis.fetch; let notify!: () => void, complete!: () => void;
+    const started = new Promise<void>(resolve => { notify = resolve; }), done = new Promise<void>(resolve => { complete = resolve; });
+    const calls: string[] = [];
+    globalThis.fetch = async (_url, options) => {
+        notify(); await done;
+        return Response.json({ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', digest: new Headers(options?.headers).get('x-content-sha256'), status: 'pending' }, { status: 202 });
+    };
+    try {
+        const services = { idFromName: () => ({}), get: () => ({ fetch: async (r: Request) => { calls.push(new URL(r.url).pathname); return Response.json({ ok: true }); } }) };
+        const f = await fixture('IDLE', { ...testModerationConfig, MODERATION_URL: 'https://moderation.test/jobs/validate', AI_PROVIDER: 'wan22', SERVICES: services as never });
+        const worker = f.worker as any, room = worker.room as Room; room.players[0].accountId = 'account-a';
+        const input = await new PendingInputs(f.storage).create({ id: crypto.randomUUID(), code: room.code, creatorId: 'a', accountId: 'account-a', ballotId: room.ballotId, prompt: 'Safe pending prompt' }, testImageData(832, 624));
+        room.state = 'GENERATING'; room.generationId = input.id; room.currentPrompt = input.prompt; await worker.saveRoom();
+        const restored = await f.recreate() as any; restored.input.retryAt = 0;
+        await restored.alarm(); await started;
+        restored.room.state = 'IDLE'; restored.room.generationId = undefined; restored.room.currentPrompt = ''; restored.room.activeCreatorIndex = 1;
+        await restored.saveRoom(); complete(); await Promise.all(f.pending);
+        assert.equal(f.data.has('pendingInput'), false); assert.equal(f.data.has('moderation-checkpoints'), false);
+        assert.ok(!calls.includes('/quota/begin')); assert.equal((f.data.get('room') as Room).activeCreatorIndex, 1);
+    } finally { complete?.(); globalThis.fetch = original; }
 });

@@ -10,6 +10,24 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Implementiert und erhalten
 
+- Neues lokales Paket 30.10.: persistente Eingabemoderation für Cloudflare-Spielzüge.
+  Private Bildchunks mit Intent vor erstem Chunk, sechsminütiger Retention und
+  Alarm vor Speicherung. Room-Recreation übernimmt Ticket und Eingabe; Statusabfrage
+  außerhalb serieller Raumqueue. Vor Quota-Beginn erneut Profilinhaber/Sitzung prüfen.
+  Provider-Submission-Checkpoint ersetzt anschließend die private Eingabe;
+  Austritt, Ablauf, unvollständige Speicherung und blockierte Freigabe bereinigen.
+  Verspätete Antworten dürfen weder Eingabe neu speichern noch Quota/GPU starten.
+  Keine private Bild-URL/Prompts/Tickets in Snapshots. Neue Stufe „Bild und Prompt
+  werden geprüft“, Wiederverbindungsfrist unverändert.
+- Lokaler Live-Testbericht unterscheidet jetzt aggregierte Kontingentdifferenz
+  ausdrücklich von jobgenauer Abrechnung (billingVerified=false). Keine Live-Jobs
+  oder erneuten HF-Anmeldungen in diesem Paket. Keine neuen Modell-/GPU-Downloads.
+- Build/222 Units bestanden; 35 gezielte Speicher-/Worker-Tests einschließlich
+  DO-Neuerstellung mit persistiertem Zustand. Workerd-Grenzen und Worker/DO-
+  Archiv-/Alarm-Integration Exit0, externe Dienste simuliert. Keine neue vollständige
+  Browsermatrix für dieses Paket; Produktionsstand unten bleibt der vorige Release.
+  Live-One-Shot-Schutz und Generation-View-Tests ebenfalls bestanden (2/2).
+
 - Branch codex/audit-remediation; alle früheren Commits erhalten.
 - 138068a: verschlüsselte SQLite-Moderationsjobs, Lease/TTL/Recovery/Lost-ACK-Lookup
   im separaten Dienst; `/api/release` für Node/Worker.
@@ -76,9 +94,10 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 1. P0: Moderationskandidat/Gratis-Hosting qualifizieren. NSFW/SmolVLM bisher bei
    harmlosen Fällen/Format/Latenz gescheitert. Keine identischen Diagnoserunden,
    keine erfundene qualification.json; Korpus-/Fach-/Lizenzabnahme fehlt.
-2. P0: Eingabemoderation mit privaten persistenten Room-Checkpoints/Alarmen verbinden.
-   Ausgabetickets sind integriert, Eingabe weiterhin max.30s. SQLite-Volume beim
-   Hoster prüfen: /tmp überlebt keinen garantierten Space-Rebuild.
+2. P0: Cloudflare-Spielzüge nutzen nun private persistente Eingabejobs. Weitere
+   Pfade: gemeinsame Bildauswahl in der Lobby und Node-Entwicklungsserver weiterhin
+   synchron/max.30s; deren langfristige Orchestrierung bleibt offen. SQLite-Volume
+   beim Hoster prüfen: /tmp überlebt keinen garantierten Space-Rebuild.
 3. P0: kontrollierter Wan-Produzent mit kompatiblem festem Modell-/Lightning-Rezept
    und Hosting fehlt. wan-service/PROGRESS.md nur Vorbereitung; Drift-Gates strikt.
 4. P0: echte HF-Abrechnung fehlt. Zwei Konten am28.10. lesend isoliert geprüft,
@@ -94,8 +113,9 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Nächster konkreter Schritt
 
-1. Eingabe-Moderation analog zur Ausgabe mit privaten Room-Checkpoints/Alarmen
-   integrieren, ohne lange serielle Operationen oder neue GPU-Anfrage bei Recovery.
+1. Neue Room-Eingabejobs mit tatsächlicher qualifizierter Moderation und Provider
+   abnehmen; anschließend Lobby-Gemeinschaftsbild und Node-Pfad konsolidieren.
+   Vor einem neuen Deployment vollständige relevante Browsermatrix nachholen.
 2. Moderationsalternative/Hosting qualifizieren und kontrollierten Wan-Produzenten
    fertigstellen. Negative Diagnosen nicht einfach wiederholen oder Gates lockern.
 3. Danach neue persönliche HF-Anmeldungen über den sicheren OAuth-Prüfweg und
