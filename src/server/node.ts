@@ -23,7 +23,7 @@ import { huggingFaceResponse } from './huggingface';
 import { privatePath } from './indexing';
 import { securityHeaders } from '../security/headers';
 import { operationFailure } from '../security/diagnostics';
-import { releaseId } from '../security/release';
+import { releaseId, releaseResponse } from '../security/release';
 import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
@@ -149,6 +149,7 @@ function webRequest(req: express.Request) {
     for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
     return new Request(`${req.protocol}://${req.get('host')}${req.originalUrl}`, { method: req.method, headers, body: typeof req.body === 'string' && req.method !== 'GET' && req.method !== 'HEAD' ? req.body : undefined });
 }
+app.all('/api/release', (req, res) => { void webResponse(releaseResponse(req.method, process.env.APP_RELEASE_ID), res); });
 async function webResponse(response: Response, res: express.Response) {
     res.status(response.status);
     for (const [key, value] of response.headers) if (key !== 'set-cookie') res.setHeader(key, value);

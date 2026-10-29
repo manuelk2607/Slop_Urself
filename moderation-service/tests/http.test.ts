@@ -5,6 +5,10 @@ import { createHash } from 'node:crypto';
 import { moderationServer } from '../src/http.js';
 import { POLICY_VERSION } from '../src/policy.js';
 import { request as httpRequest } from 'node:http';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ModerationJobs } from '../src/jobs.js';
 test('HTTP protocol authenticates, binds decisions and separates evaluation from qualified approval', async t => {
     let qualified = false, calls = 0;
     const secret = 'protocol-test-only-secret-at-least-32-characters', version = 'a'.repeat(64);
@@ -88,6 +92,11 @@ test('background jobs require authentication/digest and never publish expired or
     assert.equal((await post('/jobs/validate')).status,503);assert.equal(calls,0);
     const pending=await post('/jobs/evaluate');assert.equal(pending.status,202);
     const ticket=await pending.json() as {id:string;evaluationOnly:boolean};assert.equal(ticket.evaluationOnly,true);
+    assert.equal((await fetch(base+'/jobs/lookup')).status,401);
+    assert.equal((await fetch(base+'/jobs/lookup',{headers})).status,400);
+    const lookup=await fetch(base+'/jobs/lookup',{headers:{...headers,'x-moderation-mode':'evaluate'}});
+    assert.equal(lookup.status,202);assert.equal((await lookup.json() as {id:string}).id,ticket.id);
+    assert.equal((await fetch(base+'/jobs/lookup',{headers:{...headers,'x-moderation-mode':'validate'}})).status,503);
     assert.equal((await fetch(base+'/jobs/'+ticket.id,{headers})).status,202);
     assert.equal((await post('/jobs/evaluate')).status,429);assert.equal(calls,1);
     assert.equal((await fetch(base+'/jobs/'+ticket.id)).status,401);
@@ -96,6 +105,37 @@ test('background jobs require authentication/digest and never publish expired or
     const completed=await fetch(base+'/jobs/'+ticket.id,{headers});assert.equal(completed.status,200);
     assert.equal((await completed.json() as {evaluationOnly:boolean}).evaluationOnly,true);
     qualified=true;const second=await (await post('/jobs/validate')).json() as {id:string};
+    assert.notEqual(second.id,ticket.id,'evaluation cannot become a validation ticket');
     finish();await new Promise(resolve=>setTimeout(resolve,10));qualified=false;
     assert.equal((await fetch(base+'/jobs/'+second.id,{headers})).status,503);
+});
+
+test('a restarted HTTP service resumes its persisted input and serves only its bound result', async t => {
+    const secret = 'restart-http-test-only-secret-at-least-32', version = 'e'.repeat(64);
+    const dir = mkdtempSync(join(tmpdir(), 'slop-http-restart-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const path = join(dir, 'jobs.sqlite');
+    const input = { stage: 'input' as const, image: 'safe-fixture', prompt: 'benign' };
+    const digest = createHash('sha256').update(JSON.stringify(input)).digest('hex');
+    const before = new ModerationJobs(path, secret, version);
+    const ticket = before.create(digest, true, input); before.close();
+    const jobs = new ModerationJobs(path, secret, version); t.after(() => jobs.close());
+    let calls = 0;
+    const server = moderationServer({ secret, version, jobs, qualified: () => false, engine: () => ({
+        input: async (image, prompt) => { calls++; assert.equal(image, input.image); assert.equal(prompt, input.prompt); return { decision: 'review' }; },
+        output: async () => { throw new Error('Wrong stage'); }
+    }) });
+    server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    t.after(() => { server.closeAllConnections(); server.close(); });
+    const address = server.address(); assert.ok(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}/jobs/${ticket.id}`;
+    const headers = { authorization: `Bearer ${secret}`, 'x-content-sha256': digest };
+    let response: Response | undefined;
+    for (let n = 0; n < 30; n++) {
+        response = await fetch(url, { headers }); if (response.status !== 202) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(response?.status, 200); assert.equal(calls, 1);
+    const result = await response!.json() as { evaluationOnly?: boolean; digest?: string; decision?: string };
+    assert.equal(result.evaluationOnly, true); assert.equal(result.digest, digest); assert.equal(result.decision, 'review');
+    assert.equal((await fetch(url, { headers: { ...headers, 'x-content-sha256': 'wrong' } })).status, 404);
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { releaseId } from '../../src/security/release';
+import { releaseId, releaseResponse } from '../../src/security/release';
 import worker from '../../src/server/cloudflare/worker';
 import { logAiEvent } from '../../src/ai/telemetry';
 test('only actual deployment identifiers reach release headers; query redaction is configured', async () => {
@@ -26,4 +26,16 @@ test('release correlation never logs unvalidated environment values', () => {
         assert.equal(JSON.parse(lines[1]).releaseId, undefined);
         assert.doesNotMatch(lines.join(''), /secret|private/);
     } finally { console.info = original; }
+});
+
+test('release probe bypasses account/services dependencies and never caches or fabricates missing versions', async () => {
+    const id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const response = await worker.fetch(new Request('https://game.test/api/release'), { CF_VERSION_METADATA: { id } } as never);
+    assert.equal(response.status, 200); assert.deepEqual(await response.json(), { release: id });
+    assert.equal(response.headers.get('Cache-Control'), 'no-store');
+    assert.match(response.headers.get('X-Robots-Tag') || '', /noindex/);
+    assert.equal(releaseResponse('POST', id).status, 405);
+    assert.equal(await releaseResponse('HEAD', id).text(), '');
+    const missing = releaseResponse('GET', 'token=private');
+    assert.equal(missing.status, 503); assert.deepEqual(await missing.json(), { release: null });
 });

@@ -1,5 +1,7 @@
 import { boundedJson } from '../server/body';
 
+class LostAcknowledgement extends Error {}
+
 export async function moderationRequest(url: string, secret: string, body: string, digest: string,
     wait: (signal: AbortSignal) => Promise<void> = signal => new Promise((resolve, reject) => {
         const done = () => { signal.removeEventListener('abort', aborted); resolve(); };
@@ -13,17 +15,27 @@ export async function moderationRequest(url: string, secret: string, body: strin
     // five minutes. Long jobs need a durable checkpoint/resume orchestrator;
     // until that exists, an overlong check remains unavailable, never approved.
     const signal = AbortSignal.timeout(30_000);
-    const headers = { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'x-content-sha256': digest };
+    const headers = { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'x-content-sha256': digest, 'x-moderation-mode': 'validate' };
     const request = async (target: string, method: 'GET' | 'POST') => {
         signal.throwIfAborted();
-        const response = await fetch(target, { method, redirect: 'manual', headers,
-            ...(method === 'POST' ? { body } : {}), signal });
+        let response: Response;
+        try { response = await fetch(target, { method, redirect: 'manual', headers,
+            ...(method === 'POST' ? { body } : {}), signal }); }
+        catch (error) { if (method === 'POST') throw new LostAcknowledgement(); throw error; }
         if (![200, 202].includes(response.status) || !response.headers.get('content-type')?.includes('application/json')) {
             await response.body?.cancel(); throw new Error('Moderation unavailable');
         }
         return { status: response.status, value: await boundedJson(response, 16_384) };
     };
-    let response = await request(url, 'POST');
+    let response;
+    try { response = await request(url, 'POST'); }
+    catch (error) {
+        if (!asynchronous || !(error instanceof LostAcknowledgement)) throw error;
+        const lookup = new URL(endpoint.href); lookup.pathname = endpoint.pathname.slice(0, -'validate'.length) + 'lookup';
+        // Recover a persisted acknowledgement by digest; never create a second job.
+        response = await request(lookup.href, 'GET');
+        if (response.status !== 202) throw new Error('Invalid moderation lookup');
+    }
     if (response.status === 200) return response.value;
     if (!asynchronous) throw new Error('Unexpected pending moderation');
     const ticket = response.value as { id?: unknown; digest?: unknown; evaluationOnly?: unknown } | null;

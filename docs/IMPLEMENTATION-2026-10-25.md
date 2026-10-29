@@ -4,6 +4,25 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Aktuellster Nachtrag, 29.10.: Dienstpersistenz und Release-Prüfung
+
+M02/M03/M31: SQLite-Journal speichert verschlüsselte Moderationseingaben/Ergebnisse
+vor Bestätigung. Begrenzte Retention, atomare Compute-Lease, maximal zwei Versuche
+nach Prozessausfall, versionsgebundene Resultate und Schutz gegen verspätete Worker.
+24 Diensttests und Dienst-Build bestanden. Speicher-/HTTP-Neustarttests verwenden
+synthetische Daten; keine semantische Qualifikation. Ein dauerhaft gemountetes Volume
+beim Hoster und persistente Tickets in den Spiel-DOs sind weiter erforderlich.
+Der gesamte Moderationspunkt ist ausdrücklich noch nicht abgeschlossen.
+
+M20/M45: öffentlicher, nicht gecachter `/api/release` in beiden Runtimes; fehlende
+Version führt zu 503, nur bestätigte Versionsformate werden ausgegeben. Root-Build,
+212 Units und workerd-Grenzintegration bestanden. Vollständige Browsermatrix vor
+einem Release noch offen. Cloudflare-API bestätigt aktive Version
+`ee71b881-67c6-4140-bba4-bca3e96e6e14` (Secretänderung 29.10., Anwendung zuletzt
+23.10.). Lokale Auditkorrekturen sind nicht deployed. Produktionsbindungen ohne
+MODERATION_*, WAN_* und CF_VERSION_METADATA; nur Namen/ausgewählte Modellparameter
+gelesen. Keine neue Veröffentlichung oder echte KI-Aufträge in diesem Paket.
+
 ## Abgeschlossene Implementierungspakete
 
 | Auditpunkte | Änderung | Abnahmegrenze |

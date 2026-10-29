@@ -1,5 +1,67 @@
 # Audit-Umsetzung – Stand 29. Oktober 2026
 
+## Fortsetzung – persistente Dienstjobs und produktiver Versionsabgleich
+
+- **M02/M03/M31, dienstseitig umgesetzt:** Moderationsaufträge werden vor HTTP 202
+  in SQLite bestätigt; Eingaben/Resultate AES-256-GCM-verschlüsselt, gebunden an
+  Ticket/Digest/Modellversion/Modus. Standardpfad `/tmp/slop-moderation/jobs.sqlite`,
+  konfigurierbares geschütztes Volume über `MODERATION_JOB_DB` und separater
+  Schlüssel `MODERATION_JOB_KEY`. Datei 0600, vier Tickets, sechs Minuten Retention.
+  `/tmp` garantiert keinen Erhalt bei einem Hoster-Rebuild; Volumeabnahme offen.
+- Atomare Compute-Lease verhindert parallele Hintergrundberechnung über getrennte
+  SQLite-Verbindungen. Nach Prozessabbruch maximal eine erneute Moderationsprüfung;
+  keine HF-Inferenz in diesem Dienst. Alte Worker dürfen terminale/abgelaufene
+  Ergebnisse nicht überschreiben. Schlüssel-/Versionswechsel übernimmt keine
+  Freigaben. Authentifiziertes `/jobs/status` liefert nur Statusanzahlen/Slotbelegung.
+  Bei verlorener POST-Verbindung fragt der Spieltransport `/jobs/lookup` mit
+  Bearer/Digest/Validierungsmodus ab; kein zweiter POST und keine Übernahme von
+  Evaluationstickets. Room-Eviction bleibt unabhängig davon offen.
+- Dienst-Build und **24 technische Tests bestanden**, einschließlich Wiederöffnung,
+  konkurrierender Claims, verlorener Bestätigung, Verschlüsselung, TTL, falschem
+  Schlüssel, Versionswechsel, verspäteter Antwort und HTTP-Wiederanlauf.
+  Das ist keine semantische Qualifikation. **Room-/Service-Orchestrierung bleibt
+  unvollständig:** Spieltickets sind noch nicht in DO-Checkpoints/Alarmen gespeichert;
+  der Spielclient wartet weiterhin 30s. M02/M03 bleiben insgesamt offen.
+- **M20/M45:** `/api/release` für Node/Worker ergänzt, mit validierter Release-ID,
+  no-store, noindex, GET/HEAD und 503 bei fehlender ID. Keine Secrets/Kontodaten.
+  Root-Build, 212/212 Units und workerd-HF-/Moderationsgrenzintegration bestanden.
+  Anschließend zusätzlicher Lost-Acknowledgement-Test (8/8 gezielte Release-/
+  Moderationschecks) bestanden; Gesamtzahl jetzt 213, Gesamtsuite nach diesem
+  kleinen Lookup-Paket nicht erneut ausgeführt.
+  Keine neue vollständige Browsermatrix; vor Veröffentlichung nachholen.
+- **Produktion jetzt per Cloudflare-API verifiziert:** aktiver Worker
+  `ee71b881-67c6-4140-bba4-bca3e96e6e14`, Deployment vom 29.10. durch Secretänderung;
+  letztes Anwendungsdeployment am 23.10. (`2136ab45-a14b-4af3-973a-55479bfd18cc`).
+  Lokale Auditkorrekturen ab 25.10. sind daher nicht veröffentlicht. Ausgelesen nur
+  Bindungsnamen und ausgewählte Modellangaben, keine Secretwerte. Aktive Bindungsliste
+  enthält weder MODERATION_* noch WAN_* oder CF_VERSION_METADATA, wohl aber HF_TOKEN.
+  Kein Beleg produktiver Moderations-/Modellkontrolle; keine produktive Sicherheits-
+  freigabe behaupten. WAF, DB-Backups und tatsächliche Abrechnung nicht geprüft.
+- **Nächster konkreter Schritt:** das vorhandene Dienstticket mit persistenten,
+  privaten Room-/Service-Checkpoints und Alarmen verbinden (inklusive verlorener
+  Empfangsbestätigung), ohne lange serielle Raumoperationen. Danach passende
+  Moderationsalternative qualifizieren und kontrollierten Wan-Produzenten abnehmen.
+  Zwei-Konten-GPU-Test erst nach diesen Abnahmen und ausdrücklicher Umfangsfreigabe.
+- Keine GPU-Aufträge, keine Produktionsdatenänderung, kein Push/Deployment.
+
+## Validierungscheck – 29. Oktober 2026, 10:29 CET
+
+- Repository sauber auf `b7e2163` (`codex/audit-remediation`); keine uncommitteten
+  Änderungen. `npm run build` und `npm test` erfolgreich: 211/211 Tests bestanden.
+  Die Tests verwenden ausschließlich Mock-/synthetische Providerdaten und sind kein
+  Nachweis einer echten HF-Abrechnung oder semantischen Moderationsqualität.
+- Produktionsprüfung mit Googlebot-Kennung: Startseite HTTP 200, `/robots.txt`
+  HTTP 200 mit `text/plain`, ohne Weiterleitung und mit öffentlichen Regeln;
+  `/sitemap.xml` HTTP 200 mit `application/xml` und gültigem `urlset`. Damit ist
+  der frühere Robots-/Sitemap-Befund zum Prüfzeitpunkt nicht reproduzierbar.
+- Der produktive Abruf liefert keinen auswertbaren `X-Slop-Release`-Header. Deshalb
+  ist nicht verifiziert, dass der lokale Stand `b7e2163` deployed ist; lokale
+  Sicherheitskorrekturen dürfen nicht automatisch dem Produktionsstand zugerechnet
+  werden. Kein Deployment in diesem Validierungsauftrag.
+- **Freigabestatus unverändert:** Moderationsqualität, dauerhafte Moderationsjobs,
+  kontrollierter Wan-Produzent und tatsächlicher HF-Abrechnungsnachweis fehlen.
+  Echte GPU-Generierung bleibt daher gesperrt.
+
 ## Auftrag und Grenzen
 
 Offene Maßnahmen aus `docs/IMPLEMENTATION-2026-10-25.md` und beiden Audits vom
@@ -176,7 +238,7 @@ Ausführliche Grenzen/ältere Tests stehen im Implementierungsbericht.
 ## Nächste konkrete Schritte
 
 1. Lokale Sicherheits-/Recoverypakete und aktuelle Regressionen abgeschlossen und
-   gesichert. Beim nächsten P0-Abhängigkeitsschritt beziehungsweise unabhängigen
+  gesichert. Beim nächsten P0-Abhängigkeitsschritt beziehungsweise unabhängigen
    P1-Rest ansetzen; keine erneute identische Gesamtsuite ohne Quelländerung.
 2. P0 mit geeignetem Moderationskandidaten/Hardware und kontrolliertem Wan fortsetzen,
    ohne Fail-Closed-Gate zu umgehen. Zwei Konten erst für separat freigegebenen GPU-Test wieder verbinden.

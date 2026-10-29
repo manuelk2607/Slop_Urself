@@ -150,10 +150,36 @@ Auftragskennung. `GET /jobs/{id}` verlangt denselben Bearer-Schlüssel und
 kurzlebige Ergebnisdatensätze, fünf Minuten Arbeitsdeadline, Upload weiter maximal
 25 Sekunden. Ein nicht abbrechbarer Modelllauf hält den Slot bis zu seinem echten
 Ende. Evaluation bleibt `evaluationOnly`, Qualifikation wird beim Ergebnisabruf
-erneut geprüft. Keine Medien auf Platte außer bestehenden kurzlebigen FFmpeg-Dateien.
-Die Auftragsliste liegt nur im RAM: Neustart/Verfall liefert keine Freigabe.
-**Noch nicht in die Spiel-Orchestrierung integriert**, kein langlebiger Recovery-
-Nachweis. Die bestehende semantische und 25s-Qualifikationsgrenze wurde nicht gelockert.
+erneut geprüft. Die bestehende semantische und 25s-Qualifikationsgrenze wurde nicht gelockert.
+
+Die Server-Auftragsliste liegt jetzt in SQLite (`MODERATION_JOB_DB`, Standard
+`/tmp/slop-moderation/jobs.sqlite`). Eingaben und Resultate sind mit AES-256-GCM
+verschlüsselt und an Auftrag, Digest, Version und Prüfmodus gebunden. Konfiguriere
+`MODERATION_JOB_KEY` separat (mindestens 32 Zeichen); ohne ihn wird ein getrennter
+Schlüssel aus `MODERATION_SECRET` abgeleitet. Niemals Schlüssel ins Repository schreiben.
+Die Datei erhält Modus 0600. Das Verzeichnis gehört ausschließlich dem Dienst.
+Der Hoster muss dieses Volume erhalten: `/tmp` überlebt einen Prozessneustart,
+aber kein garantiertes Space-Rebuild. Backups/Dateikopien können verschlüsselte
+Inhalte über die logische Ablaufzeit hinaus enthalten; keine Löschgarantie beim Hoster.
+
+SQLite bestätigt den Datensatz vor HTTP 202; derselbe Digest/Modus/Versionsstand
+erhält innerhalb der sechsminütigen Retention dasselbe Ticket. Eine atomare
+fünfminütige Compute-Lease sperrt andere Hintergrundworker. Nach einem Absturz
+kann nur die **Moderationsprüfung** erneut laufen (maximal zwei Versuche, niemals
+eine HF-Generierung). Ergebnisse alter/abgelaufener Worker werden verworfen.
+Fertige/fehlgeschlagene Tickets werden nicht erneut berechnet; abgelaufene Daten
+werden bei Zugriff und sekündlich entfernt. Schlüssel-/Versionswechsel erlaubt
+keine Übernahme alter Freigaben. `GET /jobs/status` liefert authentifiziert nur
+Statusanzahlen und Slotbelegung, keine Bilddaten, Prompts oder Auftragskennungen.
+Bei verlorener POST-Verbindung kann `GET /jobs/lookup` mit demselben Bearer/Digest
+und `x-moderation-mode: validate` das bestätigte Ticket wiederfinden. Es wird kein
+neuer POST gesendet. Evaluation- und Validierungstickets bleiben getrennt.
+Synchrone `/validate`-Instanzen separat nicht parallel gegen dieselbe CPU betreiben.
+
+**Raum-/Service-Orchestrierung bleibt offen:** Die Spielseite persistiert Tickets
+noch nicht und wartet maximal 30 Sekunden. Dienstseitige Prozess-Recovery ersetzt
+keine Wiederaufnahme nach Room-/Worker-Eviction. Ein unqualifiziertes Modell bleibt
+gesperrt; die SQLite-Tests sind technische Prüfungen, keine semantische Abnahme.
 
 Spieltransport: MODERATION_URL kann auf /jobs/validate zeigen. Die zentrale
 Spielprüfung kann Pending-Tickets sicher pollen, wartet aber bis zur persistenten

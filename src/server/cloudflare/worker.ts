@@ -15,7 +15,7 @@ import { indexingResponse } from '../indexing';
 import { contentReportResponse } from '../content-reports';
 import type { Account } from '../../auth/session';
 import { operationFailure } from '../../security/diagnostics';
-import { releaseId } from '../../security/release';
+import { releaseId, releaseResponse } from '../../security/release';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
@@ -33,6 +33,7 @@ export default {
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
+        if (url.pathname === '/api/release') return releaseResponse(request.method, env.CF_VERSION_METADATA?.id);
         const seoResponse = publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
         const auth = cloudflareAuth(env);

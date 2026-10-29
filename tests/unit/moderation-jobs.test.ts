@@ -7,6 +7,27 @@ import { testImageData } from '../support/images';
 import { readFile } from 'node:fs/promises';
 import { testModerationConfig } from '../support/moderation-fixture';
 
+test('a lost POST acknowledgement recovers its authenticated digest ticket without repeating submission', async () => {
+    const original = globalThis.fetch, digest = 'a'.repeat(64), id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    let posts = 0, reads = 0;
+    try {
+        globalThis.fetch = async (input, options) => {
+            assert.equal(new Headers(options?.headers).get('authorization'), 'Bearer test-secret');
+            assert.equal(new Headers(options?.headers).get('x-content-sha256'), digest);
+            if (options?.method === 'POST') { posts++; throw new Error('Connection lost after persistence'); }
+            reads++; assert.equal(options?.body, undefined);
+            if (String(input).endsWith('/lookup')) {
+                assert.equal(new Headers(options?.headers).get('x-moderation-mode'), 'validate');
+                return Response.json({ id, digest, status: 'pending' }, { status: 202 });
+            }
+            assert.equal(String(input), `https://moderation.test/jobs/${id}`);
+            return Response.json({ decision: 'review', digest });
+        };
+        assert.deepEqual(await moderationRequest('https://moderation.test/jobs/validate', 'test-secret', '{}', digest, async () => {}), { decision: 'review', digest });
+        assert.equal(posts, 1); assert.equal(reads, 2);
+    } finally { globalThis.fetch = original; }
+});
+
 test('async moderation polls only the fixed authenticated origin and never treats pending as approval', async () => {
     const original=globalThis.fetch, id='a'.repeat(8)+'-aaaa-aaaa-aaaa-'+'a'.repeat(12), digest='d'.repeat(64);
     const calls: string[]=[];let reads=0;
