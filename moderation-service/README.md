@@ -142,3 +142,15 @@ einer Anfrage gemeinsam bewertet; unterschiedliche Frames weiterhin vollständig
 Qualifikationsvideos müssen mindestens 80 unterschiedliche Frames nachweisen.
 Technische Tests sind keine semantische Qualitätsabnahme. Siehe
 [28.10.-Diagnose](../docs/audits/2026-10-28-moderation-labels-v2.json).
+
+29.10.: Vorbereitete Hintergrundschnittstelle: `POST /jobs/evaluate` bzw.
+`POST /jobs/validate` antwortet nach validiertem Upload mit 202 und einer zufälligen
+Auftragskennung. `GET /jobs/{id}` verlangt denselben Bearer-Schlüssel und
+`x-content-sha256`; 202 ist niemals eine Freigabe. Ein Compute-Slot, maximal vier
+kurzlebige Ergebnisdatensätze, fünf Minuten Arbeitsdeadline, Upload weiter maximal
+25 Sekunden. Ein nicht abbrechbarer Modelllauf hält den Slot bis zu seinem echten
+Ende. Evaluation bleibt `evaluationOnly`, Qualifikation wird beim Ergebnisabruf
+erneut geprüft. Keine Medien auf Platte außer bestehenden kurzlebigen FFmpeg-Dateien.
+Die Auftragsliste liegt nur im RAM: Neustart/Verfall liefert keine Freigabe.
+**Noch nicht in die Spiel-Orchestrierung integriert**, kein langlebiger Recovery-
+Nachweis. Die bestehende semantische und 25s-Qualifikationsgrenze wurde nicht gelockert.

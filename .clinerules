@@ -5,7 +5,7 @@
   - env.AUDIO (Cloudflare R2 Bucket)
   - env.AI (Workers AI)
 - Datenbank:
-  - Nutze für alle DB-Checks, Tabelleninspektionen und Migrationen ausschließlich das MCP-Tool `slop_urself`.
+  - Nutze für DB-Checks, Tabelleninspektionen und Migrationen ausschließlich den vorhandenen Neon-MCP-Zugang, beschränkt auf Projekt `autumn-leaf-19858358` (Slop Urself). Produktive PostgreSQL-Datenbank: `Slop_Urself`, Branch `production` (`br-soft-math-b1efy5s0`). Keine anderen Projekte bearbeiten.
   - Verwende im Code den Treiber `@neondatabase/serverless`.
 - Deployment & CLI:
   - Lokale Entwicklung und Tests: `npx wrangler dev` bzw. `npx wrangler pages dev`.

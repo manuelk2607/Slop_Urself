@@ -72,3 +72,30 @@ test('inference is cancelled on deadline and an expired qualification cannot app
     mode = 'expire'; assert.equal((await post()).status, 503);
     mode = 'normal'; qualified = true; assert.equal((await post()).status, 200);
 });
+
+test('background jobs require authentication/digest and never publish expired or evaluation-only approvals', async t => {
+    const secret='async-test-secret-at-least-32-characters', version='d'.repeat(64);
+    let qualified=false, calls=0, finish!:()=>void;
+    const server=moderationServer({secret,version,qualified:()=>qualified,engine:()=>({
+        input:async()=>{calls++;await new Promise<void>(resolve=>{finish=resolve;});return {decision:'allow',decodeComplete:true};},output:async()=>({decision:'review'})
+    })});
+    server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>{server.closeAllConnections();server.close();});
+    const address=server.address();assert.ok(address&&typeof address!=='string');const base=`http://127.0.0.1:${address.port}`;
+    const body=JSON.stringify({stage:'input',image:'fixture',prompt:'benign',policyVersion:POLICY_VERSION,modelVersion:version});
+    const digest=createHash('sha256').update(body).digest('hex');
+    const headers={authorization:`Bearer ${secret}`,'content-type':'application/json','x-content-sha256':digest};
+    const post=(path:string)=>fetch(base+path,{method:'POST',headers,body});
+    assert.equal((await post('/jobs/validate')).status,503);assert.equal(calls,0);
+    const pending=await post('/jobs/evaluate');assert.equal(pending.status,202);
+    const ticket=await pending.json() as {id:string;evaluationOnly:boolean};assert.equal(ticket.evaluationOnly,true);
+    assert.equal((await fetch(base+'/jobs/'+ticket.id,{headers})).status,202);
+    assert.equal((await post('/jobs/evaluate')).status,429);assert.equal(calls,1);
+    assert.equal((await fetch(base+'/jobs/'+ticket.id)).status,401);
+    assert.equal((await fetch(base+'/jobs/'+ticket.id,{headers:{...headers,'x-content-sha256':'wrong'}})).status,404);
+    finish();await new Promise(resolve=>setTimeout(resolve,10));
+    const completed=await fetch(base+'/jobs/'+ticket.id,{headers});assert.equal(completed.status,200);
+    assert.equal((await completed.json() as {evaluationOnly:boolean}).evaluationOnly,true);
+    qualified=true;const second=await (await post('/jobs/validate')).json() as {id:string};
+    finish();await new Promise(resolve=>setTimeout(resolve,10));qualified=false;
+    assert.equal((await fetch(base+'/jobs/'+second.id,{headers})).status,503);
+});

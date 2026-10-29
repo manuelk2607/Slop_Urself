@@ -590,3 +590,33 @@ noch Resume dürfen einen zweiten POST senden. Danach Build/207 Unit-Tests und
 direkte workerd-Grenztests Exit 0. Die komplette Browsermatrix wurde für diesen
 kleinen API-Guard nicht nochmals ausgeführt; ihr erfolgreicher Quellstand bleibt
 2491d05. Keine zusätzlichen HF-/GPU-Aufträge oder Produktionsänderungen.
+
+
+### 29.10.: DB-Zugang, tatsächliche Umbenennung, Moderations-Hintergrundschnittstelle
+
+Der Nutzer hat den projektgebundenen vorhandenen Neon-Zugang und anschließend
+explizit die Umbenennung des tatsächlichen Datenbanknamens beauftragt. `.clinerules`
+erlaubt jetzt ausschließlich das bekannte Slop-Projekt über Neon-MCP. Per MCP zuerst
+Branch/Datenbanken/Schema-Metadaten geprüft: production, neondb, sechs Tabellen,
+keine weiteren DB-Verbindungen. Rename-API änderte den Namen auf Slop_Urself bei
+unveränderter DB-ID 281758. Danach Cloudflare-DATABASE_URL-Secret und beide ignorierten
+lokalen Konfigurationsdateien ohne Ausgabe der Werte umgestellt. MCP bestätigt
+current_database()=Slop_Urself und sechs Tabellen. Homepage/Sitemap danach HTTP 200.
+Kein neues Anwendungspaket deployed, keine Tabellen/Nutzerdatensätze verändert.
+Der alte MCP-Blocker ist behoben; WAF-/Backup-/Restore-Abnahme dadurch nicht bewiesen.
+
+Der Moderationsdienst bietet zusätzlich authentifizierte /jobs/evaluate und
+/jobs/validate sowie Digest-gebundenes Polling. 202 und evaluationOnly erlauben keine
+Veröffentlichung. Ein Compute-Slot bleibt auch bei nicht abbrechbarem Modelllauf
+belegt; Upload maximal 25s, Hintergrundarbeit 5min. Höchstens vier kurzlebige
+Ergebnisdatensätze, erneute Qualifikationsprüfung beim Abruf. Build/20 technische
+Diensttests und Root-Build/207 Units bestanden. Noch keine Spielintegration oder
+dauerhafte Recovery; RAM-Verlust liefert keine Freigabe. Semantische Abnahme und
+bisherige 25s-Qualifikationsgrenze unverändert. Kein echter KI-Auftrag, keine
+Behauptung einer produktiv verfügbaren Moderation.
+
+Die aktuelle Sitemap wurde normal sowie mit Googlebot-User-Agent extern abgerufen:
+HTTP 200, application/xml, keine Weiterleitung, XML-Namespace/loc korrekt. User-Agent-
+Simulation ist kein Google-Servernachweis. Der vom Nutzer eingefügte Hinweis auf
+fehlende Style-Informationen ist eine normale XML-Browserdarstellung. Ohne konkreten
+GSC-Abrufbefund wird kein HTML-/Sitemap-Fix erfunden.

@@ -8,6 +8,38 @@ Commits erhalten. Kein Push/Deployment in diesem Auftrag. Echte KI bleibt gesper
 bis Moderation, Modellkontrolle und individuelle HF-Abrechnung qualifiziert sind.
 Keine bezahlten Aufträge, rechtswidrigen Testmedien oder produktiven Datenänderungen.
 
+## Aktueller Fortsetzungspunkt – neue Arbeiten am 29.10.
+
+- **DB-Zugang entblockt:** Nutzer erlaubt vorhandenen Neon-MCP über angepasste
+  `.clinerules`, ausschließlich Projekt autumn-leaf-19858358. Tatsächlicher DB-Name
+  auf ausdrücklichen Wunsch per Neon-API von neondb nach **Slop_Urself** geändert.
+  DB-ID 281758 unverändert, vorher/nachher sechs öffentliche Tabellen. Schema-Metadaten
+  per MCP gelesen, keine Nutzerdatensätze ausgegeben oder geändert. `.env.local`,
+  ignorierte `cloudflare/.dev.vars` und produktives DATABASE_URL-Secret angepasst,
+  Werte nur intern. Neue Anwendungsversion NICHT deployed, nur Secret aktualisiert.
+  Homepage und Sitemap danach 200. Zugriff funktioniert; alten MCP-Blocker nicht
+  wiederholen. Produktive WAF-/Backup-/Restore-Abnahme weiterhin offen.
+- **M02/M03 Hintergrund-HTTP vorbereitet:** POST /jobs/evaluate bzw. /jobs/validate
+  gibt nach gebundenem Upload 202, GET /jobs/{UUID} verlangt Bearer und Digest.
+  Ein Compute-Slot, vier kurzlebige Resultate, 25s-Upload-/5min-Arbeitsdeadline.
+  Ausstehend/fehlgeschlagen/abgelaufene Qualifikation geben niemals frei.
+  Aufträge liegen nur im RAM, Neustart ist ein sicherer Fehlschlag, KEIN dauerhafter
+  Recovery-Nachweis. Spielintegration, langlebige Auftragsverwaltung und eine
+  qualifizierte Moderationsalternative sind noch offen. Standard-Qualifikation
+  und Spiel-Gates nicht gelockert. Dienst-Build/20 Tests, Root-Build/207 Units bestanden.
+- **Wan:** offizielle Wan-/Diffusers-/LightX2V-Quellen gelesen; keine neue
+  kontrollierte Producer-Implementierung, kein Space-Deployment, keine GPU-Aufträge.
+  `wan-service/PROGRESS.md` enthält nur Vorbereitung und offene Rezept-/Versionsfragen.
+- **Sitemap real geprüft:** /sitemap.xml normal und mit Googlebot-Kennung extern
+  200, application/xml, keine Weiterleitung, gültiges XML mit einer öffentlichen URL.
+  Nutzertext „This XML file ... style information“ ist normale Browserdarstellung.
+  Echter Google-Abruf/GSC-Bericht nicht vorliegend, keine Stylesheet-/Routingänderung.
+- Nächster Schritt: Hintergrundschnittstelle sicher mit dauerhaften Spieljobs
+  verbinden; vorher qualifizierbaren Moderationskandidaten/Hosting prüfen. Kontrollierten
+  Wan-Produzenten inklusive tatsächlich kompatiblem 4-/8-Schritte-Rezept abschließen.
+  DB-abhängige P1-Aufgaben können jetzt nach Schemaabgleich wieder aufgenommen werden.
+  Zwei-Konten-Abrechnungstest erst nach Schutzabnahmen und gesonderter Umfangsfreigabe.
+
 ## Aktueller Fortsetzungspunkt – 29.10.
 
 - **M17, lesend real geprüft:** zwei verschiedene HF-Konten, fremder Profilzugriff
@@ -112,9 +144,8 @@ Ausführliche Grenzen/ältere Tests stehen im Implementierungsbericht.
 3. **M17:** Zwei reale HF-Testkonten lesend erfolgreich isoliert geprüft. Echte
    Video-/Abrechnungsprüfung benötigt separate Umfangsfreigabe und bestandene Schutz-/
    Modellabnahmen. Lesender Erfolg ist kein Belastungsnachweis; RAM-Sitzung beendet.
-4. **MCP `slop_urself` fehlt**, am 28.10. erneut in verfügbaren Tools geprüft.
-   Keine produktive DB-Inspektion/Migration, kein Ersatz über allgemeinen Neon-Zugang.
-   Produktions-WAF, Backups, Logeinstellungen und Dateiretention nicht verifiziert.
+4. **DB-Zugang am 29.10. entblockt**, siehe neuen Fortsetzungspunkt. Produktive
+   WAF, Backups, Logeinstellungen und Dateiretention bleiben unbestätigt.
 
 ## Nächste konkrete Schritte
 
