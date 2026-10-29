@@ -1,0 +1,29 @@
+{
+  "sourceCommit": "f814ecc8716808c1f39509b20b958c1c27b427d5",
+  "branch": "codex/audit-remediation",
+  "pushVerified": true,
+  "buildPassed": true,
+  "unitTests": 222,
+  "unitLogSha256": "d39738e7b32a6f64157843123f5620a72f28c4261fbff1191c9338d6fbc66125",
+  "targetedWorkerStorageTests": 35,
+  "targetedLogSha256": "6dded446a6c1822cd7ae45d219685320ee227ffacf8c3d35566b375932b56e8d",
+  "workerdBoundariesPassed": true,
+  "workerdArchiveAlarmsPassed": true,
+  "oneShotAndGenerationViewTests": 2,
+  "externalServicesSimulated": true,
+  "realGpuCalls": 0,
+  "fullBrowserMatrixRepeated": false,
+  "deployed": false,
+  "productionVersionUnchanged": "1d7af01b-569f-4b48-8d9e-4852dbabd842",
+  "generationRelease": false,
+  "moderationQualityQualified": false,
+  "controlledWanVerified": false,
+  "actualBillingVerified": false,
+  "remaining": [
+    "Shared lobby image and Node development input orchestration remain synchronous.",
+    "No new moderation-model qualification or reviewed corpus.",
+    "No controlled Wan producer/recipe deployment or hardware verification.",
+    "No fresh HF grants, authenticated production party or per-job billing proof.",
+    "Complete relevant release checks remain required before another deployment."
+  ]
+}

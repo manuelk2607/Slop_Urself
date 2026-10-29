@@ -10,7 +10,7 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Implementiert und erhalten
 
-- Neues lokales Paket 30.10.: persistente Eingabemoderation für Cloudflare-Spielzüge.
+- Neues Entwicklungspaket 30.10.: persistente Eingabemoderation für Cloudflare-Spielzüge.
   Private Bildchunks mit Intent vor erstem Chunk, sechsminütiger Retention und
   Alarm vor Speicherung. Room-Recreation übernimmt Ticket und Eingabe; Statusabfrage
   außerhalb serieller Raumqueue. Vor Quota-Beginn erneut Profilinhaber/Sitzung prüfen.
@@ -27,6 +27,9 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
   Archiv-/Alarm-Integration Exit0, externe Dienste simuliert. Keine neue vollständige
   Browsermatrix für dieses Paket; Produktionsstand unten bleibt der vorige Release.
   Live-One-Shot-Schutz und Generation-View-Tests ebenfalls bestanden (2/2).
+  Commit f814ecc auf origin/codex/audit-remediation gepusht, Remote-SHA abgeglichen.
+  Nachweis: docs/audits/2026-10-30-input-recovery.json. Nicht erneut deployed;
+  produktive UUID bleibt 1d7af01b-569f-4b48-8d9e-4852dbabd842 mit blockierter KI.
 
 - Branch codex/audit-remediation; alle früheren Commits erhalten.
 - 138068a: verschlüsselte SQLite-Moderationsjobs, Lease/TTL/Recovery/Lost-ACK-Lookup
@@ -113,8 +116,8 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Nächster konkreter Schritt
 
-1. Neue Room-Eingabejobs mit tatsächlicher qualifizierter Moderation und Provider
-   abnehmen; anschließend Lobby-Gemeinschaftsbild und Node-Pfad konsolidieren.
+1. Lobby-Gemeinschaftsbild und Node-Pfad ebenfalls auf begrenzte persistente Jobs
+   umstellen; neue Room-Eingabejobs später mit qualifizierter Moderation/Provider abnehmen.
    Vor einem neuen Deployment vollständige relevante Browsermatrix nachholen.
 2. Moderationsalternative/Hosting qualifizieren und kontrollierten Wan-Produzenten
    fertigstellen. Negative Diagnosen nicht einfach wiederholen oder Gates lockern.
