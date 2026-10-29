@@ -24,7 +24,13 @@ Gesamtlauf nach Korrektur einer veralteten Zehn-Spieler-Vorschauannahme: Exit0,
 217 Units und 97 PASS-Nachweise für Chromium/WebKit/Node/workerd auf f34d6a3.
 Moderationsdienst gebaut/25 technische Tests bestanden. Wrangler-Probelauf und
 Secretmuster-/Diffprüfung bestanden. Keine semantische KI-Abnahme oder reale GPU-
-Aufträge. Ausdrückliche Push-/Deployment-Freigabe liegt vor; Produktivnachweis folgt separat.
+Aufträge. Release-Commit f6321f5 auf origin/codex/audit-remediation gepusht und mit
+Worker-Version 1d7af01b-569f-4b48-8d9e-4852dbabd842 auf Cloudflare veröffentlicht.
+UUID per /api/release/Header und blocked-Bindung per Cloudflare-API bestätigt.
+Produktiv: öffentliche Seiten/SEO200, private anonyme APIs401, fremde Registrierung403;
+mobile Anmeldeseite in Chromium/WebKit ohne JS-Fehler/Overflow. Keine produktiven
+Formular-/GPU-/DB-Schreibtests. Positive angemeldete Live-Partie und reale HF-
+Abrechnung bleiben offen. Bericht docs/audits/2026-10-30-release.json.
 
 ### Aktuellster Nachtrag, 29.10.: Dienstpersistenz und Release-Prüfung
 

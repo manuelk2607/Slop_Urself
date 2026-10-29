@@ -18,6 +18,8 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
   nach Eviction nur derselbe Job/Lookup, Pending kehrt sofort zurück. Vorhandene
   Room-Archiv-Retries/Alarme treiben weitere Prüfungen. Keine HF-Wiederholung.
   Journal: nur Digest/Ticket/Frist, keine Inhalte/Tokens/Allow-Caches, max.64, TTL6min.
+- f6321f5: vollständiger Testnachweis und kompakter Fortschrittsstand committed und
+  gepusht. Remote origin/codex/audit-remediation wurde per ls-remote verifiziert.
 - Wrangler erzwingt **AI_GENERATION_RELEASE=blocked**. Auch vollständig gesetzte
   Moderationswerte heben die zentrale Sperre echter Ein-/Ausgaben nicht auf.
 - tools/release-smoke.mts prüft Release, Header/SEO, anonyme APIs und fremde Origin;
@@ -46,9 +48,17 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Produktion und externe Nachweise
 
-- Noch alter Worker ee71b881-67c6-4140-bba4-bca3e96e6e14: Secretänderung29.10.,
-  Anwendung zuletzt23.10. Lokale Auditkorrekturen bisher nicht veröffentlicht.
-  URL https://slopurself.maki26.workers.dev .
+- **Veröffentlicht:** Worker **1d7af01b-569f-4b48-8d9e-4852dbabd842**, Release-Commit
+  f6321f5, geprüfter Anwendungscode f34d6a3. Deployment über bestehenden Wrangler-
+  Wrapper erfolgreich. URL https://slopurself.maki26.workers.dev . Die früheren
+  lokalen Auditkorrekturen sind damit ebenfalls veröffentlicht.
+- Produktiv verifiziert: /api/release und X-Slop-Release stimmen mit UUID überein;
+  aktive Cloudflare-Bindung AI_GENERATION_RELEASE=blocked. Startseite/robots/sitemap/
+  config200, korrekte MIME-Typen und gültiges XML, CSP/noindex/no-store passend;
+  anonyme Session/Statistik/Bild/WS-Zugriffe401, fremde Registrierung403.
+  Authentifizierungsbildschirm mobil in Chromium/WebKit sichtbar, kein Overflow
+  oder JS-Fehler. Keine Formulare abgesendet, keine Benutzer/Räume/GPU-Jobs erstellt.
+  Positive angemeldete Produktionspartie und echte Abrechnung bleiben unbestätigt.
 - Erforderliche Cloudflare-Secretnamen vorhanden, einschließlich HF_OAUTH_CLIENT_ID;
   kein dedizierter Vault-Key (getrennter HKDF-Pfad mit AUTH-Schlüssel getestet),
   keine Moderations-Secrets. Keine Secretwerte ausgegeben oder rotiert.
@@ -84,15 +94,17 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Nächster konkreter Schritt
 
-1. Gesamtabnahme bestanden; nur Dokumentation seit dem geprüften Code geändert.
-2. Dokumentation committen. Remote-Branch existiert
-   noch nicht: git push --set-upstream origin codex/audit-remediation, SHA abgleichen.
-3. Bestehendes npm run cf:deploy/Wrapper nutzt Wrangler; deployen und UUID erfassen.
-4. tools/release-smoke.mts mit Produktions-URL+UUID ausführen, aktive blocked-Bindung
-   per Wrangler-Versionsmetadaten verifizieren. Positive Produktionspartie benötigt
-   frische HF-Anmeldungen; lokale Tests nicht als Produktivnachweis ausgeben.
-5. Ergebnis/UUID hier dokumentieren, Nachweis pushen. Kein blindes Rollback auf
-   alten Worker ohne KI-Sperre. Echte Generierung bleibt gesperrt.
+1. Eingabe-Moderation analog zur Ausgabe mit privaten Room-Checkpoints/Alarmen
+   integrieren, ohne lange serielle Operationen oder neue GPU-Anfrage bei Recovery.
+2. Moderationsalternative/Hosting qualifizieren und kontrollierten Wan-Produzenten
+   fertigstellen. Negative Diagnosen nicht einfach wiederholen oder Gates lockern.
+3. Danach neue persönliche HF-Anmeldungen über den sicheren OAuth-Prüfweg und
+   gesondert genehmigten Zwei-Konten-GPU-/Abrechnungstest vorbereiten.
+4. Unabhängige P1-Reste laut obiger Liste bearbeiten; für DB-Arbeit ausschließlich
+   vorhandenen Neon-MCP nutzen, keine unbekannten Backups/Restore-Erfolge behaupten.
+5. Reine Nachweisdokumentation benötigt kein erneutes Deployment. Bei späteren Änderungen kann die oben
+   geprüfte Worker-UUID als Ausgangspunkt dienen; nicht auf alte Worker ohne
+   KI-Sperre zurückrollen. Echte Generierung bleibt gesperrt.
 
 ## Referenzen
 
