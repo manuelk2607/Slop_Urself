@@ -1,4 +1,4 @@
-# Audit-Umsetzung – Stand 27. Oktober 2026
+# Audit-Umsetzung – Stand 29. Oktober 2026
 
 ## Auftrag und Grenzen
 
@@ -8,24 +8,62 @@ Commits erhalten. Kein Push/Deployment in diesem Auftrag. Echte KI bleibt gesper
 bis Moderation, Modellkontrolle und individuelle HF-Abrechnung qualifiziert sind.
 Keine bezahlten Aufträge, rechtswidrigen Testmedien oder produktiven Datenänderungen.
 
-## Aktueller Fortsetzungspunkt
+## Aktueller Fortsetzungspunkt – 29.10.
 
-- Quellstand **5c12107**, alle bestehenden Commits erhalten. Konsistenter Neubuild
-  und 196 Units **57381 Exit 0**, technischer Moderationsdienst **96633 Exit 0**
-  mit 15 Tests, vollständige Chromium/WebKit/Node/workerd-Matrix **83903 Exit 0**.
-  Alle Prozesse beendet; keine erneute identische Prüfung nötig ohne Codeänderung.
-- Dauerhafte Logs unter `.local/audit-tests`, Browsercache `.local/playwright`.
-  Öffentlicher Ergebnisnachweis mit Code-/Loghashes:
-  `docs/audits/2026-10-27-regression-results.json`. Nur lokale isolierte Abnahme.
-- Prozess 95986 und /tmp-Logs waren nach Unterbrechung verschwunden; kein alter
-  Gesamterfolg behauptet. Fehlgeschlagener Mischstand 42975 bleibt als Vorlauf
-  dokumentiert. Der neue kohärente Gesamtlauf ersetzt diese fehlende Abnahme.
-- Kein Push/Deployment, keine realen HF-/DB-/Speicheraufrufe. Produktive Sicherheit
-  weiterhin nicht freigegeben; semantische Diagnosefehler bleiben offene P0-Grenze.
-- Fortsetzen bei den unten priorisierten offenen Punkten; vorhandene Schutzregeln,
-  getestete UI-/Quota-Pakete und fehlgeschlagene CPU-Versuche nicht wiederholen.
+- **M17, lesend real geprüft:** zwei verschiedene HF-Konten, fremder Profilzugriff
+  abgewiesen, persönliche Jobtoken gegen echte whoami-Identität geprüft, absichtlicher
+  Jobtausch abgewiesen. Vor/nach jeweils A 175,592746/300s und B 300/300s unverändert.
+  Bericht `docs/audits/2026-10-28-hf-readonly.json`. Keine Inferenz/GPU-Aufträge,
+  ausdrücklich keine reale Abrechnungsfreigabe. Prüffenster beendet, Zugangsdaten
+  ausschließlich im RAM verworfen; für weitere Live-Prüfung neu verbinden.
+- **M05/M31:** Modell-/Hostvertrag nach Upload vor GPU-POST sowie vor/nach laufendem
+  Ergebnisabruf erneut prüfen. Fremde gespeicherte Hosts erhalten keinen Token;
+  Drift/unbekannter Status bleibt derselbe wartende Auftrag statt Neugenerierung.
+  Kleine gebundene JSON-Antworten, echte Quota-Reset-Zeitstempel und aktive Holds.
+- **M02/M17/M25:** workerd unterstützt `redirect:error` nicht. Die neue Quota-
+  Härtung deckte außerdem bestehende inkompatible Job-/Moderationsaufrufe auf.
+  Auf `manual` plus Nicht-2xx-Ablehnung umgestellt; kein Redirect-Following.
+  OAuth-Grant-/Profilantworten ebenfalls begrenzt und ohne automatische Weiterleitung.
+  Direkte workerd-Grenz- und OAuth-Tests bestanden, kein externer GPU-Aufruf.
+- **M02/M03:** native byteidentische Frames nur innerhalb einer Anfrage dedupliziert;
+  bewegte Frames vollständig prüfen, Qualifikationsbenchmark >=80 unterschiedliche
+  Frames. Kontextpräfix/Antwortform geprüft, keine Rohtexte. Dienst-Build/19 technische
+  Tests bestanden. Diagnose `...moderation-shape.json`: einzelner harmloser Fall
+  scheitert an dekoriertem Label; separates `labels-v2` prüft nur feste Enum-Formen.
+  `...moderation-labels-v2.json`: vier harmlose Bildfälle nicht freigegeben, davon
+  drei technische Zeitüberschreitungen; Standbildvideo alle 5 Frames/1 einzigartiger
+  Frame in 9.873ms geprüft, weiterhin review. Gleichzeitige Testlast, keine isolierte
+  Latenz-/Semantikqualifikation. Standard JSON/Modell-Lock bleibt unverändert,
+  keine qualification.json, keine Freigabe. Öffentliche Gewichte im ignorierten
+  `.local/moderation-model-cache` geprüft; keine erneuten identischen Diagnoseläufe.
+- **M04:** nachträgliche Sperren auch für frisch generierte klassische Archivdateien
+  vor Wertung/Ratebonus und alle 10s einschließlich Hibernation; Statusausfall hält
+  Wertung zurück. Finaler gesperrter Clip endet ohne Punkte und gibt Raum-Holds frei.
+- **Verifiziert abgeschlossen:** Stand 2491d05: Build/206 Units, vollständige
+  Chromium/WebKit/Node/workerd-Matrix **Exit 0, 97 PASS-Nachweise**. Moderationsdienst:
+  Build/19 technische Tests bestanden, semantische Diagnose Exit 2. Kein pauschales
+  Wiederholen dieser Suite. Bericht `docs/audits/2026-10-29-regression-results.json`
+  mit Quellständen und Loghashes; Logs dauerhaft in `.local/audit-tests`.
+- **50de998 – M31:** fehlerhafte HF-Event-IDs nach POST bleiben ein bereits
+  persistierter unklarer `submitting`-Auftrag. Kein Speichern unbrauchbarer IDs,
+  kein Fallback-/Resume-Neuauftrag. Sieben ungültige Formen geprüft. Danach erneuter
+  Build/207 Units und direkte workerd-Grenztests Exit 0. Die volle Browsermatrix
+  wurde nach diesem kleinen API-Guard nicht erneut ausgeführt, nicht so behaupten.
+- Die alten Testprozesse sind beendet. Zwischenläufe mit workerd-Redirectfehler
+  und eingeschränktem macOS-Browserstart zählen nicht als bestandener Gesamtlauf.
+- Kein Push/Deployment und keine reale Generierungs-/Abrechnungserlaubnis. Alle
+  bisherigen Commits erhalten. `slop_urself`-MCP am 28.10. weiterhin nicht verfügbar.
 
 ## Neue abgeschlossene Implementierungspakete
+
+- **50de998:** M31 ungültige Submission-IDs bleiben unklar statt doppelter GPU-POST.
+
+- **02989e8:** zwei echte HF-Konten lesend isoliert geprüft, sicheres RAM-Prüffenster.
+- **9d53aeb:** M02/M03 Präfixprüfung/Framewiederverwendung, separate Labeldiagnose;
+  negative Semantiknachweise erhalten, keine Freigabe.
+- **b4fb861:** M05/M17/M25/M31/M34 Providerdrift, Quota-Holds, portable HF-/Moderations-
+  Abrufe und begrenzte OAuth-Antworten. Workerd-Grenz-/OAuth-Tests bestanden.
+- **2491d05:** M04 nachträgliche Sperren auch in klassischen Runden/Hibernation.
 
 - **c9668e7 – M02/M03 Diagnose:** optionales, strikt validiertes labels-v1-Protokoll
   mit eigenem Fingerprint. Standard und Modell-Lock unverändert. CPU-Test Exit 2:
@@ -64,25 +102,27 @@ Ausführliche Grenzen/ältere Tests stehen im Implementierungsbericht.
 ## P0: echte Freigabegrenzen
 
 1. **Moderation NICHT qualifiziert.** Nach ONNX-Reparatur laden Modelle, aber
-   beide sichere Diagnoserunden scheitern an Qualität/Format und Videolaufzeit.
+   die bisherigen sicheren Diagnoserunden scheitern an Qualität/Format und Videolaufzeit.
    Keine qualification.json erzeugt. Keine identischen Wiederholungen ohne neue
    technische Hypothese. Kostenloses Hosting und repräsentative Fachprüfung offen.
 2. **Kontrollierter Wan-Erzeuger nicht abgenommen.** Öffentlicher Community-Space
-   am 26.10. RUNNING/API-kompatibel geprüft, keine freigegebene Modellkonfiguration.
+   am 28.10. RUNNING/API-kompatibel geprüft, keine freigegebene Modellkonfiguration.
    SHA-/Replica-Deklaration ist keine kryptografische Gewichtsattestierung.
    Echte Wan-/Safari-Ausgabe und kostenfreies Overrun-Verhalten bleiben offen.
-3. **M17:** Nutzer bestätigt nur EIN reales HF-Konto. Zwei-Konten-Abrechnungstest
-   nicht möglich. Unit-/workerd-/Browser-Stubs sind kein Providerabrechnungsnachweis.
-4. **MCP `slop_urself` fehlt**, am 27.10. erneut in verfügbaren Tools geprüft.
+3. **M17:** Zwei reale HF-Testkonten lesend erfolgreich isoliert geprüft. Echte
+   Video-/Abrechnungsprüfung benötigt separate Umfangsfreigabe und bestandene Schutz-/
+   Modellabnahmen. Lesender Erfolg ist kein Belastungsnachweis; RAM-Sitzung beendet.
+4. **MCP `slop_urself` fehlt**, am 28.10. erneut in verfügbaren Tools geprüft.
    Keine produktive DB-Inspektion/Migration, kein Ersatz über allgemeinen Neon-Zugang.
    Produktions-WAF, Backups, Logeinstellungen und Dateiretention nicht verifiziert.
 
 ## Nächste konkrete Schritte
 
-1. Lokale Pakete vollständig abgenommen und dokumentiert. Keine neue identische
-   Gesamtsuite nötig. Weiter mit P0-Abhängigkeiten beziehungsweise unabhängigem P1-Rest.
+1. Lokale Sicherheits-/Recoverypakete und aktuelle Regressionen abgeschlossen und
+   gesichert. Beim nächsten P0-Abhängigkeitsschritt beziehungsweise unabhängigen
+   P1-Rest ansetzen; keine erneute identische Gesamtsuite ohne Quelländerung.
 2. P0 mit geeignetem Moderationskandidaten/Hardware und kontrolliertem Wan fortsetzen,
-   ohne Fail-Closed-Gate zu umgehen. Zweites Konto erst nutzen, wenn verfügbar.
+   ohne Fail-Closed-Gate zu umgehen. Zwei Konten erst für separat freigegebenen GPU-Test wieder verbinden.
 3. P1-Reste: M04 Altarchiv/Einspruch/Status weiterer Spielansichten; M06 Bestands-
    migration; reale M09/M11-Ausgabe; M18 vollständige Betroffenen-/HF-/DO-Löschung;
    M19 externer Speicher; produktive M20-Logeinstellungen. DB-Abhängigkeiten beachten.

@@ -131,3 +131,14 @@ Das optionale Diagnoseprotokoll akzeptiert nur eine vollständige Enum-Antwort u
 besitzt einen anderen Freigabefingerprint. `model-lock.json` und der aktive
 JSON-Standard bleiben unverändert. Keine Qualifikation und kein Hosting-Freigang.
 Weitere identische Läufe sind ohne neue technische Hypothese nicht sinnvoll.
+
+
+28.10.: Eine gezielte Formdiagnose belegte ein vollständiges Label mit Satzzeichen.
+`--protocol labels-v2` ist deshalb ein getrennt versioniertes Experiment mit exakt
+begrenzten Enum-Formen, kein Prosa-/Substringparser. Auch dieser sichere Diagnoselauf
+scheitert an harmlosen Fällen und teilweise am Zeitlimit. Kein aktiver Modell-Lock
+geändert und keine Qualifikation. Native byteidentische Frames werden nur innerhalb
+einer Anfrage gemeinsam bewertet; unterschiedliche Frames weiterhin vollständig.
+Qualifikationsvideos müssen mindestens 80 unterschiedliche Frames nachweisen.
+Technische Tests sind keine semantische Qualitätsabnahme. Siehe
+[28.10.-Diagnose](../docs/audits/2026-10-28-moderation-labels-v2.json).

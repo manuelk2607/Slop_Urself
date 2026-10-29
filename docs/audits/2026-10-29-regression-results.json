@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-29",
+  "scope": "isolated local regression validation plus read-only live HF identity evidence; no production release approval",
+  "runtime": "Node 24.22.1",
+  "fullRegression": {
+    "sourceCommit": "2491d05cd095618195a7191ec68dc9a06b042676",
+    "buildExitCode": 0,
+    "unitTestsPassed": 206,
+    "unitTestsFailed": 0,
+    "matrixExitCode": 0,
+    "passLogRecords": 97,
+    "browsers": [
+      "chromium",
+      "webkit"
+    ],
+    "backends": [
+      "Node",
+      "workerd"
+    ],
+    "coverage": [
+      "OAuth/device sessions and encrypted eviction recovery",
+      "personal token ownership and quota using stubs",
+      "manual redirect rejection in real workerd",
+      "bounded moderation, quota and identity responses",
+      "multiplayer synchronization and classic/archive voting",
+      "generation progress/reload and prompt preview",
+      "video playback/retry/seek, archive permissions and deletion/undo",
+      "accessibility and responsive layout",
+      "public SEO and private noindex"
+    ]
+  },
+  "subsequentTargetedPackage": {
+    "sourceCommit": "50de998230a0cc63aaa61c2db4732003e382bcec",
+    "change": "validate HF submission event IDs while retaining ambiguous job state; never resubmit",
+    "buildExitCode": 0,
+    "unitTestsPassed": 207,
+    "unitTestsFailed": 0,
+    "workerdBoundaryExitCode": 0,
+    "completeBrowserMatrixRepeated": false,
+    "limitation": "The 97-record full browser matrix covers 2491d05, before this narrow additional API-response guard."
+  },
+  "moderation": {
+    "technicalBuildExitCode": 0,
+    "technicalTestsPassed": 19,
+    "technicalTestsFailed": 0,
+    "semanticQualification": false,
+    "diagnosticExitCode": 2,
+    "diagnosticReports": [
+      "2026-10-28-moderation-shape.json",
+      "2026-10-28-moderation-labels-v2.json"
+    ],
+    "limitation": "Benign false holds, technical deadlines, no representative qualification; native duplicate-frame diagnostic does not establish moving-video performance."
+  },
+  "liveHfReadOnly": {
+    "report": "2026-10-28-hf-readonly.json",
+    "distinctIdentitiesVerified": true,
+    "foreignProfileRejected": true,
+    "jobOwnersVerified": true,
+    "swappedJobRejected": true,
+    "localReservationSimulationOnly": true,
+    "actualPerJobDebitVerified": false,
+    "credentialsPersisted": false,
+    "sessionStopped": true
+  },
+  "generationRelease": false,
+  "liveHfGenerationCalls": 0,
+  "realDatabaseCalls": 0,
+  "productionWrites": 0,
+  "pushPerformed": false,
+  "deploymentPerformed": false,
+  "logDirectory": ".local/audit-tests",
+  "logSha256": {
+    "build-2026-10-28-final.log": "8c3f82cfab87560f6fa9c8c19ed22a3ef8d9bbae1c1409600f07914f097eddfe",
+    "unit-2026-10-28-final.log": "ea85ddf779d3938f3a5b5651fce27c5a764078b0758a535927a4e2a92bfbc406",
+    "moderation-build-2026-10-28-v2.log": "08d10bf1ca56b6dc7b5acc6e1663435b6871a2da9db662e2026734b954953bed",
+    "moderation-test-2026-10-28-v2.log": "eab214b018bc5a7177f876578d3ae7eab3e195ce72a2e97ce414a5b70085b727",
+    "ci-2026-10-28-validated.log": "8e4a906c2d42de38b4322b880eb6219e34c717b58bfeaebaf466f5cb9a387816",
+    "build-2026-10-29-event-id.log": "8c3f82cfab87560f6fa9c8c19ed22a3ef8d9bbae1c1409600f07914f097eddfe",
+    "unit-2026-10-29-event-id.log": "0c5f4dc01ede2fd49653ddb8f2495980be952195d37adb49cc12e847bb45366d",
+    "hf-boundaries-2026-10-29-event-id.log": "811652110f0d37d6a003c5ec8da4196cec5732e680d6142597caf53818e6e3fd"
+  },
+  "priorFailures": "The first new CI run found an unsupported workerd redirect mode, subsequently fixed and regression-tested. A second run could not launch Chromium due to macOS permissions. The complete authorized run exited 0; failures are not counted as passes.",
+  "externalBlockers": [
+    "unqualified semantic moderation and hosting",
+    "unapproved controlled Wan producer and real output",
+    "explicit real generation scope approval and provider debit/overrun proof",
+    "required slop_urself MCP unavailable for database-dependent work",
+    "production WAF, backup, retention and real-device behavior unverified"
+  ]
+}

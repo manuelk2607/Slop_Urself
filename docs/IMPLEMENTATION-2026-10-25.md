@@ -481,3 +481,112 @@ M02/M03 bleiben mangels bestandener semantischer Moderation und Videolaufzeit of
 M05 benötigt den kontrollierten Erzeuger, M17 ein zweites echtes HF-Konto. Das
 vorgeschriebene `slop_urself`-MCP fehlt weiterhin für DB-abhängige Maßnahmen.
 Die neuen lokalen Regressionserfolge heben die KI-Sperre ausdrücklich nicht auf.
+
+
+### Fortsetzung 28.10.: reale Kontentrennung, keine GPU-Abrechnung (02989e8)
+
+Das lokale, nur auf Loopback erreichbare Prüffenster nutzt den produktiven
+`HfConnections`-/`PlayerQuotaBudget`-Code mit ausschließlich RAM-Ablage. Eine eigene
+Netzwerk-Allowlist lässt nur die festgelegten HF-OAuth-, Identitäts- und Quota-
+Endpunkte zu; Inferenz, Zahlungen und Weiterleitungsziele sind ausgeschlossen.
+Der Nutzer hat beide kostenlosen Testkonten persönlich auf HF freigegeben.
+
+**Real lesend belegt:** zwei unterschiedliche HF-Identitäten; Fremdprofilzugriff
+abgewiesen; tatsächliche Jobtoken über whoami dem richtigen Konto zugeordnet;
+absichtlich vertauschter Jobtoken abgewiesen. Quota vor/nach unverändert: A
+175,592746 von 300 Sekunden, B 300 von 300 Sekunden. Das sind zeitpunktbezogene
+Providerangaben, keine garantierte künftige Kapazität. Die Jobreservierungen waren
+lokale Simulationen. Null Generierungen, kein Nachweis tatsächlicher Einzelbelastung.
+Prüffenster beendet, RAM-Zugänge verworfen. Neue echte Aufträge brauchen nach den
+Moderations-/Modellabnahmen eine gesonderte Umfangsfreigabe und neue HF-Anmeldung.
+[Bereinigter Bericht](audits/2026-10-28-hf-readonly.json).
+
+Die öffentliche Wan-Quelle war RUNNING, API-kompatibel und auf derselben Source-SHA
+fca7f5a33da3057bae497de5cd70f49ce75e6c02; kein kontrollierter Gewichts-/Modellvertrag
+konfiguriert. [Read-only-Nachweis](audits/2026-10-28-wan-readiness.json). Eine SHA und
+eine Modell-Selbstauskunft attestieren keine tatsächlich geladenen Gewichte.
+
+### M02/M03: konkrete Formdiagnose und native Framewiederverwendung (9d53aeb)
+
+Der ursprüngliche Eingabe-Tokenpräfix wird vor der Inferenz kopiert. Nur ein
+unveränderter Präfix mit begrenzter einzeiliger Fortsetzung wird decodiert. Die
+Diagnose speichert ausschließlich feste Formklassen, niemals Rohantworten.
+Ein gezielter harmloser Lauf belegte `decorated_label` als Ursache einer
+Formatablehnung. Das separate experimentelle Protokoll `labels-v2` akzeptiert nur
+vollständige Enum-Wörter, passende einfache/doppelte Anführungszeichen oder genau
+einen Satzpunkt/Ausrufezeichen. Kein Extrahieren aus Prosa/JSON, keine Substring-
+Freigabe. JSON-Standard, Modell-Lock, Risikoschwellen und Freigabesperren bleiben.
+
+Die vollständige sichere Folgediagnose war **nicht erfolgreich**: vier harmlose
+Bildfälle nicht freigegeben, davon drei technische Zeitüberschreitungen; ein weiterer
+kritischer Fall technisch fehlgeschlagen. Drei kritische Fälle zurückgehalten, aber
+keine allgemeine Erkennungszusage. Alle Medien waren synthetisch und nicht intim.
+Zeitmessungen unter paralleler Testlast sind keine isolierte Leistungsmessung.
+[Formdiagnose](audits/2026-10-28-moderation-shape.json),
+[Folgediagnose](audits/2026-10-28-moderation-labels-v2.json).
+
+Byteidentische, vollständig in nativer Auflösung decodierte Frames teilen nur
+innerhalb derselben Anfrage ein gültiges Urteil. Jeder unterschiedliche Frame wird
+weiter geprüft. Das synthetische Standbildvideo hatte fünf vollständig geprüfte
+Frames, davon einen einzigartigen; 9.873ms, weiterhin `review`. Das ist ausdrücklich
+kein 80-/81-Frame-Wan-Benchmark. Ein Qualifikationsbericht muss nun mindestens 80
+unterschiedliche native Frames pro Testvideo nachweisen. Dienst-Build und 19
+technische Tests bestanden; keine qualification.json und keine Sicherheitsfreigabe.
+
+### M05/M17/M25/M31/M34: Provider- und Quota-Grenzen (b4fb861)
+
+Gespeicherter Host muss zur offiziellen Space-Metadatenauflösung passen, bevor
+irgendein persönlicher Token dorthin geht. Source-/Runtime-/Modellrevision erneut
+nach Upload vor dem GPU-POST sowie vor und nach Ergebnisabruf prüfen. Eine
+Modelländerung bei laufendem Auftrag erhält dessen unklaren Status und Reservierung;
+kein neuer Auftrag, keine ungeprüfte Veröffentlichung. Historische bereits fertig
+gespeicherte Ergebnisse werden nicht nachträglich als neu geprüft ausgegeben.
+
+Der erste neue Gesamtlauf deckte einen echten Plattformfehler auf: workerd lehnt
+`redirect:error` ab. Die neue Quota-Härtung und bereits bestehende persönliche
+Job-/Moderationspfade waren betroffen. Kompatible `manual`-Abrufe mit Nicht-2xx-
+Ablehnung verhindern weiterhin automatisches Folgen. Der direkte workerd-Test
+belegt funktionierende Quota-/Job-/Moderationsaufrufe und Abweisung von 307,
+überlangen Bodies und fremder Jobidentität. OAuth-Grant-/Profilantworten sind
+begrenzt und ohne automatische Weiterleitung. Der vollständige OAuth-/Device-
+DO-Test besteht einschließlich Wiederherstellung nach Eviction. Externe Verträge
+hier simuliert: kein GPU-Verbrauch oder realer Provider-Abrechnungsnachweis.
+
+Quota-Antworten begrenzen/validieren und unnötige Billingfelder verwerfen;
+Resetzeitpunkte normalisieren. Ein Kontingentreset löscht keine laufenden/unklaren
+Job-Holds. Konservative vorhandene TTL bleibt bestehen. Tests prüfen auch
+Modellwechsel während Upload, Modellwechsel nach Ergebniseingang, fremde Hosts,
+malforme Uploadantworten und Null GPU-POSTs bei vorzeitigem Abbruch.
+
+### M04/M09/M31: nachträgliche Sperren auch in klassischen Runden (2491d05)
+
+Frisch generierte `/api/videos/`-Dateien werden nun wie Archiv-Replays vor
+Punkte-/Ratebonus und periodisch alle zehn Sekunden erneut auf Sperren geprüft.
+Statusausfall hält die Wertung zurück; ein gesperrtes Video verliert Prompt,
+Stimmen und Rateabgaben ohne Bonus. Der letzte Clip kann die Partie ohne Punkte
+beenden. Node und DO behandeln die Änderung; die DO-Regression prüft Ausfall,
+Hibernation, Wiederkehr, Nullpunkte und Quota-Freigabe. Das löscht keine bestehenden
+Archivdateien und widerruft keine bereits heruntergeladenen Bytes. Altarchivprüfung,
+Einsprüche und bereits früher abgeschlossene Wertungen bleiben gesonderte Aufgaben.
+
+### Teststand dieser Pakete
+
+Quellstand **2491d05**: Root-Build/206 Unit-Tests und vollständige Chromium/WebKit-
+Node/workerd-Matrix **Exit 0**, 97 PASS-Nachweise. Moderations-Build/19 technische
+Tests bestanden; die semantische Diagnose scheitert weiterhin (Exit 2). Ein
+Zwischenlauf scheiterte an macOS-Browserstartrechten, nicht an einem UI-Befund;
+der autorisierte Folgelauf bestand. Kein Push, Deployment, produktiver Datenzugriff
+oder Aufheben der Generierungssperre.
+[Quellstände und Loghashes](audits/2026-10-29-regression-results.json).
+
+### M31: ungültige HF-Auftragskennungen, 29.10. (50de998)
+
+Eine erfolgreiche HTTP-POST-Antwort ohne brauchbare Event-ID beweist keinen
+abgelehnten GPU-Auftrag. Typ/festes Format und maximal 120 Zeichen werden vor
+Übernahme geprüft. Bei ungültiger Antwort bleibt der bereits dauerhaft gespeicherte
+`submitting`-Auftrag ohne neue GPU-Anfrage erhalten. Sieben Fehlerformen prüfen
+Zahl, Objekt, leeren/überlangen String, Pfad, Steuerzeichen und null; weder Fallback
+noch Resume dürfen einen zweiten POST senden. Danach Build/207 Unit-Tests und
+direkte workerd-Grenztests Exit 0. Die komplette Browsermatrix wurde für diesen
+kleinen API-Guard nicht nochmals ausgeführt; ihr erfolgreicher Quellstand bleibt
+2491d05. Keine zusätzlichen HF-/GPU-Aufträge oder Produktionsänderungen.
