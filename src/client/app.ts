@@ -287,6 +287,7 @@ usernameInput.addEventListener('input', () => {
 });
 
 function quotaHint(quota: QuotaCapacity, additional = false) {
+    if (quota.generationBlocked) return 'Neue KI-Videos sind derzeit gesperrt. Archivpartien bleiben verfügbar.';
     const limit = quota.aiRoundLimit;
     if (quota.quotaMode === 'unavailable') return quota.sharedQuota === false ? 'Bitte prüft eure HF-Verbindungen.' : 'Rundenlimit momentan nicht verfügbar.';
     const roundLabel = `${additional ? 'Zusatzrunde' : 'Runde'}${limit === 1 ? '' : 'n'}`;

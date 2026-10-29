@@ -4,6 +4,7 @@ import { StoredModerationJournal } from '../../src/security/moderation-journal';
 import { moderateOutput, generationSafetyReady } from '../../src/security/moderation';
 import { moderationRequest } from '../../src/security/moderation-jobs';
 import { testModerationConfig } from '../support/moderation-fixture';
+import { ServiceDurableObject } from '../../src/server/cloudflare/services';
 
 function storage() {
     const data = new Map<string, unknown>();
@@ -64,4 +65,21 @@ test('journal rejects invalid/capacity entries and removes expired data without 
 test('explicit production release block wins even over a configured moderation service', () => {
     assert.throws(() => generationSafetyReady({ ...testModerationConfig, AI_PROVIDER: 'wan22', AI_GENERATION_RELEASE: 'blocked' }));
     generationSafetyReady({ AI_PROVIDER: 'mock', AI_GENERATION_RELEASE: 'blocked' });
+});
+
+test('blocked production quota is explicit and cannot reserve budget or query external HF accounts', async () => {
+    const state = storage(), original = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('Blocked service must not contact HF'); };
+    try {
+        const services = new ServiceDurableObject({ storage: { ...state, getAlarm: async () => null, setAlarm: async () => {} } } as never,
+            { ...testModerationConfig, AI_PROVIDER: 'wan22', AI_GENERATION_RELEASE: 'blocked' } as never);
+        const request = (path: string) => services.fetch(new Request('https://internal' + path, { method: 'POST', body: JSON.stringify({ code: 'TEST', players: 2, rounds: 1 }) }));
+        for (const path of ['/quota/display', '/quota/capacity']) {
+            const response = await request(path); assert.equal(response.status, 200);
+            const body = await response.json() as { aiRoundLimit: number; generationBlocked?: boolean };
+            assert.equal(body.aiRoundLimit, 0); assert.equal(body.generationBlocked, true);
+        }
+        for (const path of ['/quota/reserve', '/quota/extend', '/quota/begin', '/quota/attempt']) assert.equal((await request(path)).status, 503);
+        assert.equal(state.data.size, 0, 'No reservation writes while blocked');
+    } finally { globalThis.fetch = original; }
 });

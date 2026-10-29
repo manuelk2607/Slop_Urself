@@ -4,7 +4,20 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
-### Lokales Eingabe-Recovery-Paket, 30.10.
+### Neuester Stand, 30.10.: alle Eingabepfade und vollständige Testmatrix
+
+M02/M31/M32: Cloudflare prüft nun auch Gemeinschaftsbilder mit privaten persistenten
+Tickets; Node nutzt private Dateien, begrenzte Retries und sichere Orphan-Bereinigung.
+Zusätzlicher Schutz gegen Bereinigung durch einen zweiten Server auf belegtem Port.
+M01: blockierte KI zeigt null freigegebene Runden und verhindert Budget-Mutationen
+vor HF-Zugriff; Archivpartien bleiben verfügbar. Details im Nachtrag am Dateiende.
+Vollständige Matrix Exit0: Build/227 Units/98 PASS-Prüfschritte über Chromium,
+WebKit, Node und workerd. Moderationsdienst Build/25 technische Tests und Wrangler-
+Dry-Run bestanden. Keine tatsächliche Moderations-, Wan- oder Abrechnungsfreigabe.
+Push/Produktionsnachweis im aktuellen PROGRESS.md; historische Angaben unten
+beziehen sich ausschließlich auf den jeweiligen damaligen Stand.
+
+### Historischer Zwischenstand des Eingabe-Recovery-Pakets, 30.10.
 
 M02/M03/M12/M31: Cloudflare-Spielzüge speichern private Eingabechunks und einen
 vorherigen Intent mit Ablaufalarm. Ein Room-Neustart setzt denselben Moderationsjob
@@ -715,3 +728,33 @@ bei fehlender Qualifikation, block/review, evaluationOnly und unvollständigem
 Prüfergebnis. Build/211 Unit-Tests und workerd-Grenztests Exit 0. Reine externe
 Vertragsfixtures; kein Nachweis semantischer Moderationsqualität oder tatsächlicher
 HF-Abrechnung. Keine erneute vollständige Browsermatrix und kein Deployment.
+
+### 30.10.: dauerhafte Gemeinschaftsbildprüfung und Node-Prüfaufträge (M02/M31/M32)
+
+Cloudflare prüft auch Lobby-Gemeinschaftsbilder über private persistente Intents,
+Bildchunks und Moderationstickets. Vor Freigabe existiert keine lesbare Raum-Bild-
+Referenz; Start und weitere Uploads warten. Host, Konto, Phase, Ballot und Variante
+werden vor Veröffentlichung erneut geprüft. Ein DO-Neustart übernimmt denselben
+Prüfauftrag. Erfolgreiche Veröffentlichung persistiert die Bildreferenz vor dem
+Entfernen des Intents; ein Neustart in diesem Fenster beendet die Bereinigung.
+
+Der Node-Entwicklungsserver nutzt denselben begrenzten Eingabe-/Ticketvertrag auf
+seinem privaten Dateispeicher. Abbruch während des Speicherns kann nicht zur späten
+Freigabe führen. Speicherfehler nach erfolgreicher Prüfung wiederholen ausschließlich
+Bereinigung, niemals die GPU-Freigabe. Node-Räume bleiben bewusst im RAM: nach
+Prozessneustart werden verwaiste private Prüfaufträge entfernt, nicht unbekannten
+Profilen zugeordnet oder blind neu generiert. Vollständige lokale Spiel-Recovery
+ist damit ausdrücklich nicht nachgewiesen. Ein zweiter Prozess mit belegtem Port
+darf die Prüfaufträge des laufenden Servers nicht bereinigen; Portbindung und
+Bereitschaftssperre sichern diese Reihenfolge ab.
+
+Bei blockierter echter KI liefern Konfiguration und Kontingentanzeige jetzt
+explizit null freigegebene Runden; Reservierung/Beginn werden vor HF-/Budgetarbeit
+abgewiesen. Archivpartien bleiben möglich. Keine Änderung der SEO-Routen,
+Datenbankschemata, Produktivdaten oder Sicherheitsfreigabe.
+
+Tests/Release werden in PROGRESS.md und einem separaten Nachweis erfasst.
+Externe Semantik-/Abrechnungs-
+prüfung nicht durch simulierte Antworten ersetzt. Den tatsächlich vorhandenen,
+pausierten privaten Wan-Prototyp einschließlich unverifizierter Laufzeitabhängigkeiten
+beschreibt nun wan-service/PROGRESS.md; keine Space-Änderung und kein GPU-Auftrag.

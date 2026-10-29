@@ -9,7 +9,7 @@ import { preparedImageSize } from '../../ai/images';
 import { gameOptions } from '../../game/options';
 import { archiveCapacity, isArchiveGame, prepareArchive, playArchiveVideo, checkArchiveContent, needsContentCheck } from '../../game/archive-play';
 import { closePhase, syncPhase } from '../../game/phases';
-import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse } from '../../game/images';
+import { writeSharedImage, readSharedImage, deleteSharedImage, sharedImageResponse, IMAGE_TTL } from '../../game/images';
 import { logAiEvent } from '../../ai/telemetry';
 import { archiveEnabled } from '../../storage/archive';
 import { takeRateLimit, rateKey, MESSAGE_RATE, MESSAGE_BYTES, expensiveMessageRule, RATE_MESSAGE, type RateBuckets } from '../../security/rate-limit';
@@ -60,6 +60,9 @@ export class RoomDurableObject {
             this.quotaReleases = (await state.storage.get<typeof this.quotaReleases>('quotaReleases')) || [];
             this.aiJobs = (await state.storage.get<typeof this.aiJobs>('aiJobs')) || {};
             this.input = await this.inputs.load();
+            if (this.input?.shared && this.room?.sharedImage?.id === this.input.image.id) {
+                await this.inputs.remove(this.input, true); this.input = undefined;
+            }
             for (const socket of state.getWebSockets()) this.sockets.set(socket, socket.deserializeAttachment());
             if (this.room) {
                 this.roomCode = this.room.code;
@@ -326,6 +329,7 @@ export class RoomDurableObject {
     private async startGame(player: Player) {
         const room = this.room!;
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
+        if (this.input?.shared) throw new Error('Das gemeinsame Bild wird noch geprüft.');
         if (startProblem(room)) throw new Error(startProblem(room));
         await service(this.env, '/hf/roster', { participants: room.players });
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
@@ -380,6 +384,15 @@ export class RoomDurableObject {
         const room = this.room!;
         const recovering = room.state === 'IDLE' && gameOptions(room.options).sharedImage && (!room.sharedImage || room.sharedImage.expiresAt <= Date.now());
         if ((!['LOBBY', 'GAME_OVER'].includes(room.state) && !recovering) || room.hostId !== player.id) return;
+        if (this.env.AI_PROVIDER !== 'mock') {
+            generationSafetyReady(this.env);
+            if (!player.accountId || !gameOptions(room.options).sharedImage) throw new Error('Bitte bestätige Profil und Spielvariante.');
+            const alarm = await this.state.storage.getAlarm(), cleanupAt = Date.now() + 360_000;
+            if (alarm === null || alarm > cleanupAt) await this.state.storage.setAlarm(cleanupAt);
+            this.input = await this.inputs.create({ id: crypto.randomUUID(), code: room.code, creatorId: player.id,
+                accountId: player.accountId, ballotId: room.ballotId, prompt: '', shared: true, roomPhase: room.state }, payload.imageBase64 as string);
+            resetReady(room); await this.saveRoom(); this.broadcastRoomUpdate(); this.runInput(room, this.input); return;
+        }
         const image = await writeSharedImage(this.state.storage, payload.imageBase64, this.env), old = room.sharedImage;
         room.sharedImage = image; resetReady(room);
         try { await this.saveRoom(); }
@@ -430,6 +443,10 @@ export class RoomDurableObject {
     }
 
     private inputMatches(room: RoomState, input: PendingInput) {
+        if (input.stage === 'staging') return false;
+        if (input.shared) return this.room === room && this.input?.id === input.id && room.code === input.code
+            && room.state === input.roomPhase && room.ballotId === input.ballotId && gameOptions(room.options).sharedImage
+            && room.hostId === input.creatorId && room.players.some(p => p.id === input.creatorId && p.accountId === input.accountId);
         const creator = activeCreator(room);
         return this.room === room && room.state === 'GENERATING' && room.generationId === input.id
             && this.input?.id === input.id && room.ballotId === input.ballotId
@@ -437,7 +454,7 @@ export class RoomDurableObject {
     }
 
     private runInput(room: RoomState, input: PendingInput) {
-        if (this.inputRunning || this.activeGenerations.has(input.id) || !this.inputMatches(room, input) || room.generationJob) return;
+        if (this.inputRunning || this.activeGenerations.has(input.id) || !this.inputMatches(room, input) || (!input.shared && room.generationJob)) return;
         this.inputRunning = true;
         const journal = new StoredModerationJournal(this.state.storage);
         const checked = <T>(work: () => Promise<T>) => this.enqueue(async () => {
@@ -448,18 +465,26 @@ export class RoomDurableObject {
             generationSafetyReady(this.env);
             if (input.expiresAt <= Date.now()) throw new Error('Die Inhaltsprüfung ist abgelaufen. Bitte sende dein Bild erneut.');
             const image = await readSharedImage(this.state.storage, input.image);
-            await moderateInput(image, buildVideoPrompt(input.prompt), { ...this.env, moderationJournal: {
+            await moderateInput(image, input.shared ? '' : buildVideoPrompt(input.prompt), { ...this.env, moderationJournal: {
                 load: key => checked(() => journal.load(key)), save: (key, value) => checked(() => journal.save(key, value)),
                 clear: key => checked(() => journal.clear(key))
             } });
             await checked(async () => {
                 if (input.expiresAt <= Date.now()) throw new Error('Prüfung abgelaufen.');
-                const creator = activeCreator(room)!;
+                const creator = room.players.find(p => p.id === input.creatorId)!;
                 const socket = [...this.sockets.entries()].find(([socket, meta]) => socket.readyState === 1 && meta.playerId === creator.id);
                 const account = socket?.[1].account;
                 if (!socket && input.expiresAt > Date.now()) throw new ModerationError('moderation_unavailable', 'Warte auf die Wiederverbindung.');
                 if (!account || account.id !== input.accountId || account.expiresAt <= Date.now()
                     || !await accountIsCurrent(account, cloudflareAuth(this.env))) throw new Error('Bitte melde dich erneut an.');
+                if (input.shared) {
+                    const old = room.sharedImage;
+                    room.sharedImage = { ...input.image, expiresAt: Date.now() + IMAGE_TTL }; resetReady(room);
+                    // Publish only after approval. Persist the reference before
+                    // dropping private intent, so recreation can finish cleanup.
+                    await this.saveRoom(); await this.inputs.remove(input, true); this.input = undefined; await this.saveRoom();
+                    await deleteSharedImage(this.state.storage, old); this.broadcastRoomUpdate(); return;
+                }
                 input.stage = 'starting'; await this.inputs.save(input);
                 await service(this.env, '/archive/preflight', { code: room.code, jobId: input.id });
                 await service(this.env, '/quota/begin', { code: room.code, generations: remainingVideos(room), jobId: input.id,
@@ -471,6 +496,11 @@ export class RoomDurableObject {
             if (!this.inputMatches(room, input)) return;
             if (error instanceof ModerationError && error.code === 'moderation_unavailable' && input.expiresAt > Date.now() && this.env.AI_GENERATION_RELEASE !== 'blocked') {
                 input.retryAt = Date.now() + 15_000; await this.inputs.save(input); return;
+            }
+            if (input.shared) {
+                await this.inputs.remove(input, room.sharedImage?.id === input.image.id); this.input = undefined;
+                await this.saveRoom();
+                this.broadcastRoomUpdate(); this.broadcast('roomNotice', 'Das gemeinsame Bild konnte nicht freigegeben werden. Bitte versuche es erneut.'); return;
             }
             room.state = 'IDLE'; room.generationId = undefined;
             room.currentPrompt = ''; room.generationStage = undefined; room.generationStartedAt = undefined;
@@ -813,7 +843,7 @@ export class RoomDurableObject {
                 await this.checkVotingComplete();
                 await this.refreshLobbyQuota();
                 this.broadcastRoomUpdate();
-                if (this.input && this.room && !room.generationJob && this.input.retryAt <= Date.now()) this.runInput(room, this.input);
+                if (this.input && this.room && (this.input.shared || !room.generationJob) && this.input.retryAt <= Date.now()) this.runInput(room, this.input);
                 if (this.room?.state === 'GENERATING' && room.generationJob && room.generationId
                     && !this.activeGenerations.has(room.generationId) && (room.generationRetryAt || 0) <= Date.now()) this.runGeneration(room);
             }
@@ -857,9 +887,10 @@ export class RoomDurableObject {
     }
 
     private async saveRoom() {
-        if (this.input && (!this.room || !this.inputMatches(this.room, this.input) || this.room.generationJob)) {
-            await this.inputs.remove(this.input); this.input = undefined;
+        if (this.input && (!this.room || !this.inputMatches(this.room, this.input) || (!this.input.shared && this.room.generationJob))) {
+            await this.inputs.remove(this.input, this.input.shared && this.room?.sharedImage?.id === this.input.image.id); this.input = undefined;
         }
+        if (this.room) this.room.sharedImagePending = Boolean(this.input?.shared);
         if (this.room) syncPhase(this.room);
         if (this.room) await this.state.storage.put('room', this.room);
         else {

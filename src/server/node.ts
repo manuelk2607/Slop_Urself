@@ -28,7 +28,7 @@ import { ROBOTS_TEXT, SITEMAP_XML } from './seo';
 import { qualityConfig } from '../ai/providers';
 import { preparedImageSize } from '../ai/images';
 import { normalizeImage } from '../security/images';
-import { generationSafetyReady, moderateInput, validatePrompt } from '../security/moderation';
+import { generationSafetyReady, moderateInput, validatePrompt, blockedGenerationCapacity } from '../security/moderation';
 import { archiveRecovery } from '../ai/recovery';
 import { approvedProvider } from '../ai/provider-trust';
 import { gameOptions } from '../game/options';
@@ -50,6 +50,7 @@ import {
 import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
 import { roundInput } from '../game/persistence';
 import { participants, participantForConnection, isSpectator, resetReady, startProblem, checkJoin, prepareRematch } from '../game/participants';
+import { NodeInputs } from './node-inputs';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -74,6 +75,18 @@ const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || p
 const reports = new ContentReports(nodeHfStorage(process.env.MODERATION_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/moderation')));
 const archiveReservations = new ArchiveReservations(nodeHfStorage(process.env.ARCHIVE_RESERVATIONS_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/archive-reservations')));
 const archiveInventory = new ArchiveStatusCache(config);
+const nodeInputs = new NodeInputs(nodeHfStorage(process.env.NODE_INPUT_STORAGE_DIR || path.join(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local', `node-${PORT}`), 'input-moderation')), config);
+let startupReady = false;
+app.use((_request, response, next) => {
+    if (!startupReady) { response.setHeader('Retry-After', '1'); response.status(503).send('Das Spiel startet gerade.'); return; }
+    next();
+});
+io.use((_socket, next) => startupReady ? next() : next(new Error('Das Spiel startet gerade.')));
+async function requireInputOwner(room: Room, player: Player) {
+    const socket = io.sockets.sockets.get(player.connectionId || player.id), account = socket?.data.account as Account | undefined;
+    if (!account || account.id !== player.accountId || account.expiresAt <= Date.now() || !await accountIsCurrent(account, config)) throw new Error('Bitte bestätige dein Benutzerkonto erneut.');
+    if (rooms.get(room.code) !== room || !room.players.includes(player)) throw new Error('Der Raum wurde verlassen.');
+}
 async function canReadVideo(url: string, account: Account) {
     return account.id === config.ADMIN_ACCOUNT_ID || [...rooms.values()].some(room => room.currentVideoUrl === url && participants(room).some(p => p.accountId === account.id))
         || Boolean(await getDatabase()?.canReadVideo(url, account.id));
@@ -211,7 +224,7 @@ app.get('/api/config', async (req, res) => {
     const signedIn = authDisabled(config) || Boolean(account);
     res.setHeader('Cache-Control', 'no-store');
     res.json({
-        ...(signedIn ? await budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
+        ...(blockedGenerationCapacity(config, players) || (signedIn ? await budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined) : { aiRoundLimit: 0, quotaMode: 'unavailable' })), authEnabled: !authDisabled(config),
         aiProvider: AI_PROVIDER === 'mock' ? 'mock' : AI_PROVIDER_CHAIN,
         mockAi: AI_PROVIDER === 'mock', hfRequired: AI_PROVIDER !== 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
     });
@@ -359,7 +372,7 @@ async function refreshLobbyQuota(room: Room) {
     const players = room.players.length;
     const quality = gameOptions(room.options).quality;
     const mode = gameOptions(room.options).mode;
-    const capacity = isArchiveGame(room) ? archiveCapacity(await playableArchive(room), players) : await budget.capacity(players, quality, room.players);
+    const capacity = isArchiveGame(room) ? archiveCapacity(await playableArchive(room), players) : blockedGenerationCapacity(config, players) || await budget.capacity(players, quality, room.players);
     if (rooms.get(room.code) !== room || room.state !== state || video !== room.videoNumber || players !== room.players.length || quality !== gameOptions(room.options).quality || mode !== gameOptions(room.options).mode) return;
     if (state === 'GAME_OVER') room.extensionQuota = capacity;
     else {
@@ -453,7 +466,12 @@ async function endPhase(room: Room) {
     }
 }
 const phaseClock = setInterval(() => {
+    nodeInputs.sweep();
     for (const room of rooms.values()) {
+        if (room.sharedImage && room.sharedImage.expiresAt <= Date.now()) {
+            const old = room.sharedImage; room.sharedImage = undefined; resetReady(room);
+            void deleteSharedImage(imageStorage, old); broadcast(room);
+        }
         if (needsContentCheck(room) && (contentCheckAt.get(room) || 0) <= Date.now()) void archiveContentReady(room);
         if (room.phaseDeadline && room.phaseDeadline <= Date.now()) void endPhase(room);
         else if (room.state === 'VOTING' && room.previewDeadline && room.previewDeadline <= Date.now() && !room.previewConfirmed) { void checkVotingComplete(room, true).then(() => broadcast(room)); }
@@ -629,6 +647,29 @@ io.on('connection', (socket: Socket) => {
         const { room, player } = member(socket, payload);
         const recovering = room.state === 'IDLE' && gameOptions(room.options).sharedImage && (!room.sharedImage || room.sharedImage.expiresAt <= Date.now());
         if ((!['LOBBY', 'GAME_OVER'].includes(room.state) && !recovering) || room.hostId !== player.id || pendingStarts.has(room.code)) return;
+        if (AI_PROVIDER !== 'mock') {
+            generationSafetyReady(config);
+            if (!player.accountId || nodeInputs.has(room.code) || !gameOptions(room.options).sharedImage) throw new Error('Ein Bild wird bereits geprüft oder das Profil ist nicht bestätigt.');
+            const phase = room.state, ballot = room.ballotId;
+            const current = () => rooms.get(room.code) === room && room.hostId === player.id && room.players.includes(player)
+                && room.state === phase && room.ballotId === ballot && gameOptions(room.options).sharedImage;
+            room.sharedImagePending = true; resetReady(room); broadcast(room);
+            try { await nodeInputs.submit({ id: randomUUID(), code: room.code, creatorId: player.id, accountId: player.accountId,
+                prompt: '', ballotId: ballot, shared: true, roomPhase: phase }, payload.imageBase64 as string, {
+                current,
+                cancelled: () => { room.sharedImagePending = false; if (rooms.get(room.code) === room) broadcast(room); },
+                approved: async image => {
+                    await requireInputOwner(room, player); if (!current()) return;
+                    const prepared = await writeSharedImage(imageStorage, image), old = room.sharedImage;
+                    if (!current()) { await deleteSharedImage(imageStorage, prepared); return; }
+                    room.sharedImage = prepared; room.sharedImagePending = false; resetReady(room);
+                    await deleteSharedImage(imageStorage, old); broadcast(room);
+                },
+                rejected: async () => { room.sharedImagePending = false; broadcast(room); io.to(room.code).emit('roomNotice', 'Das gemeinsame Bild konnte nicht freigegeben werden.'); }
+            }); }
+            catch (error) { room.sharedImagePending = false; broadcast(room); throw error; }
+            return;
+        }
         const state = room.state;
         pendingStarts.add(room.code);
         try {
@@ -657,6 +698,7 @@ io.on('connection', (socket: Socket) => {
     on('startGame', async payload => {
         const { room, player } = member(socket, payload);
         if (room.hostId !== player.id || room.state !== 'LOBBY') return;
+        if (room.sharedImagePending) throw new Error('Das gemeinsame Bild wird noch geprüft.');
         if (startProblem(room)) throw new Error(startProblem(room));
         if (pendingStarts.has(room.code)) return;
         pendingStarts.add(room.code);
@@ -684,6 +726,32 @@ io.on('connection', (socket: Socket) => {
         generationSafetyReady(config);
         if (AI_PROVIDER !== 'mock') approvedProvider(config);
         const imageBase64 = await normalizeImage(gameOptions(room.options).sharedImage ? await readSharedImage(imageStorage, room.sharedImage) : payload.imageBase64);
+        if (AI_PROVIDER !== 'mock') {
+            if (!player.accountId || nodeInputs.has(room.code)) throw new Error('Ein Bild wird bereits geprüft oder das Profil ist nicht bestätigt.');
+            if (!archiveEnabled(config)) throw new Error('Der Videospeicher ist nicht eingerichtet.');
+            const id = randomUUID(), ballot = room.ballotId;
+            const current = () => rooms.get(room.code) === room && room.state === 'GENERATING' && room.generationId === id
+                && activeCreator(room)?.id === player.id && room.ballotId === ballot;
+            room.state = 'GENERATING'; room.generationId = id; room.generationStartedAt = Date.now(); room.generationStage = 'moderation';
+            room.currentPrompt = prompt; room.currentVideoUrl = ''; room.currentVotes = {}; room.generationJob = undefined; broadcast(room);
+            try { await nodeInputs.submit({ id, code: room.code, creatorId: player.id, accountId: player.accountId, prompt, ballotId: ballot }, imageBase64, {
+                current,
+                approved: async image => {
+                    await requireInputOwner(room, player); if (!current()) return;
+                    await reserveArchive(id, room.code);
+                    await withBudget(() => budget.begin(room.code, remainingVideos(room), id, player.id, remainingVideosFor(room, player.id), player));
+                    if (!current()) { await Promise.all([withBudget(() => budget.consume(room.code, id)), releaseArchive(id)]); return; }
+                    room.generationStage = 'preparing'; broadcast(room); runGeneration(room, id, image);
+                },
+                rejected: async () => {
+                    if (!current()) return;
+                    room.state = 'IDLE'; room.generationId = undefined; room.currentPrompt = ''; broadcast(room);
+                    await Promise.all([withBudget(() => budget.consume(room.code, id)), releaseArchive(id)]);
+                    io.to(room.code).emit('roomNotice', 'Die Bildprüfung konnte nicht abgeschlossen werden. Bitte wähle ein anderes Bild oder versuche es erneut.');
+                }
+            }); } catch (error) { if (current()) { room.state = 'IDLE'; room.generationId = undefined; room.currentPrompt = ''; broadcast(room); } throw error; }
+            return;
+        }
         await moderateInput(imageBase64, buildVideoPrompt(prompt), config);
         const image = validateImage(imageBase64);
         if (room.imageProfile === 'bounded') preparedImageSize(image.base64);
@@ -776,7 +844,7 @@ io.on('connection', (socket: Socket) => {
             do { code = randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase(); } while (await roomExists(code) || rooms.has(code));
             const plan = prepareRematch(room, code), next = plan.room;
             next.quota = isArchiveGame(next) ? archiveCapacity(await playableArchive(next), next.players.length)
-                : await budget.capacity(next.players.length, gameOptions(next.options).quality, next.players);
+                : blockedGenerationCapacity(config, next.players.length) || await budget.capacity(next.players.length, gameOptions(next.options).quality, next.players);
             next.maxRounds = next.quota.aiRoundLimit ? maxRounds(next.maxRounds || 1, next.quota.aiRoundLimit) : 0;
             if (room.state !== 'GAME_OVER' || room.hostId !== player.id || roster !== participants(room).filter(p => p.connected).map(p => p.id).join(',') || room.players.some(p => !p.connected)) throw new Error('Die Gruppe hat sich geändert. Bitte versuche es erneut.');
             // No await between the final collision check and registering the new room.
@@ -816,5 +884,10 @@ server.on('error', error => {
     console.error(code === 'EADDRINUSE' ? `Port ${PORT} ist belegt. Starte mit PORT=${PORT + 1} npm run dev.` : error.message);
     process.exitCode = 1;
 });
-ensureDatabaseSchema().then(() => server.listen(PORT, () => console.log(`Server läuft auf http://127.0.0.1:${PORT}`)))
-    .catch(error => { operationFailure('startup', error); process.exitCode = 1; });
+// Bind first: another process owning this port may also own these jobs. A failed
+// second start must never run orphan cleanup against the live process's files.
+server.listen(PORT, () => {
+    void Promise.all([ensureDatabaseSchema(), nodeInputs.cleanupOnStart()]).then(() => {
+        startupReady = true; console.log(`Server läuft auf http://127.0.0.1:${PORT}`);
+    }).catch(error => { operationFailure('startup', error); process.exitCode = 1; io.close(); server.close(); });
+});

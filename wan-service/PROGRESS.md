@@ -12,3 +12,31 @@ No GPU jobs, deployment, secrets, DB, release changes or commits.
   moderation qualification and Space source/runtime identity.
 
 Checkpoint: Preparation interrupted; no executable producer implemented. Do not treat this folder as deployable. Official candidates inspected: Wan-AI/Wan2.2-I2V-A14B-Diffusers and lightx2v/Wan2.2-Lightning. Exact adapter format, immutable pins, scheduler, dual-expert recipe and free hardware fit remain unverified.
+
+## Read-only discovery, 2026-10-30
+
+An existing **private remote prototype** was found using the owner's existing
+local credential without exposing it. The connector's unauthenticated/not-found
+response did not mean that the Space was deleted. HF API confirms
+`Manuel2607/SlopUrself-Wan22-GPU-Test`, source
+`ed1bb1cacd00f89c789b1d8d13657d71d49ad4a6`, **PAUSED**, no current hardware.
+The Space was neither resumed nor modified and no GPU request was made.
+
+Source at that immutable revision uses the fixed merge
+`TestOrganizationPleaseIgnore/WAMU-Merge-MotionBoost_WAN2.2_I2V_LIGHTNING`, revision
+`261ceaab8aeeb2493bf0b7304a51c190c1e91073`, and `size="large"`. This is a
+community merge, not proof of the official Wan weights or a successful inference.
+The LoRA list is empty. Remaining reproducibility issues include startup
+`pip install --upgrade --no-deps spaces`, unpinned dependencies, and two
+`spaces.aoti_load` calls to `cbensimon/WanTransformer3DModel-sm120-cu130-raa`
+without an immutable revision in the call. Source SHA alone therefore does not
+establish a stable runtime. The application still requires matching source and
+runtime SHAs, declared `slop_model` identity and an approved endpoint schema.
+The inspected prototype does not declare `slop_model`; the existing strict
+application gate correctly refuses this producer rather than silently trusting it.
+
+Next: replace/lock these runtime inputs and implement the identity contract in a
+reviewable producer package, review the merge's license/provenance and validate
+CPU contract checks before seeking a separately scoped free GPU test. The local
+folder still contains no qualified, deployable producer; do not enable the game
+or claim successful large-hardware operation based on this discovery.

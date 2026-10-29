@@ -10,6 +10,29 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Implementiert und erhalten
 
+- Aktuelles geprüftes Paket 30.10.: Gemeinschaftsbilder in Cloudflare
+  ebenfalls privat/dauerhaft prüfen, Start bis Freigabe sperren, Besitzer/Phase/
+  Variante vor Veröffentlichung erneut prüfen. Neuerstellung vollendet auch die
+  Bereinigung nach bereits persistierter Freigabe. Node nutzt private Dateien und
+  dieselben Tickets mit begrenzten Retries, Abbruchschutz während des Speicherns
+  und reinen Bereinigungs-Retries nach erfolgreicher Prüfung. Node-Spielräume
+  bleiben RAM-basiert; Neustart verwirft verwaiste Prüfungen sicher statt einen
+  unbekannten Spiel-/GPU-Auftrag wiederherzustellen. Port erst binden, danach
+  Orphan-Bereinigung: ein zweiter Prozess auf belegtem Port darf nichts löschen.
+- Blockierte KI wird in Konfiguration/Lobby explizit mit null freigegebenen
+  Runden angezeigt, Budget-Mutationen vor externer Arbeit abgewiesen. Archivmodus
+  bleibt verfügbar. Regressionen für Gemeinschaftsbild-Recovery, Node-Tickets,
+  Speicherrennen, zweiten Serverstart und blockierte Service-Budgets ergänzt.
+- Vollständige Matrix abgeschlossen, Session69342 **Exit0**: Build/227 Units und
+  98 PASS-Prüfschritte (Chromium/WebKit, Node/workerd, Auth/OAuth, Moderation,
+  Quota, zehn Spieler/81 Stimmen, Archiv/Varianten/Mobile/A11y). Externe Dienste
+  simuliert, null echte GPU-Aufträge. Log
+  `.local/audit-tests/ci-2026-10-30-inputs-validated.log`, SHA256
+  `64dc1eeb2d2c26ebfcad0e3601a229bcdb7f2749398db26483c5ad224d804dde`.
+  Moderationsdienst Build/25 technische Tests bestanden, keine semantische Abnahme.
+  Zwei abgebrochene Teilläufe zählen nicht. Wrangler-Dry-Run und separater
+  Typcheck des Produktions-Smoke-Tools bestanden; finale Diffprüfung sauber.
+
 - Neues Entwicklungspaket 30.10.: persistente Eingabemoderation für Cloudflare-Spielzüge.
   Private Bildchunks mit Intent vor erstem Chunk, sechsminütiger Retention und
   Alarm vor Speicherung. Room-Recreation übernimmt Ticket und Eingabe; Statusabfrage
@@ -97,12 +120,13 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 1. P0: Moderationskandidat/Gratis-Hosting qualifizieren. NSFW/SmolVLM bisher bei
    harmlosen Fällen/Format/Latenz gescheitert. Keine identischen Diagnoserunden,
    keine erfundene qualification.json; Korpus-/Fach-/Lizenzabnahme fehlt.
-2. P0: Cloudflare-Spielzüge nutzen nun private persistente Eingabejobs. Weitere
-   Pfade: gemeinsame Bildauswahl in der Lobby und Node-Entwicklungsserver weiterhin
-   synchron/max.30s; deren langfristige Orchestrierung bleibt offen. SQLite-Volume
+2. P0: Eingabe-/Ausgabetickets, Gemeinschaftsbild und Node-Prüfaufträge sind lokal
+   implementiert. Abnahme mit qualifiziertem Dienst weiterhin offen. SQLite-Volume
    beim Hoster prüfen: /tmp überlebt keinen garantierten Space-Rebuild.
-3. P0: kontrollierter Wan-Produzent mit kompatiblem festem Modell-/Lightning-Rezept
-   und Hosting fehlt. wan-service/PROGRESS.md nur Vorbereitung; Drift-Gates strikt.
+3. P0: eigener privater Wan-Prototyp existiert, wurde lesend bestätigt: PAUSED,
+   SHA ed1bb1cacd00f89c789b1d8d13657d71d49ad4a6. Fester MotionBoost-Merge, aber
+   mutable spaces-Installation/AOTI-Quellen und fehlendes slop_model: keine
+   Laufzeitfreigabe. Nicht gestartet/geändert. Details wan-service/PROGRESS.md.
 4. P0: echte HF-Abrechnung fehlt. Zwei Konten am28.10. lesend isoliert geprüft,
    fremde Jobidentität abgewiesen, Budgets unverändert. RAM-Zugänge verworfen.
    Neue offizielle OAuth-Anmeldung erst für freigegebenen GPU-Test, keine Tokens
@@ -116,9 +140,9 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Nächster konkreter Schritt
 
-1. Lobby-Gemeinschaftsbild und Node-Pfad ebenfalls auf begrenzte persistente Jobs
-   umstellen; neue Room-Eingabejobs später mit qualifizierter Moderation/Provider abnehmen.
-   Vor einem neuen Deployment vollständige relevante Browsermatrix nachholen.
+1. Getestetes Paket committen, pushen und mit aktiver KI-Sperre deployen.
+   Produktiv Release-ID, Konfiguration,
+   private APIs und öffentliche Seiten prüfen und den Nachweis hier aktualisieren.
 2. Moderationsalternative/Hosting qualifizieren und kontrollierten Wan-Produzenten
    fertigstellen. Negative Diagnosen nicht einfach wiederholen oder Gates lockern.
 3. Danach neue persönliche HF-Anmeldungen über den sicheren OAuth-Prüfweg und

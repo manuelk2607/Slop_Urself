@@ -33,9 +33,11 @@ for (const agent of [undefined, 'Googlebot/2.1 (+http://www.google.com/bot.html)
     assert.equal(new XMLParser().parse(xml).urlset.url.loc, origin.origin + '/');
 }
 const config = await get('/api/config'); assert.equal(config.status, 200);
-const settings = await config.json() as { authEnabled?: boolean; hfRequired?: boolean; mockAi?: boolean; aiRoundLimit?: number };
+const settings = await config.json() as { authEnabled?: boolean; hfRequired?: boolean; mockAi?: boolean; aiRoundLimit?: number; generationBlocked?: boolean; quotaMode?: string };
 assert.equal(settings.authEnabled, true); assert.equal(settings.hfRequired, true); assert.equal(settings.mockAi, false);
 assert.equal(settings.aiRoundLimit, 0, 'Anonymous clients cannot query a personal budget.');
+assert.equal(settings.generationBlocked, true, 'This release must explicitly expose the production inference hold.');
+assert.equal(settings.quotaMode, 'unavailable');
 for (const path of ['/api/session', '/api/stats', '/api/stats/videos', '/api/stats/rooms', '/api/rooms/0000/image', '/ws/0000']) {
     const response = await get(path); assert.ok([401, 403].includes(response.status), path);
     assert.match(response.headers.get('x-robots-tag') || '', /noindex/);
@@ -45,4 +47,5 @@ const forged = await fetch(new URL('/api/session', origin), { method: 'POST', re
     body: JSON.stringify({ mode: 'create', username: 'NeverCreated' }), signal: AbortSignal.timeout(20_000) });
 assert.equal(forged.status, 403, 'Foreign-origin registration rejected before writes.');
 console.info(JSON.stringify({ release: expected, origin: origin.origin, probes, foreignOriginRejected: true,
+    generationHoldExposed: settings.generationBlocked,
     inferenceCalls: 0, databaseWrites: 0, limitations: ['No authenticated positive multiplayer or real GPU/billing test.', 'Googlebot user-agent is not evidence of a real Google crawl.'] }, null, 2));

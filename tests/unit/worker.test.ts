@@ -825,3 +825,32 @@ test('approval arriving after the creator turn changes cannot restore private in
         assert.ok(!calls.includes('/quota/begin')); assert.equal((f.data.get('room') as Room).activeCreatorIndex, 1);
     } finally { complete?.(); globalThis.fetch = original; }
 });
+
+test('shared lobby images stay private until approval and survive recreation without GPU budget calls', async () => {
+    const original = globalThis.fetch; let approved = false, posts = 0;
+    const calls: string[] = [];
+    globalThis.fetch = async (_url, options) => {
+        const digest = new Headers(options?.headers).get('x-content-sha256');
+        if (options?.method === 'POST') { posts++; assert.equal(JSON.parse(String(options.body)).prompt, ''); return Response.json({ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', digest, status: 'pending' }, { status: 202 }); }
+        return approved ? Response.json({ decision: 'allow', digest, decodeComplete: true, policyVersion: testModerationConfig.MODERATION_POLICY_VERSION, modelVersion: testModerationConfig.MODERATION_MODEL_VERSION }) : Response.json({ digest, status: 'pending' }, { status: 202 });
+    };
+    try {
+        const services = { idFromName: () => ({}), get: () => ({ fetch: async (r: Request) => {
+            const path = new URL(r.url).pathname; calls.push(path);
+            const body = await r.json() as { name?: string };
+            return Response.json(path === '/profiles/find' ? { profile: { id: `account-${body.name}`, name: body.name } } : { aiRoundLimit: 5 });
+        } }) };
+        const f = await fixture('LOBBY', { ...testModerationConfig, MODERATION_URL: 'https://moderation.test/jobs/validate', AI_PROVIDER: 'wan22', AUTH_MODE: '', SERVICES: services as never }, 1, { options: gameOptions({ sharedImage: true }) });
+        const worker = f.worker as any, room = worker.room as Room; room.players[0].accountId = 'account-a';
+        f.sockets[0].attachment.account = { id: 'account-a', name: 'a', identityProof: 'owner', expiresAt: Date.now() + 60_000 };
+        await worker.setSharedImage(room.players[0], { imageBase64: testImageData(832, 624) }); await Promise.all(f.pending);
+        assert.equal(room.sharedImage, undefined); assert.equal(roomSnapshot(room, 'b').sharedImagePending, true);
+        await assert.rejects(worker.startGame(room.players[0]), /geprüft/);
+        const restored = await f.recreate() as any; approved = true; restored.input.retryAt = 0;
+        await restored.alarm(); await Promise.all(f.pending);
+        assert.equal(posts, 1); assert.ok(restored.room.sharedImage); assert.equal(restored.room.sharedImagePending, false);
+        assert.equal(restored.room.state, 'LOBBY'); assert.equal(f.data.has('pendingInput'), false);
+        assert.ok([...f.data.keys()].some(key => key.startsWith('image:')), 'approved room reference retains its chunks');
+        assert.ok(!calls.includes('/quota/begin')); assert.ok(!calls.includes('/archive/preflight'));
+    } finally { globalThis.fetch = original; }
+});

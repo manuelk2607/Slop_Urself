@@ -9,6 +9,7 @@ export class GpuQuotaError extends Error {
 export interface Reservation { rounds: number; active: number; expiresAt: number; reset: string | null; gpuSecondsPerVideo?: number; activeJobs?: Record<string, number>; quality?: GenerationQuality }
 export interface BudgetStorage { get<T>(key: string): Promise<T | undefined>; put<T>(key: string, value: T): Promise<void> }
 export interface QuotaCapacity {
+    generationBlocked?: boolean;
     aiRoundLimit: number;
     playerCount: number;
     quotaMode: 'mock' | 'live' | 'unavailable' | 'archive';

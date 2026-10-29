@@ -11,7 +11,7 @@ import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/r
 import { json } from './runtime';
 import type { DurableObjectState, Env } from './types';
 import { restoreIds } from '../../shared/history';
-import { ModerationError } from '../../security/moderation';
+import { ModerationError, blockedGenerationCapacity, generationSafetyReady } from '../../security/moderation';
 import { ContentReports, type ReportReason } from '../../security/reports';
 import { ArchiveReservations } from '../../storage/reservations';
 import { verifyHfRoster } from '../../auth/hf-roster';
@@ -46,6 +46,9 @@ export class ServiceDurableObject {
                 participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number;
                 account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
             const quality = generationQuality(data.quality);
+            const blocked = blockedGenerationCapacity(this.env, data.players || 1);
+            if (blocked && ['/quota/display', '/quota/capacity'].includes(path)) return json(blocked);
+            if (blocked && ['/quota/reserve', '/quota/extend', '/quota/begin', '/quota/attempt'].includes(path)) generationSafetyReady(this.env);
             if (path === '/security/content/blocked') return json({ blocked: await this.reports.blocked(data.url) });
             if (path === '/security/content/allowed') return json({ allowedUrls: await this.reports.allowed(data.urls) });
             if (path === '/security/content/list') return json({ reports: await this.reports.list() });

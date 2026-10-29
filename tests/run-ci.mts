@@ -45,6 +45,7 @@ async function cleanup() {
 process.once('SIGTERM', () => { void cleanup().then(() => process.exit(143)); });
 process.once('SIGINT', () => { void cleanup().then(() => process.exit(130)); });
 try {
+    await run(['tests/integration/node-startup.mts']);
     await start(3310, false); await start(3312, true); await start(3313, false);
     await run(['tests/e2e/security.e2e.mts', 'http://127.0.0.1:3313']);
     await run(['tests/integration/cloudflare-runtime.mts']);

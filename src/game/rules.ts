@@ -56,6 +56,7 @@ export interface Room {
     options?: GameOptions;
     imageProfile?: 'bounded';
     sharedImage?: SharedImage;
+    sharedImagePending?: boolean;
     tasks?: Record<string, string>;
     guesses?: Record<string, { text: string; correct?: boolean }>;
     guessesReviewed?: boolean;
@@ -182,6 +183,7 @@ export function roomSnapshot(room: Room, viewerId?: string) {
         previewDeadline: room.previewDeadline, previewConfirmed: room.previewConfirmed,
         options: gameOptions(room.options),
         sharedImageUrl: room.sharedImage ? `/api/rooms/${room.code}/image?id=${room.sharedImage.id}` : undefined,
+        sharedImagePending: Boolean(room.sharedImagePending),
         ownTask: viewerId === creator?.id ? room.tasks?.[viewerId] : undefined,
         ownGuess: viewerId ? room.guesses?.[viewerId]?.text : undefined,
         task: room.players.some(p => p.id === viewerId) ? revealedTask(room) : undefined,

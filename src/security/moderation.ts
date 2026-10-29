@@ -27,6 +27,11 @@ export function generationSafetyReady(config: ModerationConfig) {
     if (config.AI_PROVIDER !== 'mock' && config.AI_GENERATION_RELEASE === 'blocked') throw unavailable();
     if (config.AI_PROVIDER !== 'mock' && !moderationConfigured(config)) throw unavailable();
 }
+export function blockedGenerationCapacity(config: ModerationConfig, players: number) {
+    if (config.AI_PROVIDER === 'mock' || config.AI_GENERATION_RELEASE !== 'blocked') return;
+    return { aiRoundLimit: 0, playerCount: players, quotaMode: 'unavailable' as const, generationBlocked: true,
+        error: 'Neue KI-Videos sind derzeit gesperrt. Archivpartien bleiben verfügbar.' };
+}
 async function sha256(bytes: Uint8Array) {
     const hash = await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>);
     return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');

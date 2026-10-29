@@ -5,7 +5,7 @@ import { prepareImage } from './images';
 interface Guess { playerId: string; name: string; text: string; correct?: boolean; points: number }
 export interface VariantSnapshot {
     roomId?: string; hostId: string; activeCreatorId?: string; gameState: string; videoNumber?: number; currentRound?: number; ballotId?: string; role?: string;
-    options?: GameOptions; sharedImageUrl?: string; ownTask?: string; ownGuess?: string; task?: string;
+    options?: GameOptions; sharedImageUrl?: string; sharedImagePending?: boolean; ownTask?: string; ownGuess?: string; task?: string;
     reviewPrompt?: string; reviewGuesses?: Guess[]; votedPlayerIds?: string[];
     playerCount?: number; players?: { id: string }[]; previewDeadline?: number; previewConfirmed?: boolean; hasAbstained?: boolean;
     reveal?: { prompt: string; task?: string; guesses: Guess[] };
@@ -114,15 +114,17 @@ export function gameVariants(roomId: () => string, playerId: () => string, emit:
         const missingImage = options.sharedImage && !data.sharedImageUrl && data.gameState === 'IDLE';
         element(missingImage ? 'sharedImageCreateSlot' : data.gameState === 'GAME_OVER' ? 'sharedImageFinalSlot' : 'sharedImageLobbySlot').append(panel);
         panel.hidden = !options.sharedImage;
-        imageButton.hidden = !host; imageButton.disabled = uploading;
+        imageButton.hidden = !host; imageButton.disabled = uploading || Boolean(data.sharedImagePending);
         if (data.sharedImageUrl !== sharedUrl) {
             sharedUrl = data.sharedImageUrl || '';
             const preview = element<HTMLImageElement>('sharedImagePreview'); preview.hidden = !sharedUrl;
             if (sharedUrl) preview.src = sharedUrl; else preview.removeAttribute('src');
             imageStatus.textContent = sharedUrl ? 'Bild bereit.' : 'Noch kein gemeinsames Bild vorhanden.';
         }
+        if (!uploading) imageStatus.textContent = data.sharedImagePending ? 'Das gemeinsame Bild wird geprüft …' : sharedUrl ? 'Bild bereit.' : 'Noch kein gemeinsames Bild vorhanden.';
+        if (data.sharedImagePending) element<HTMLButtonElement>('startGameButton').disabled = true;
         element('personalImagePicker').hidden = options.sharedImage;
-        if (options.sharedImage && creator && data.gameState === 'IDLE') element<HTMLButtonElement>('uploadButton').disabled = missingImage;
+        if (options.sharedImage && creator && data.gameState === 'IDLE') element<HTMLButtonElement>('uploadButton').disabled = missingImage || Boolean(data.sharedImagePending);
         const common = element<HTMLImageElement>('sharedCreationImage'); common.hidden = !options.sharedImage || !sharedUrl;
         if (sharedUrl && common.getAttribute('src') !== sharedUrl) common.src = sharedUrl;
         element('secretTask').hidden = !data.ownTask; element('secretTask').textContent = data.ownTask ? `Dein geheimer Auftrag: ${data.ownTask}` : '';

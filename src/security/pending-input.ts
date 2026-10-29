@@ -1,6 +1,7 @@
 import { deleteSharedImage, writeSharedImage, type ImageStorage, type SharedImage } from '../game/images';
 
 export interface PendingInput {
+    shared?: boolean; roomPhase?: string;
     id: string; code: string; creatorId: string; accountId: string; ballotId?: string;
     prompt: string; image: SharedImage; expiresAt: number; retryAt: number;
     stage: 'staging' | 'checking' | 'starting';
@@ -22,9 +23,9 @@ export class PendingInputs {
         } catch (error) { if (pending) await this.remove(pending); throw error; }
     }
     save(value: PendingInput) { return this.storage.put('pendingInput', value); }
-    async remove(value: PendingInput) {
+    async remove(value: PendingInput, keepImage = false) {
         if ((await this.load())?.id !== value.id) return;
-        await deleteSharedImage(this.storage, value.image);
+        if (!keepImage) await deleteSharedImage(this.storage, value.image);
         await this.storage.delete('moderation-checkpoints');
         await this.storage.delete('pendingInput');
     }

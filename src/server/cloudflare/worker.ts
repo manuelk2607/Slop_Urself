@@ -18,6 +18,7 @@ import { operationFailure } from '../../security/diagnostics';
 import { releaseId, releaseResponse } from '../../security/release';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
+import { blockedGenerationCapacity } from '../../security/moderation';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
 export type { Env } from './types';
@@ -71,7 +72,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             const account = await requestAccount(request, auth).catch(() => undefined);
             const signedIn = authDisabled(env) || Boolean(account);
             return json({
-                ...(signedIn ? await service(env, '/quota/display', { players, participants: account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined }) : { aiRoundLimit: 0, quotaMode: 'unavailable' }),
+                ...(blockedGenerationCapacity(env, players) || (signedIn ? await service(env, '/quota/display', { players, participants: account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined }) : { aiRoundLimit: 0, quotaMode: 'unavailable' })),
                 authEnabled: !authDisabled(env),
                 aiProvider: env.AI_PROVIDER === 'mock' ? 'mock' : env.AI_PROVIDER_CHAIN || env.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN,
                 mockAi: env.AI_PROVIDER === 'mock',
