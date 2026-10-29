@@ -1,0 +1,47 @@
+{
+  "sourceCommit": "f34d6a3",
+  "branch": "codex/audit-remediation",
+  "ci": {
+    "exitCode": 0,
+    "unitTests": 217,
+    "passRecords": 97,
+    "browsers": ["chromium", "webkit"],
+    "runtimes": ["node", "workerd"],
+    "log": ".local/audit-tests/ci-2026-10-29-release-validated.log",
+    "sha256": "4874e4f3231566d94256e0ee8522e4f65afaaa76aab9dc741e67c9eaa4e8895e",
+    "externalServicesSimulated": true,
+    "realGpuCalls": 0
+  },
+  "moderationService": { "build": true, "technicalTests": 25, "qualified": false },
+  "releasePreparation": {
+    "wranglerDryRun": true,
+    "productionDependencyAuditFindings": 0,
+    "diffCheck": true,
+    "secretPatternFindings": 0,
+    "dedicatedLintConfigured": false,
+    "productionInferenceBinding": "blocked"
+  },
+  "externalReads": {
+    "databaseSchemaCompatible": true,
+    "publicTables": 6,
+    "publicIndexes": 14,
+    "runtimeLeastPrivilegeVerified": false,
+    "snapshotsVisible": 0,
+    "snapshotScheduleEntries": 0,
+    "restoreVerified": false,
+    "archiveReadable": true,
+    "archiveObjects": 4,
+    "archiveBytes": 2806873
+  },
+  "pushVerified": false,
+  "deploymentVerified": false,
+  "generationRelease": false,
+  "billingVerified": false,
+  "limitations": [
+    "Moderation model quality and hosting remain unqualified.",
+    "Persistent input moderation room orchestration is incomplete.",
+    "Controlled Wan producer and actual personal quota debit remain unverified.",
+    "No live authenticated production multiplayer/GPU test without fresh HF grants.",
+    "WAF, restore, host retention and real mobile devices remain unverified."
+  ]
+}
