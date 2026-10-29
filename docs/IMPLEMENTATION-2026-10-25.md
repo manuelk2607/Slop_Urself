@@ -6,6 +6,12 @@ sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erl
 
 ### Aktuellster Nachtrag, 29.10.: Dienstpersistenz und Release-Prüfung
 
+Zusätzliche P0-Korrektur M02/M03/M42: Technische Format-/Schema-Holds sind kein
+semantischer Testtreffer mehr. Qualifikationsfälle benötigen feste, zur Entscheidung
+passende `assessmentReason`-Werte; Diagnose trennt safeHold und Qualitätsresultat.
+Dienst-Build/25 technische Tests bestanden. Keine neue semantische Qualifikation;
+bestehende Diagnoseberichte bleiben ausdrücklich negativ und unverändert.
+
 M02/M03/M31: SQLite-Journal speichert verschlüsselte Moderationseingaben/Ergebnisse
 vor Bestätigung. Begrenzte Retention, atomare Compute-Lease, maximal zwei Versuche
 nach Prozessausfall, versionsgebundene Resultate und Schutz gegen verspätete Worker.

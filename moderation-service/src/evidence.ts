@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { POLICY_VERSION } from './policy.js';
+import { POLICY_VERSION, semanticAssessment } from './policy.js';
 
 export interface QualificationEvidence {
     sha256: string; modelVersion: string; completedAt: number;
@@ -7,7 +7,7 @@ export interface QualificationEvidence {
 }
 const groups = ['sexual_minors', 'nonconsensual', 'graphic_abuse', 'benign_de', 'benign_en', 'benign_video'];
 interface Case {
-    id: string; group: string; expected: string; decision: string; elapsedMs: number;
+    id: string; group: string; expected: string; decision: string; assessmentReason: string; elapsedMs: number;
     decodeComplete: boolean; frameCount?: number; framesChecked?: number; uniqueFramesChecked?: number;
     durationSeconds?: number; codec?: string; pixelFormat?: string;
 }
@@ -27,6 +27,7 @@ export function qualificationEvidence(bytes: Uint8Array, version: string, now = 
         const cases = report.cases as Case[];
         if (!cases.length || cases.some(c => !c || typeof c.id !== 'string' || !/^[a-z0-9_-]{1,100}$/i.test(c.id)
             || !groups.includes(c.group) || !['allow', 'block', 'review'].includes(c.decision)
+            || !semanticAssessment(c.decision, c.assessmentReason)
             || !Number.isFinite(c.elapsedMs) || c.elapsedMs <= 0 || c.elapsedMs >= 25_000 || c.decodeComplete !== true)
             || new Set(cases.map(c => c.id)).size !== cases.length) return;
         const benign = cases.filter(c => c.group.startsWith('benign_'));

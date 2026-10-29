@@ -22,6 +22,12 @@ Return ALLOW for clearly harmless nonsexual movement, family scenes, ordinary ch
 Answer exactly one word: ALLOW, BLOCK, or REVIEW. Do not describe the image and do not explain.`;
 }
 export interface Assessment { decision: Decision; reason: 'classifier_schema' | 'classifier_high_risk' | 'classifier_uncertain' | 'context_format' | 'context_schema' | 'context_prohibited' | 'context_sexual' | 'context_uncertain' | 'context_not_safe' | 'clear' }
+export function semanticAssessment(decision: unknown, reason: unknown) {
+    if (decision === 'allow') return reason === 'clear';
+    if (decision === 'block') return ['classifier_high_risk', 'context_prohibited'].includes(String(reason));
+    if (decision === 'review') return ['classifier_uncertain', 'context_sexual', 'context_uncertain', 'context_not_safe'].includes(String(reason));
+    return false;
+}
 export function assess(scores: Scores[], context: string, protocol: DecisionProtocol = 'json-v1'): Assessment {
     const hold = (reason: Assessment['reason']): Assessment => ({ decision: 'review', reason });
     if (!Array.isArray(scores) || scores.length !== 2 || scores.some(s => typeof s?.label !== 'string' || !Number.isFinite(s.score) || s.score < 0 || s.score > 1)) return hold('classifier_schema');

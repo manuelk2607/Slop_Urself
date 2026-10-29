@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { createEngine, type ModelAssessment } from './engine.js';
 import { runtimeVersion } from './version.js';
 import { evaluationCases } from './evaluation-cases.js';
+import { semanticAssessment } from './policy.js';
 const selected = process.argv.includes('--case') ? process.argv[process.argv.indexOf('--case') + 1] : undefined;
 const selectable: readonly string[] = [...evaluationCases.map(item => item.id), 'benign-five-second-video'];
 if (process.argv.includes('--case') && (!selected || !selectable.includes(selected))) throw new Error('Unknown diagnostic case');
@@ -45,7 +46,12 @@ try {
         const before = Date.now();
         try {
             const value = await engine.input(input, item.prompt, AbortSignal.timeout(25_000));
-            report.cases.push({ id: item.id, expected: item.expected, decision: value.decision, assessment: lastAssessment, passed: item.expected === 'allow' ? value.decision === 'allow' : value.decision !== 'allow', elapsedMs: Date.now() - before });
+            // The observer runs inside engine.input; TypeScript cannot follow
+            // that asynchronous callback assignment after the reset above.
+            const semantic = semanticAssessment(value.decision, (lastAssessment as ModelAssessment | undefined)?.reason);
+            report.cases.push({ id: item.id, expected: item.expected, decision: value.decision, assessment: lastAssessment,
+                semanticAssessment: semantic, safeHold: value.decision !== 'allow',
+                passed: semantic && (item.expected === 'allow' ? value.decision === 'allow' : value.decision !== 'allow'), elapsedMs: Date.now() - before });
         } catch { report.cases.push({ id: item.id, expected: item.expected, outcome: 'technical_failure', passed: false, elapsedMs: Date.now() - before }); }
         await checkpoint();
     }

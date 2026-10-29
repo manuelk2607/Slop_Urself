@@ -9,6 +9,7 @@ function fixture() {
     const cases = ['sexual_minors', 'nonconsensual', 'graphic_abuse', 'benign_de', 'benign_en', 'benign_video'].flatMap(group =>
         Array.from({ length: group === 'benign_video' ? 3 : group.startsWith('benign_') ? 10 : 5 }, (_, i) => ({
             id: `${group}-${i}`, group, expected: group.startsWith('benign_') ? 'allow' : 'hold', decision: group.startsWith('benign_') ? 'allow' : 'block',
+            assessmentReason: group.startsWith('benign_') ? 'clear' : 'context_prohibited',
             elapsedMs: 100, decodeComplete: true, ...(group === 'benign_video' ? { frameCount: 81, framesChecked: 81, uniqueFramesChecked: 81, durationSeconds: 5, codec: 'h264', pixelFormat: 'yuv420p' } : {})
         })));
     const report = { purpose: 'moderation-qualification', sufficientForQualification: true, policyVersion: POLICY_VERSION, modelVersion: version, completedAt: new Date(now).toISOString(), cases };
@@ -47,4 +48,15 @@ test('diagnostic, malformed, stale, sparse, duplicated, slow and excessive false
     for (const change of changes) { const f = fixture(); change(f.report); assert.equal(qualificationEvidence(f.bytes(), f.version, f.now), undefined); }
     assert.equal(qualificationEvidence(Buffer.from('{}'), 'x'), undefined);
     assert.equal(qualificationEvidence(new Uint8Array(1024 * 1024 + 1), 'x'), undefined);
+});
+
+test('technical fail-closed holds never qualify as measured semantic recognition', () => {
+    for (const reason of ['context_format', 'context_schema', 'classifier_schema', 'timeout', '', 'made_up']) {
+        const f = fixture(); f.report.cases[0].decision = 'review'; f.report.cases[0].assessmentReason = reason;
+        assert.equal(qualificationEvidence(f.bytes(), f.version, f.now), undefined, reason);
+    }
+    const inconsistent = fixture(); inconsistent.report.cases[0].assessmentReason = 'clear';
+    assert.equal(qualificationEvidence(inconsistent.bytes(), inconsistent.version, inconsistent.now), undefined);
+    const semantic = fixture(); semantic.report.cases[0].decision = 'review'; semantic.report.cases[0].assessmentReason = 'context_uncertain';
+    assert.ok(qualificationEvidence(semantic.bytes(), semantic.version, semantic.now));
 });

@@ -143,6 +143,14 @@ Qualifikationsvideos müssen mindestens 80 unterschiedliche Frames nachweisen.
 Technische Tests sind keine semantische Qualitätsabnahme. Siehe
 [28.10.-Diagnose](../docs/audits/2026-10-28-moderation-labels-v2.json).
 
+Qualifikationsberichte benötigen je Fall zusätzlich `assessmentReason` aus der
+festen Entscheidungsmenge. `context_format`, `context_schema`, `classifier_schema`
+und technische Ausfälle zählen niemals als semantischer Treffer, auch wenn sie
+korrekt sperren. Die Diagnose unterscheidet deshalb `safeHold` von bestandener
+inhaltlicher Bewertung. Fehlende oder widersprüchliche Gründe machen einen
+Qualifikationsbericht ungültig. Unsicherheit bleibt ein Hold, kein Beweis einer
+eindeutig erkannten Rechtsverletzung. Bestehende Messberichte werden nicht umetikettiert.
+
 29.10.: Vorbereitete Hintergrundschnittstelle: `POST /jobs/evaluate` bzw.
 `POST /jobs/validate` antwortet nach validiertem Upload mit 202 und einer zufälligen
 Auftragskennung. `GET /jobs/{id}` verlangt denselben Bearer-Schlüssel und

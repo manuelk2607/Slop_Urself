@@ -1,5 +1,18 @@
 # Audit-Umsetzung – Stand 29. Oktober 2026
 
+## Weiteres P0-Paket – technische Holds sind kein Qualitätsnachweis
+
+- **M02/M03/M42:** Qualifikationsparser verlangt nun einen zur Entscheidung
+  passenden festen `assessmentReason`. Format-/Schemafehler und technische Ausfälle
+  dürfen keinen Risikofall als semantisch bestanden zählen. Der Diagnose-Runner
+  trennt `safeHold` von inhaltlichem Testerfolg; historische negative Modellberichte
+  bleiben unverändert. Keine neuen Modelle geladen, keine Qualitätsfreigabe.
+- Dienst-Build/25 technische Tests bestanden. Neue Regressionen verwerfen sechs
+  technische/unbekannte Gründe sowie widersprüchliche Entscheidungen. Fachliche
+  Korpus-/Qualitätsabnahme, Modelleignung und Gratis-Hosting bleiben offen.
+- Voriges Paket lokal committed als `138068a`; kein Push/Deployment. Nächster
+  Entwicklungsschritt bleibt die persistente Room-/Service-Orchestrierung, siehe unten.
+
 ## Fortsetzung – persistente Dienstjobs und produktiver Versionsabgleich
 
 - **M02/M03/M31, dienstseitig umgesetzt:** Moderationsaufträge werden vor HTTP 202
