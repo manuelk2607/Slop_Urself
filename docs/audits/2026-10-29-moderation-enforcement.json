@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-29",
+  "scope": "local fail-closed pipeline and portable transport regression",
+  "buildExitCode": 0,
+  "unitTestsPassed": 211,
+  "unitTestsFailed": 0,
+  "workerdBoundaryExitCode": 0,
+  "fullBrowserMatrixRepeated": false,
+  "realGpuCalls": 0,
+  "productionWritesThisPackage": 0,
+  "push": false,
+  "applicationDeploy": false,
+  "semanticModerationQualified": false,
+  "durableModerationRecoveryImplemented": false,
+  "controlledWanProducerImplemented": false,
+  "logSha256": {
+    "build-2026-10-29-moderation-client.log": "8c3f82cfab87560f6fa9c8c19ed22a3ef8d9bbae1c1409600f07914f097eddfe",
+    "unit-2026-10-29-moderation-client.log": "ce351eabcdc5420f8f82caa5fa30118043ad344c2ddf102b033e0aec81fbf376",
+    "workerd-2026-10-29-moderation-client.log": "811652110f0d37d6a003c5ec8da4196cec5732e680d6142597caf53818e6e3fd"
+  }
+}

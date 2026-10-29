@@ -620,3 +620,27 @@ HTTP 200, application/xml, keine Weiterleitung, XML-Namespace/loc korrekt. User-
 Simulation ist kein Google-Servernachweis. Der vom Nutzer eingefügte Hinweis auf
 fehlende Style-Informationen ist eine normale XML-Browserdarstellung. Ohne konkreten
 GSC-Abrufbefund wird kein HTML-/Sitemap-Fix erfunden.
+
+
+### 29.10.: zentrale Moderationsdurchsetzung und Hintergrundtransport
+
+`security/moderation-jobs.ts` integriert den bestehenden Hintergrundvertrag in die
+zentralen Bild-/Prompt- und Videoprüfpfade. Ein 202-Ticket erlaubt nur Polling auf
+dem konfigurierten Ursprung mit gebundenem Digest. Fremde URLs, Redirects,
+evaluationOnly, verlorene Tickets, widersprüchliche Pending-Antworten und überlange
+Bodies werden abgewiesen; kein automatischer neuer POST nach unbekanntem Status.
+Der Client bleibt auf maximal 30 Sekunden begrenzt, bis persistente Ticket-/Alarm-
+Orchestrierung die seriellen Raum-/Serviceoperationen entlastet. Dauerhafte Recovery
+ist noch nicht implementiert und wird nicht durch diese Transporteinbindung ersetzt.
+
+Ein bisheriger zweiminütiger Freigabe-Cache konnte bei identischem Inhalt eine
+zwischenzeitlich abgelaufene Qualifikation verdecken. Er ist entfernt. Nur parallel
+laufende Prüfungen werden zusammengeführt, getrennt nach Credential-Hash. Eine neue
+Regression prüft zuerst Freigabe und unmittelbar danach Qualifikationsausfall mit
+identischem Bild/Prompt: der zweite Aufruf muss erneut prüfen und scheitern.
+
+Zusätzliche Pipeline-Prüfungen beweisen null GPU-Folgeaufrufe bzw. Archivzugriffe
+bei fehlender Qualifikation, block/review, evaluationOnly und unvollständigem
+Prüfergebnis. Build/211 Unit-Tests und workerd-Grenztests Exit 0. Reine externe
+Vertragsfixtures; kein Nachweis semantischer Moderationsqualität oder tatsächlicher
+HF-Abrechnung. Keine erneute vollständige Browsermatrix und kein Deployment.

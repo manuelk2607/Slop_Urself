@@ -8,6 +8,32 @@ Commits erhalten. Kein Push/Deployment in diesem Auftrag. Echte KI bleibt gesper
 bis Moderation, Modellkontrolle und individuelle HF-Abrechnung qualifiziert sind.
 Keine bezahlten Aufträge, rechtswidrigen Testmedien oder produktiven Datenänderungen.
 
+## Neuer Fortsetzungspunkt – Moderationsdurchsetzung am 29.10.
+
+- Spielpfade nutzen jetzt denselben begrenzten Moderationstransport für Bild/Prompt
+  und Video. Opt-in über MODERATION_URL .../jobs/validate: 202 ist nur ausstehend,
+  Polling ausschließlich fester Host/Pfad, Bearer plus exakter Digest; verlorene,
+  umgeleitete, malforme oder evaluationOnly-Aufträge geben nicht frei und lösen
+  keinen erneuten POST aus. Synchrone /validate-Verträge bleiben kompatibel.
+- Echter Fehler behoben: zweiminütiger Allow-Cache konnte eine zwischenzeitlich
+  abgelaufene Dienstqualifikation maskieren. Entfernt, nur gleichzeitige Prüfungen
+  innerhalb desselben gehashten Credential-Kontexts werden zusammengeführt.
+- Regressionen auf generateAiVideo UND archiveVideo belegen bei fehlender
+  Qualifikation, block/review, evaluationOnly und unvollständiger Prüfung:
+  null HF-/GPU-Folgeaufrufe und null Archivoperationen. Nur synthetische Fixtures,
+  keine echte semantische Prüfung, keine produktiven KI-Aufträge.
+- Root-Build/211 Units und workerd-Grenzintegration Exit 0. Bericht
+  docs/audits/2026-10-29-moderation-enforcement.json. Keine erneute vollständige
+  Browsermatrix für diese Transport-/Gateänderung; nichts anderes behaupten.
+- DURABLE RECOVERY NOCH OFFEN: Client wartet maximal 30s, damit serielle Raum- und
+  Serviceoperationen nicht fünf Minuten blockieren. Der Hintergrunddienst kann
+  weiterarbeiten, aber sichere langfristige Spiel-Fortsetzung braucht persistente
+  Tickets/Alarme und private Eingaberetention. Keine Freigabe bei Timeout/Neustart.
+- Moderationskandidat weiterhin ungeeignet/unqualifiziert, eigener Wan-Produzent
+  noch nicht implementiert. Keine neue pauschale Freigabedatei oder Umgehung.
+- Kein Push/Anwendungsdeployment in diesem Paket. Die frühere autorisierte
+  DB-Secretumstellung ist separat dokumentiert und davon nicht rückgängig gemacht.
+
 ## Aktueller Fortsetzungspunkt – neue Arbeiten am 29.10.
 
 - **DB-Zugang entblockt:** Nutzer erlaubt vorhandenen Neon-MCP über angepasste

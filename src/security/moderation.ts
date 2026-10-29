@@ -1,4 +1,4 @@
-import { boundedJson } from '../server/body';
+import { moderationRequest } from './moderation-jobs';
 export { validatePrompt } from '../shared/video-prompt';
 
 export interface ModerationConfig {
@@ -12,7 +12,6 @@ export class ModerationError extends Error {
     constructor(readonly code: 'moderation_unavailable' | 'content_blocked' | 'content_review', message: string) { super(message); }
 }
 const unavailable = () => new ModerationError('moderation_unavailable', 'Die Inhaltsprüfung ist noch nicht eingerichtet oder vorübergehend nicht erreichbar. Es wird kein neuer KI-Auftrag gestartet.');
-const approvals = new Map<string, number>();
 const inFlight = new Map<string, Promise<void>>();
 
 export function moderationConfigured(config: ModerationConfig) {
@@ -44,19 +43,16 @@ async function evaluate(stage: 'input' | 'output', payload: Record<string, unkno
     generationSafetyReady(config);
     const body = JSON.stringify({ stage, policyVersion: config.MODERATION_POLICY_VERSION, modelVersion: config.MODERATION_MODEL_VERSION, ...payload });
     const digest = await sha256(new TextEncoder().encode(body));
-    const key = `${config.MODERATION_URL}:${digest}`;
-    for (const [id, expiry] of approvals) if (expiry <= Date.now()) approvals.delete(id);
-    if ((approvals.get(key) || 0) > Date.now()) return;
+    // Coalesce only concurrent checks under the same credentials. A prior
+    // approval cannot establish that qualification is still valid now.
+    const credentialScope = await sha256(new TextEncoder().encode(config.MODERATION_SECRET!));
+    const key = `${config.MODERATION_URL}:${credentialScope}:${digest}`;
     const pending = inFlight.get(key); if (pending) return pending;
     if (inFlight.size >= 16) throw unavailable();
     const work = (async () => {
         let verdict: Verdict;
         try {
-            const response = await fetch(config.MODERATION_URL!, { method: 'POST', redirect: 'manual',
-                headers: { authorization: `Bearer ${config.MODERATION_SECRET}`, 'content-type': 'application/json', 'x-content-sha256': digest },
-                body, signal: AbortSignal.timeout(30_000) });
-            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) { await response.body?.cancel(); throw unavailable(); }
-            verdict = await boundedJson(response, 16_384) as Verdict;
+            verdict = await moderationRequest(config.MODERATION_URL!, config.MODERATION_SECRET!, body, digest) as Verdict;
         } catch { throw unavailable(); }
         if (!verdict || verdict.evaluationOnly !== undefined || verdict.digest !== digest || verdict.policyVersion !== config.MODERATION_POLICY_VERSION || verdict.modelVersion !== config.MODERATION_MODEL_VERSION) throw unavailable();
         if (verdict.decision === 'block') throw new ModerationError('content_blocked', 'Dieser Inhalt kann nach den Spielregeln nicht verarbeitet werden. Bitte wähle ein anderes Bild oder einen anderen Prompt.');
@@ -65,8 +61,6 @@ async function evaluate(stage: 'input' | 'output', payload: Record<string, unkno
         if (stage === 'output' && (!Number.isInteger(verdict.frameCount) || Number(verdict.frameCount) < 1 || Number(verdict.frameCount) > 1200
             || verdict.framesChecked !== verdict.frameCount || typeof verdict.durationSeconds !== 'number' || verdict.durationSeconds < 5 || verdict.durationSeconds > 9
             || verdict.codec !== 'h264' || verdict.pixelFormat !== 'yuv420p')) throw unavailable();
-        if (approvals.size >= 64) approvals.delete(approvals.keys().next().value!);
-        approvals.set(key, Date.now() + 120_000);
     })();
     inFlight.set(key, work);
     try { await work; } finally { inFlight.delete(key); }

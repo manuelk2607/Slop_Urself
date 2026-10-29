@@ -154,3 +154,8 @@ erneut geprüft. Keine Medien auf Platte außer bestehenden kurzlebigen FFmpeg-D
 Die Auftragsliste liegt nur im RAM: Neustart/Verfall liefert keine Freigabe.
 **Noch nicht in die Spiel-Orchestrierung integriert**, kein langlebiger Recovery-
 Nachweis. Die bestehende semantische und 25s-Qualifikationsgrenze wurde nicht gelockert.
+
+Spieltransport: MODERATION_URL kann auf /jobs/validate zeigen. Die zentrale
+Spielprüfung kann Pending-Tickets sicher pollen, wartet aber bis zur persistenten
+Room-/Service-Orchestrierung maximal 30 Sekunden. Diese Einbindung allein macht
+mehrminütige Moderation und Neustart-Recovery noch nicht produktionsbereit.
