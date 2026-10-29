@@ -37,6 +37,7 @@ tag = "v2"
 new_sqlite_classes = ["ServiceDurableObject"]
 
 [vars]
+AI_GENERATION_RELEASE = "blocked"
 AI_PROVIDER = "wan22"
 AI_PROVIDER_CHAIN = "wan22,wan22-fast"
 AI_IMAGE_PROFILE = "bounded"

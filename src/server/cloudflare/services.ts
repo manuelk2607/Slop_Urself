@@ -15,6 +15,7 @@ import { ModerationError } from '../../security/moderation';
 import { ContentReports, type ReportReason } from '../../security/reports';
 import { ArchiveReservations } from '../../storage/reservations';
 import { verifyHfRoster } from '../../auth/hf-roster';
+import { StoredModerationJournal } from '../../security/moderation-journal';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -28,12 +29,14 @@ export class ServiceDurableObject {
     private reports: ContentReports;
     private archiveReservations: ArchiveReservations;
     private archiveInventory: ArchiveStatusCache;
+    private moderationJournal: StoredModerationJournal;
     constructor(private state: DurableObjectState, private env: Env) {
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
         this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
         this.reports = new ContentReports(state.storage);
         this.archiveReservations = new ArchiveReservations(state.storage);
         this.archiveInventory = new ArchiveStatusCache(env);
+        this.moderationJournal = new StoredModerationJournal(state.storage);
         this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {
@@ -91,8 +94,9 @@ export class ServiceDurableObject {
             else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
             else if (path === '/archive') {
                 const database = getDatabase(this.env.DATABASE_URL);
+                await this.scheduleCleanup(Date.now() + 360_000);
                 this.archiveInventory.invalidate();
-                const url = await archiveVideo(data.url, this.env, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
+                const url = await archiveVideo(data.url, { ...this.env, moderationJournal: this.moderationJournal }, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
                     database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact, await this.archiveReservations.pendingBytes(data.artifact?.generationId));
                 if (url.startsWith('/api/videos/') && data.code) await this.archiveReservations.protect(data.code, url);
                 return json({ url });
@@ -137,6 +141,7 @@ export class ServiceDurableObject {
     async alarm() {
         const result = this.archiveOperations.then(async () => {
             const database = getDatabase(this.env.DATABASE_URL);
+            await this.moderationJournal.cleanup();
             await purgeDeletedVideos(database, url => { this.archiveInventory.invalidate(); return deleteArchivedVideo(url, this.env); });
             const next = await database?.nextVideoDeletion();
             if (next !== undefined) await this.scheduleCleanup(Math.max(Date.now() + 100, next));

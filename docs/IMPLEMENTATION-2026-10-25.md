@@ -4,6 +4,25 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Release-Arbeitspaket 29.10. – noch in Abnahme
+
+M02/M03/M12/M31: Services persistiert Ausgabe-Moderationstickets und vorab den
+POST-Intent. Nach Eviction nur derselbe Job/Lookup, Pending beendet den aktuellen
+Archivversuch sofort. Der persistierte vollständige Room-HF-Auftrag und dessen
+Retry-Alarm treiben die nächste Prüfung; keine GPU-Wiederholung. Journal speichert
+keine Inhalte, Tokens oder Allow-Ergebnisse und wird durch Services-Alarme bereinigt.
+Eingabemoderation vor der Generierung bleibt ohne langlebige Room-Orchestrierung.
+
+M01: explizite produktive Bindung AI_GENERATION_RELEASE=blocked erzwingt die Sperre
+auch bei später gesetzten Moderations-Secrets. Semantische Qualifikation, kontrollierter
+Wan-Produzent und tatsächliche persönliche Abrechnung sind nicht abgenommen.
+
+DB-MCP-Abgleich bestätigt Schema-Kompatibilität (sechs öffentliche Tabellen/14 Indizes)
+und noch breite Laufzeitrechte; M26/Restore offen. Keine sichtbaren Snapshots oder
+Snapshot-Zeitpläne, keine Restore-Zusage. Keine DB-Änderung für diesen Release.
+Gesamtlauf nach Korrektur einer veralteten Zehn-Spieler-Vorschauannahme läuft;
+Commit/Push/Deployment erst nach bestandener Abnahme. Ausdrückliche Nutzerfreigabe liegt vor.
+
 ### Aktuellster Nachtrag, 29.10.: Dienstpersistenz und Release-Prüfung
 
 Zusätzliche P0-Korrektur M02/M03/M42: Technische Format-/Schema-Holds sind kein

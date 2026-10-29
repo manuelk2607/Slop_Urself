@@ -1,4 +1,5 @@
 import { boundedJson } from '../server/body';
+import type { ModerationJournal } from './moderation-journal';
 
 class LostAcknowledgement extends Error {}
 
@@ -9,13 +10,14 @@ export async function moderationRequest(url: string, secret: string, body: strin
         const aborted = () => { clearTimeout(timer); signal.removeEventListener('abort', aborted); reject(new Error('Moderation deadline')); };
         signal.addEventListener('abort', aborted, { once: true });
         if (signal.aborted) aborted();
-    })) {
+    }), durable?: { journal: ModerationJournal; key: string }) {
     const endpoint = new URL(url), asynchronous = endpoint.pathname.endsWith('/jobs/validate');
     // The room/service command must not hold its serial operation queue for
     // five minutes. Long jobs need a durable checkpoint/resume orchestrator;
     // until that exists, an overlong check remains unavailable, never approved.
     const signal = AbortSignal.timeout(30_000);
     const headers = { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'x-content-sha256': digest, 'x-moderation-mode': 'validate' };
+    const jobUrl = (id: string) => { const target = new URL(endpoint.href); target.pathname = endpoint.pathname.slice(0, -'validate'.length) + id; return target.href; };
     const request = async (target: string, method: 'GET' | 'POST') => {
         signal.throwIfAborted();
         let response: Response;
@@ -27,6 +29,32 @@ export async function moderationRequest(url: string, secret: string, body: strin
         }
         return { status: response.status, value: await boundedJson(response, 16_384) };
     };
+    if (durable && asynchronous) {
+        let checkpoint = await durable.journal.load(durable.key);
+        if (checkpoint && (checkpoint.digest !== digest || checkpoint.expiresAt <= Date.now()
+            || (checkpoint.id !== undefined && !/^[a-f0-9-]{36}$/.test(checkpoint.id)))) throw new Error('Invalid stored moderation');
+        let step, lookupOnly = Boolean(checkpoint && !checkpoint.id);
+        if (checkpoint) step = await request(jobUrl(checkpoint.id || 'lookup'), 'GET');
+        else {
+            checkpoint = { digest, expiresAt: Date.now() + 360_000 };
+            // Persist intent before network I/O. After eviction, lookup the same
+            // digest instead of repeating an uncertain POST.
+            await durable.journal.save(durable.key, checkpoint);
+            try { step = await request(url, 'POST'); }
+            catch (error) { if (!(error instanceof LostAcknowledgement)) throw error; lookupOnly = true; step = await request(jobUrl('lookup'), 'GET'); }
+        }
+        if (step.status === 200) {
+            if (lookupOnly) throw new Error('Invalid moderation lookup');
+            await durable.journal.clear(durable.key); return step.value;
+        }
+        const value = step.value as { id?: unknown; digest?: unknown; status?: unknown; evaluationOnly?: unknown } | null;
+        if (!value || value.digest !== digest || value.evaluationOnly !== undefined || (value.status !== undefined && value.status !== 'pending')) throw new Error('Invalid pending moderation');
+        if (!checkpoint.id) {
+            if (typeof value.id !== 'string' || !/^[a-f0-9-]{36}$/.test(value.id)) throw new Error('Invalid moderation ticket');
+            checkpoint.id = value.id; await durable.journal.save(durable.key, checkpoint);
+        }
+        throw new Error('Moderation pending');
+    }
     let response;
     try { response = await request(url, 'POST'); }
     catch (error) {

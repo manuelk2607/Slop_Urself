@@ -3,10 +3,12 @@ export { validatePrompt } from '../shared/video-prompt';
 
 export interface ModerationConfig {
     AI_PROVIDER?: string;
+    AI_GENERATION_RELEASE?: string;
     MODERATION_URL?: string;
     MODERATION_SECRET?: string;
     MODERATION_POLICY_VERSION?: string;
     MODERATION_MODEL_VERSION?: string;
+    moderationJournal?: import('./moderation-journal').ModerationJournal;
 }
 export class ModerationError extends Error {
     constructor(readonly code: 'moderation_unavailable' | 'content_blocked' | 'content_review', message: string) { super(message); }
@@ -22,6 +24,7 @@ export function moderationConfigured(config: ModerationConfig) {
     } catch { return false; }
 }
 export function generationSafetyReady(config: ModerationConfig) {
+    if (config.AI_PROVIDER !== 'mock' && config.AI_GENERATION_RELEASE === 'blocked') throw unavailable();
     if (config.AI_PROVIDER !== 'mock' && !moderationConfigured(config)) throw unavailable();
 }
 async function sha256(bytes: Uint8Array) {
@@ -52,7 +55,8 @@ async function evaluate(stage: 'input' | 'output', payload: Record<string, unkno
     const work = (async () => {
         let verdict: Verdict;
         try {
-            verdict = await moderationRequest(config.MODERATION_URL!, config.MODERATION_SECRET!, body, digest) as Verdict;
+            verdict = await moderationRequest(config.MODERATION_URL!, config.MODERATION_SECRET!, body, digest, undefined,
+                stage === 'output' && config.moderationJournal ? { journal: config.moderationJournal, key: await sha256(new TextEncoder().encode(key)) } : undefined) as Verdict;
         } catch { throw unavailable(); }
         if (!verdict || verdict.evaluationOnly !== undefined || verdict.digest !== digest || verdict.policyVersion !== config.MODERATION_POLICY_VERSION || verdict.modelVersion !== config.MODERATION_MODEL_VERSION) throw unavailable();
         if (verdict.decision === 'block') throw new ModerationError('content_blocked', 'Dieser Inhalt kann nach den Spielregeln nicht verarbeitet werden. Bitte wähle ein anderes Bild oder einen anderen Prompt.');

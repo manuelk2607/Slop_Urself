@@ -1,5 +1,47 @@
 # Audit-Umsetzung – Stand 29. Oktober 2026
 
+## Laufender Release-Auftrag – Services-Checkpoints und ausdrücklich gesperrte KI
+
+- Nutzer autorisiert jetzt Commit, Push auf `codex/audit-remediation` und Deployment
+  der bestandenen Version. Frühere „kein Push/Deployment“-Einträge sind historische
+  Paketgrenzen. Echte Generierungsfreigabe bleibt separat verweigert.
+- **M02/M03/M12/M31, Ausgabe-Recovery:** persistente Services-Checkpoints halten
+  ausschließlich Digest/Ticket/Frist, ohne Bilder, Prompts, Tokens oder Freigaben.
+  Intent wird vor POST gespeichert; nach Eviction erfolgt GET/Lookup desselben
+  Auftrags. Pending gibt sofort zurück und nutzt vorhandene Room-Archiv-Retries/
+  Alarme statt die gemeinsame Archivqueue weiter zu blockieren. Keine neue Inferenz.
+  Maximal 64 Checkpoints, sechsminütige TTL, Services-Alarm bereinigt. Eingabejobs
+  vor Generierung brauchen weiterhin eine eigene persistente Room-Orchestrierung.
+- **M01 Release-Gate:** Wrangler enthält `AI_GENERATION_RELEASE="blocked"`;
+  die zentrale Prüfung lehnt echte Eingabe/Ausgabe auch bei sonst vollständig
+  konfigurierter Moderation ab. Mock-Regressionen behalten ihre isolierten Fixtures.
+  Moderationsqualität, Wan-Produzent und reale HF-Abrechnung bleiben offen.
+- Gezielte AI-/Moderationstests 23/23 bestanden. Produktions-Smoke-Werkzeug
+  `tools/release-smoke.mts` prüft Release-ID, Header/SEO, anonyme APIs und fremde
+  Registrierung ohne DB-/HF-Schreibaufrufe. Positive authentifizierte Multiplayer-
+  Produktionstests benötigen neu verbundene persönliche HF-Konten; bisherige
+  RAM-Prüfsitzungen sind beendet. Keine Passwörter/Tokens anfordern, solange GPU-
+  Testvoraussetzungen nicht erfüllt sind.
+- **M42 Testkorrektur:** erster Gesamtlauf bestand 217 Units und 28 PASS-Stufen,
+  scheiterte dann am Zehn-Spieler-Test: alte Erwartung ignorierte die notwendige
+  Ersteller-Vorschau. Test nutzt nun reduced motion und bestätigt jede Vorschau
+  explizit, nachdem 9/9 Stimmen eingegangen sind. Produktregel nicht gelockert.
+  Neuer vollständiger Lauf aktiv: `.local/audit-tests/ci-2026-10-29-release-validated.log`.
+- **DB lesend geprüft:** Schema entspricht allen verwendeten sechs öffentlichen
+  Tabellen, 14 Indizes. Owner-Rolle besitzt CREATE-Rechte: eingeschränkte Laufzeitrolle
+  und versionierte Migrationen bleiben M26-Rest. Tabellengrößen 16–48kB, kein Beleg
+  für einen indexbedingten Engpass. Snapshot-Liste und Backup-Zeitplan per Neon-API
+  leer; kein Restore-Nachweis und keine Aussage über eine unzugängliche PITR-Historie.
+  Keine Schema-/Produktivdatenänderung und keine ungeprüfte Backup-Konfiguration.
+  Archiv read-only per signierter S3-Liste erreichbar: vier Objekte/2.806.873 Bytes;
+  kein Schreiben oder Löschen. Produktionsabhängigkeiten: npm audit --omit=dev
+  meldet null Befunde. Moderationsdienst erneut gebaut/25 Tests bestanden.
+  Kein eigenständiger Lint-Schritt konfiguriert; strikte Typprüfungen im Build und
+  git diff --check durchgeführt, keine erfundene Lint-Abnahme.
+- **Fortsetzung:** Gesamtlauf abwarten, neue Fehler gezielt beheben, finalen Diff/
+  Secret-Scan prüfen, committen/pushen/deployen, UUID und gesperrte KI-Bindung produktiv
+  verifizieren. WAF-/Restore-/Hostretention bleiben externe Betriebsabnahmen.
+
 ## Weiteres P0-Paket – technische Holds sind kein Qualitätsnachweis
 
 - **M02/M03/M42:** Qualifikationsparser verlangt nun einen zur Entscheidung
@@ -79,7 +121,7 @@
 
 Offene Maßnahmen aus `docs/IMPLEMENTATION-2026-10-25.md` und beiden Audits vom
 24.10. priorisiert implementieren. Branch `codex/audit-remediation`; alle vorherigen
-Commits erhalten. Kein Push/Deployment in diesem Auftrag. Echte KI bleibt gesperrt,
+Commits erhalten. Push/Deployment inzwischen ausdrücklich autorisiert, siehe oben. Echte KI bleibt gesperrt,
 bis Moderation, Modellkontrolle und individuelle HF-Abrechnung qualifiziert sind.
 Keine bezahlten Aufträge, rechtswidrigen Testmedien oder produktiven Datenänderungen.
 

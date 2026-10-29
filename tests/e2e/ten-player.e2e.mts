@@ -9,7 +9,7 @@ const visible = (page: Page, id: string) => page.locator(`#${id}`).waitFor({ sta
 try {
     const pages: Page[] = [], errors: string[] = [];
     for (let i = 0; i < 10; i++) {
-        const page = await (await browser.newContext({ viewport: i === 9 ? { width: 375, height: 812 } : { width: 1280, height: 900 } })).newPage();
+        const page = await (await browser.newContext({ reducedMotion: 'reduce', viewport: i === 9 ? { width: 375, height: 812 } : { width: 1280, height: 900 } })).newPage();
         page.on('pageerror', error => errors.push(error.message)); pages.push(page);
         await page.goto(base); await page.locator('#usernameInput').fill(`TenPlayer${i}`);
     }
@@ -32,6 +32,9 @@ try {
         await Promise.all(pages.map(page => visible(page, 'screenVoting')));
         if (i === 1) { await pages[9].reload(); await visible(pages[9], 'screenVoting'); }
         for (const [voter, page] of pages.entries()) if (voter !== i) await page.locator('[data-points="4"]').click();
+        await creator.waitForFunction(() => document.getElementById('votingStatusText')?.textContent?.includes('9/9'));
+        assert.equal(await creator.locator('#screenVoting').isVisible(), true, 'All votes still preserve the creator preview.');
+        await creator.locator('#finishPreviewButton').click();
         await Promise.all(pages.map(page => visible(page, i === 9 ? 'screenGameOver' : 'screenResult')));
         if (i !== 9) await host.locator('#nextRoundButton').click();
     }
