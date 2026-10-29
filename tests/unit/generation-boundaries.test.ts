@@ -79,3 +79,30 @@ test('a deployment during upload or malformed upload output cannot submit any GP
         }
     } finally { globalThis.fetch = original; }
 });
+
+test('malformed submission IDs preserve the uncertain submitting job and never submit a second generation', async () => {
+    const original = globalThis.fetch;
+    try {
+        for (const event_id of [42, {}, '', 'x'.repeat(121), 'path/escape', 'id\nnext', null]) {
+            const saved: AiJob[] = []; let posts = 0;
+            const parameters = ['input_image', 'prompt', 'steps', 'duration_seconds'].map(parameter_name => ({ parameter_name, parameter_has_default: false, type: {} }));
+            globalThis.fetch = async (input, options) => {
+                const moderated = moderationFixture(input, options); if (moderated) return moderated;
+                const url = String(input);
+                if (url.endsWith('/whoami-v2')) return Response.json({ name: 'fixture' });
+                if (url.endsWith('/zero-gpu/quota')) return Response.json({ base: 300, current: 300, resetsAt: null });
+                if (url.includes('/api/spaces/')) return Response.json({ ...testProviderMetadata, host: root });
+                if (url.endsWith('/info')) return Response.json({ named_endpoints: { '/generate_video': { parameters } } });
+                if (url.endsWith('/config')) return Response.json({ ...testProviderSettings, dependencies: [{ id: 1, api_name: 'generate_video' }] });
+                if (url.endsWith('/upload')) return Response.json(['/tmp/a.png']);
+                assert.ok(url.endsWith('/queue/join')); posts++; return Response.json({ event_id });
+            };
+            await assert.rejects(generateAiVideo(testImageData(1, 1), 'A tree waves in the wind', {
+                ...testModerationConfig, ...testProviderConfig, HF_TOKEN: 'personal-fixture', AI_PROVIDER_CHAIN: 'wan22,wan22-fast'
+            }, undefined, undefined, { saveJob: async value => { saved.push(structuredClone(value)); } }), AiPendingError);
+            assert.equal(saved.length, 1); assert.equal(saved[0].status, 'submitting'); assert.equal(saved[0].eventId, undefined);
+            await assert.rejects(resumeAiVideo(saved[0], { HF_TOKEN: 'personal-fixture' }), AiPendingError);
+            assert.equal(posts, 1, 'Neither a fallback nor resume may resubmit the uncertain job.');
+        }
+    } finally { globalThis.fetch = original; }
+});

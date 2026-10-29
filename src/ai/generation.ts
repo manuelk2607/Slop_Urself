@@ -280,7 +280,10 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const started = await boundedJson(await get(`${root}/gradio_api/${queue ? 'queue/join' : `call${endpoint}`}`, {
                 method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(queue ? { data, fn_index: fnIndex, session_hash: job.sessionHash } : { data })
             }), 16_384) as { event_id?: string };
-            if (!started.event_id) throw new Error('Hugging Face hat keine Event-ID geliefert.');
+            // A malformed POST response is ambiguous, just like a lost one.
+            // Keep the persisted submitting job; never bind an unusable ID or
+            // blindly repeat the GPU submission.
+            if (typeof started?.event_id !== 'string' || !/^[a-zA-Z0-9_-]{1,120}$/.test(started.event_id)) throw new Error('Hugging Face hat keine gültige Event-ID geliefert.');
             job = { ...job, eventId: started.event_id, status: 'running' };
             await lifecycle.saveJob?.(job);
             logAiEvent('submitted', { ...jobFields(job, lifecycle), attempt });
