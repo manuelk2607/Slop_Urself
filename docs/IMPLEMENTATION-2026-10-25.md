@@ -14,7 +14,12 @@ vor HF-Zugriff; Archivpartien bleiben verfügbar. Details im Nachtrag am Dateien
 Vollständige Matrix Exit0: Build/227 Units/98 PASS-Prüfschritte über Chromium,
 WebKit, Node und workerd. Moderationsdienst Build/25 technische Tests und Wrangler-
 Dry-Run bestanden. Keine tatsächliche Moderations-, Wan- oder Abrechnungsfreigabe.
-Push/Produktionsnachweis im aktuellen PROGRESS.md; historische Angaben unten
+Commit 2ff31de auf origin/codex/audit-remediation gepusht und als Worker
+34a7a347-aa2e-46f5-a71b-39a120e74055 veröffentlicht. Release/Header, aktive
+KI-Sperre, öffentliche SEO-Routen200, private APIs401/fremde Origin403 und mobile
+Anmeldeseite in Chromium/WebKit produktiv geprüft. Keine positive angemeldete
+Partie und keine GPU-Aufträge. Nachweis: docs/audits/2026-10-30-shared-node-release.json.
+Weitere Details im aktuellen PROGRESS.md; historische Angaben unten
 beziehen sich ausschließlich auf den jeweiligen damaligen Stand.
 
 ### Historischer Zwischenstand des Eingabe-Recovery-Pakets, 30.10.

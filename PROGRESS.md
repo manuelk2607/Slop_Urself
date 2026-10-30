@@ -48,11 +48,11 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 - Build/222 Units bestanden; 35 gezielte Speicher-/Worker-Tests einschließlich
   DO-Neuerstellung mit persistiertem Zustand. Workerd-Grenzen und Worker/DO-
   Archiv-/Alarm-Integration Exit0, externe Dienste simuliert. Keine neue vollständige
-  Browsermatrix für dieses Paket; Produktionsstand unten bleibt der vorige Release.
+  Browsermatrix damals für dieses Paket; inzwischen durch den Gesamtlauf oben abgedeckt.
   Live-One-Shot-Schutz und Generation-View-Tests ebenfalls bestanden (2/2).
   Commit f814ecc auf origin/codex/audit-remediation gepusht, Remote-SHA abgeglichen.
-  Nachweis: docs/audits/2026-10-30-input-recovery.json. Nicht erneut deployed;
-  produktive UUID bleibt 1d7af01b-569f-4b48-8d9e-4852dbabd842 mit blockierter KI.
+  Historischer Nachweis: docs/audits/2026-10-30-input-recovery.json. Dieses Paket
+  ist jetzt im aktuellen Release 2ff31de enthalten; keine erneute Implementierung nötig.
 
 - Branch codex/audit-remediation; alle früheren Commits erhalten.
 - 138068a: verschlüsselte SQLite-Moderationsjobs, Lease/TTL/Recovery/Lost-ACK-Lookup
@@ -71,13 +71,13 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 - Zehn-Spieler-Test: reduced motion und explizite Vorschau nach 9/9 Stimmen;
   veraltete Testannahme korrigiert, Produktregel unverändert.
 
-## Tests und laufender Prozess
+## Tests und abgeschlossene Veröffentlichung
 
 - Root-Build, gezielte AI-/Moderationschecks 23/23 bestanden. Moderationsdienst
   erneut gebaut, 25/25 technische Tests. KEINE semantische Qualifikation.
 - npm audit --omit=dev: null Befunde. Kein eigener Lint-Schritt vorhanden;
   strikte Typchecks und git diff --check, keinen Lint-Lauf behaupten.
-- **Gesamtlauf abgeschlossen, Exit0**, geprüfter Code f34d6a3. Log
+- Voriger **Gesamtlauf abgeschlossen, Exit0**, geprüfter Code f34d6a3. Log
   `.local/audit-tests/ci-2026-10-29-release-validated.log`: 217 Units und 97 PASS-
   Nachweise, komplette Chromium/WebKit/Node/workerd-Matrix. Zehn Spieler/81 Stimmen,
   Wiederverbindung, OAuth, Quota, Archive, Sicherheit, Mobile und A11y enthalten.
@@ -92,17 +92,23 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Produktion und externe Nachweise
 
-- **Veröffentlicht:** Worker **1d7af01b-569f-4b48-8d9e-4852dbabd842**, Release-Commit
-  f6321f5, geprüfter Anwendungscode f34d6a3. Deployment über bestehenden Wrangler-
-  Wrapper erfolgreich. URL https://slopurself.maki26.workers.dev . Die früheren
-  lokalen Auditkorrekturen sind damit ebenfalls veröffentlicht.
+- **Aktuell veröffentlicht:** Worker **34a7a347-aa2e-46f5-a71b-39a120e74055**,
+  geprüfter Commit **2ff31de4c6a23d968fe8d22b2fdcf3eb846d9aee**, Push auf
+  origin/codex/audit-remediation per ls-remote verifiziert. Deployment über bestehenden
+  Wrangler-Wrapper mit erneutem Build erfolgreich, nur script.js als geändertes Asset.
+  URL https://slopurself.maki26.workers.dev . Voriger ebenfalls gesperrter Worker
+  1d7af01b-569f-4b48-8d9e-4852dbabd842 bleibt der dokumentierte Rollback-Ausgangspunkt.
 - Produktiv verifiziert: /api/release und X-Slop-Release stimmen mit UUID überein;
-  aktive Cloudflare-Bindung AI_GENERATION_RELEASE=blocked. Startseite/robots/sitemap/
+  aktive Cloudflare-Bindung AI_GENERATION_RELEASE=blocked und Versionsbindung per
+  versions view bestätigt; config zeigt generationBlocked=true und null Runden.
+  Startseite/robots/sitemap/
   config200, korrekte MIME-Typen und gültiges XML, CSP/noindex/no-store passend;
   anonyme Session/Statistik/Bild/WS-Zugriffe401, fremde Registrierung403.
-  Authentifizierungsbildschirm mobil in Chromium/WebKit sichtbar, kein Overflow
+  Authentifizierungsbildschirm bei 320/375px in Chromium/WebKit sichtbar, kein Overflow
   oder JS-Fehler. Keine Formulare abgesendet, keine Benutzer/Räume/GPU-Jobs erstellt.
   Positive angemeldete Produktionspartie und echte Abrechnung bleiben unbestätigt.
+  Nachweis: docs/audits/2026-10-30-shared-node-release.json. Keine laufenden Tests
+  oder Deployments; lokale Prozesskennung aus dem abgeschlossenen Lauf nicht wiederverwenden.
 - Erforderliche Cloudflare-Secretnamen vorhanden, einschließlich HF_OAUTH_CLIENT_ID;
   kein dedizierter Vault-Key (getrennter HKDF-Pfad mit AUTH-Schlüssel getestet),
   keine Moderations-Secrets. Keine Secretwerte ausgegeben oder rotiert.
@@ -120,8 +126,9 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 1. P0: Moderationskandidat/Gratis-Hosting qualifizieren. NSFW/SmolVLM bisher bei
    harmlosen Fällen/Format/Latenz gescheitert. Keine identischen Diagnoserunden,
    keine erfundene qualification.json; Korpus-/Fach-/Lizenzabnahme fehlt.
-2. P0: Eingabe-/Ausgabetickets, Gemeinschaftsbild und Node-Prüfaufträge sind lokal
-   implementiert. Abnahme mit qualifiziertem Dienst weiterhin offen. SQLite-Volume
+2. P0: Eingabe-/Ausgabetickets, Gemeinschaftsbild und Node-Prüfaufträge sind
+   implementiert und im Cloudflare-Release enthalten. Abnahme mit qualifiziertem
+   Dienst weiterhin offen. SQLite-Volume
    beim Hoster prüfen: /tmp überlebt keinen garantierten Space-Rebuild.
 3. P0: eigener privater Wan-Prototyp existiert, wurde lesend bestätigt: PAUSED,
    SHA ed1bb1cacd00f89c789b1d8d13657d71d49ad4a6. Fester MotionBoost-Merge, aber
@@ -140,16 +147,13 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Nächster konkreter Schritt
 
-1. Getestetes Paket committen, pushen und mit aktiver KI-Sperre deployen.
-   Produktiv Release-ID, Konfiguration,
-   private APIs und öffentliche Seiten prüfen und den Nachweis hier aktualisieren.
-2. Moderationsalternative/Hosting qualifizieren und kontrollierten Wan-Produzenten
+1. Moderationsalternative/Hosting qualifizieren und kontrollierten Wan-Produzenten
    fertigstellen. Negative Diagnosen nicht einfach wiederholen oder Gates lockern.
-3. Danach neue persönliche HF-Anmeldungen über den sicheren OAuth-Prüfweg und
+2. Danach neue persönliche HF-Anmeldungen über den sicheren OAuth-Prüfweg und
    gesondert genehmigten Zwei-Konten-GPU-/Abrechnungstest vorbereiten.
-4. Unabhängige P1-Reste laut obiger Liste bearbeiten; für DB-Arbeit ausschließlich
+3. Unabhängige P1-Reste laut obiger Liste bearbeiten; für DB-Arbeit ausschließlich
    vorhandenen Neon-MCP nutzen, keine unbekannten Backups/Restore-Erfolge behaupten.
-5. Reine Nachweisdokumentation benötigt kein erneutes Deployment. Bei späteren Änderungen kann die oben
+4. Reine Nachweisdokumentation benötigt kein erneutes Deployment. Bei späteren Änderungen kann die oben
    geprüfte Worker-UUID als Ausgangspunkt dienen; nicht auf alte Worker ohne
    KI-Sperre zurückrollen. Echte Generierung bleibt gesperrt.
 
