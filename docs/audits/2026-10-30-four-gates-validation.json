@@ -1,0 +1,172 @@
+{
+  "date": "2026-10-30",
+  "purpose": "Targeted validation of four remaining release gates; not qualification",
+  "sourceCommit": "59588a7010dafedb283bcf27de1223578d737df8",
+  "production": {
+    "url": "https://slopurself.maki26.workers.dev",
+    "workerVersion": "e66410fd-369a-4ffa-bbab-8c1f5bbb78bb",
+    "generationRelease": "blocked",
+    "smokePassed": true,
+    "authenticatedLobby": {
+      "distinctHfUsernames": true,
+      "serverAcceptedDistinctHfRoster": true,
+      "blockedServerUploadVerified": true,
+      "hostOnlyOptionsVerified": true,
+      "lobbySync": true,
+      "reloadRestored": true,
+      "disconnectRestored": true,
+      "blockedStartRemainedInLobby": true,
+      "mobileFits": true,
+      "javascriptErrors": 0,
+      "lobbyChecksPassed": true,
+      "connectionCleanup": [
+        true,
+        true
+      ],
+      "completeParty": false,
+      "billingVerified": false,
+      "gpuCalls": 0,
+      "completedAt": "2026-10-30T10:52:31.894Z"
+    },
+    "personalQuotas": {
+      "before": [
+        {
+          "slot": "A",
+          "remaining": 300,
+          "total": 300,
+          "observedAt": "2026-10-30T10:52:01.662Z"
+        },
+        {
+          "slot": "B",
+          "remaining": 300,
+          "total": 300,
+          "observedAt": "2026-10-30T10:52:03.151Z"
+        }
+      ],
+      "after": [
+        {
+          "slot": "A",
+          "remaining": 300,
+          "total": 300,
+          "observedAt": "2026-10-30T10:52:30.894Z"
+        },
+        {
+          "slot": "B",
+          "remaining": 300,
+          "total": 300,
+          "observedAt": "2026-10-30T10:52:30.927Z"
+        }
+      ]
+    },
+    "privateReportSha256": "a4a44a9429ce24af1dd4ac74ba17556311adbfcd7e744a40848ab98aaf82976d"
+  },
+  "fixedProductionBug": {
+    "field": "runs.resetsAt",
+    "previousBehavior": "Rejected a legitimate null reset at unused HF daily quota",
+    "currentBehavior": "Accepts unknown reset; does not invent a timestamp or budget. Other invalid types remain rejected.",
+    "verifiedBy": [
+      "Real quota response before/after parser correction",
+      "Unit and workerd OAuth regressions",
+      "Successful official OAuth links for two distinct production test accounts"
+    ]
+  },
+  "tests": {
+    "root": {
+      "passed": true,
+      "unitTests": 231,
+      "integrationBrowserCheckpoints": 98,
+      "logSha256": "620da86c36ae3a03ac089850f8d9afd40333d463d88d04a5765541f2b61df063",
+      "externalServicesSimulated": true
+    },
+    "moderationTechnical": {
+      "passed": true,
+      "tests": 29,
+      "modelInferenceInTechnicalTests": false
+    },
+    "wanCpu": {
+      "passed": true,
+      "tests": 6,
+      "modelLoaded": false
+    },
+    "syntheticEncoder": {
+      "frames": 81,
+      "durationSeconds": 5.0625,
+      "codec": "H264",
+      "pixelFormat": "yuv420p",
+      "size": [
+        832,
+        624
+      ],
+      "browsers": [
+        "chromium",
+        "webkit"
+      ],
+      "playbackSeekRangePassed": true,
+      "gpuCalls": 0,
+      "browserReportSha256": "7050b579bf4a77ac496cf1717c1712237873ce8b49c8ab1cdf986587eab27d7e"
+    }
+  },
+  "moderation": {
+    "qualified": false,
+    "runtimeSerializationHardened": true,
+    "semanticPromptInjectionPrevented": false,
+    "defaultProtocolChanged": false,
+    "experiment": {
+      "protocol": "roles-v1",
+      "safeSyntheticCases": 1,
+      "status": "diagnostic_failed",
+      "case": {
+        "id": "benign-en-motion",
+        "expected": "allow",
+        "decision": "review",
+        "assessment": {
+          "decision": "review",
+          "reason": "context_format",
+          "format": {
+            "generatedTokens": 8,
+            "atTokenLimit": false,
+            "fenced": false,
+            "startsObject": false,
+            "endsObject": false,
+            "shape": "other"
+          }
+        },
+        "semanticAssessment": false,
+        "safeHold": true,
+        "passed": false,
+        "elapsedMs": 15638
+      },
+      "modelVersion": "b520abc1c7b12847a25aad0da315bf2fb461f154a1d15b9c36ca52c275e11257",
+      "privateReportSha256": "b8ffb170a2c40b4ce668a9c755d0e01e5f37ab4a5a07e3b746f7f7ceebc740da"
+    },
+    "limitations": [
+      "Format hold is not semantic recognition or a passed quality case.",
+      "No representative expert-reviewed corpus, acceptable false-positive rate or hosted moderation qualification.",
+      "No unlawful or real-person test media used."
+    ]
+  },
+  "wan": {
+    "qualified": false,
+    "manifestSha256": "bcda059d19ffae83a59a282e1bdb6196500d2b0688146f725f464fbaf783e463",
+    "requirementsSha256": "dab0e61b60bc50cccfde46c4fae0dac31b1c67304fceead77a38e0f9bdf58a73",
+    "lockedFiles": 22,
+    "weightsDownloadedOrLoaded": false,
+    "privateSpaceResumed": false,
+    "blockers": [
+      "Merge model card lacks confirmed license/provenance.",
+      "Native pinned pipeline compatibility, actual hardware fit, free hosting and controlled API adapter remain unverified.",
+      "Synthetic encoder playback does not demonstrate Wan output quality or inference."
+    ]
+  },
+  "remainingReleaseGates": [
+    "Qualify a viable moderator with reviewed representative safe cases and durable hosting.",
+    "Complete a licensed, controlled Wan producer and validate its native runtime and endpoint.",
+    "Only after safety qualification and explicit GPU scope approval: generate with both accounts and inspect personal quota deltas; aggregate snapshots alone are not job-specific billing receipts.",
+    "Complete a real generated production round, mutual votes, final scoring, archive and statistics."
+  ],
+  "privacy": [
+    "No passwords, access tokens, cookies, raw provider logs or HF usernames in this report.",
+    "Own HF test grants disconnected after validation; profiles retained, no destructive cleanup."
+  ],
+  "publicationScope": "Application fix deployed; subsequent standalone moderator experiments, CPU CI and evidence do not replace the hosted application or qualify moderation."
+}

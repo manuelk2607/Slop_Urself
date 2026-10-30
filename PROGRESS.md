@@ -10,7 +10,7 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Implementiert und erhalten
 
-- **Laufendes Vier-Punkte-Paket 30.10. (nach 556c5a7, uncommittet):**
+- **Vier-Punkte-Paket 30.10., Commit59588a7 auf origin/codex/audit-remediation:**
   Moderationsauswertung trennt technische Ausfälle, semantische FP/FN, fehlende
   Labels und Unsicherheit kleiner Stichproben. Dienst-Build/27 Tests bestanden.
   Bestehende labels-v2-Messung: 8 beschriftet, 4 technische Ausfälle, FP1/1 harmlose
@@ -40,7 +40,8 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
   Nachgewiesener Schemafehler behoben: nullable Run-Reset wie unbekannten Reset
   behandeln; ungültige andere Typen bleiben verboten. Neuer Unitfall und workerd-
   OAuth-/Kontingenttest nutzen den realen Feldaufbau. Dies ist KEIN Abrechnungsnachweis
-  und noch keine bestätigte erfolgreiche produktive Verbindung nach dem Fix.
+  und für sich allein kein Nachweis einer erfolgreichen Produktionsverbindung.
+  Diese ist anschließend im separaten Zwei-Konten-Test bestätigt worden (siehe unten).
 - Korrektur des nachgewiesenen Diagnoseverlusts: HF-Fehlercodes gehen jetzt durch
   Services-DO/Worker bis zum HTTP-Client, fixe sichere Texte/Logging statt Provider-
   Meldungen; Identitäts-Transportfehler sind klassifiziert. Neue Units und workerd-
@@ -53,7 +54,29 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
   SHA256620da86c36ae3a03ac089850f8d9afd40333d463d88d04a5765541f2b61df063.
   Keine laufenden Tests; geprüften Anwendungscode nicht erneut komplett testen.
   Vorlauf scheiterte ausschließlich am fehlenden PLAYWRIGHT_BROWSERS_PATH, zählt
-  nicht als Gesamterfolg. Kein neues Deployment dieses Pakets. Produktion unten bleibt gültig.
+  nicht als Gesamterfolg. Paket gepusht (Remote59588a7010dafedb283bcf27de1223578d737df8
+  verifiziert) und veröffentlicht: **e66410fd-369a-4ffa-bbab-8c1f5bbb78bb**.
+  Build/Deployment/Release-Smoke erfolgreich; API/Header-UUID stimmen,
+  Cloudflare-Bindung blocked+Versionsmetadaten geprüft, öffentliche Seiten200,
+  private anonyme APIs401, fremde Origin403. Echte KI weiterhin gesperrt.
+  Nach behobenem Parser **reale Zwei-Konten-Lobby-Prüfung abgeschlossen, Exit0**.
+  Bericht `.local/production-party-51fc1088-fd80-456b-8721-4a79669b0de3.json`:
+  verschiedene HF-Konten serverseitig akzeptiert, persönliche Kontingente vor/nach
+  jeweils300/300, Lobby synchron, Reload/Verbindungsabbruch wiederhergestellt,
+  Hostberechtigung und serverseitige Upload-/Startsperre bestanden, Mobile375px,
+  keine JS-Fehler. Beide eigenen HF-Verbindungen getrennt; Testprofile erhalten.
+  Null GPU-Aufträge, keine vollständige Videorunde und kein Belastungsnachweis.
+  Session17069 beendet, keine neuen Gerätefreigaben ausstehend.
+- **Weiteres Moderationspaket 30.10.:** Aktionsdaten werden JSON-treu ohne rohe
+  Chat-/Bild-Begrenzer serialisiert; neuer Code ist Teil des Laufzeitfingerprints.
+  Build/29 technische Tests bestanden. Separat versioniertes, nur explizit wählbares
+  Rollenexperiment roles-v1 auf einem harmlosen synthetischen Ballbild geprüft:
+  review/context_format nach15.638ms, keine semantische Entscheidung. Diagnose
+  fehlgeschlagen; kein erfolgreicher Risikotreffer, keine Qualitätsfreigabe,
+  keine Lockerung der Auswertung und kein Standardmodellwechsel. Bericht
+  `.local/audit-tests/moderation-roles-motion-2026-10-30.json`. Nicht unverändert
+  wiederholen. GitHub-CI prüft künftig Dienst-Build/technische Tests sowie den
+  Wan-CPU-Vertrag separat ohne Modelle/GPU. Remoteausführung noch unbestätigt.
 
 - Aktuelles geprüftes Paket 30.10.: Gemeinschaftsbilder in Cloudflare
   ebenfalls privat/dauerhaft prüfen, Start bis Freigabe sperren, Besitzer/Phase/
@@ -137,12 +160,12 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Produktion und externe Nachweise
 
-- **Aktuell veröffentlicht:** Worker **34a7a347-aa2e-46f5-a71b-39a120e74055**,
-  geprüfter Commit **2ff31de4c6a23d968fe8d22b2fdcf3eb846d9aee**, Push auf
+- **Aktuell veröffentlicht:** Worker **e66410fd-369a-4ffa-bbab-8c1f5bbb78bb**,
+  geprüfter Commit **59588a7010dafedb283bcf27de1223578d737df8**, Push auf
   origin/codex/audit-remediation per ls-remote verifiziert. Deployment über bestehenden
-  Wrangler-Wrapper mit erneutem Build erfolgreich, nur script.js als geändertes Asset.
+  Wrangler-Wrapper mit erneutem Build erfolgreich; keine geänderten statischen Assets.
   URL https://slopurself.maki26.workers.dev . Voriger ebenfalls gesperrter Worker
-  1d7af01b-569f-4b48-8d9e-4852dbabd842 bleibt der dokumentierte Rollback-Ausgangspunkt.
+  34a7a347-aa2e-46f5-a71b-39a120e74055 bleibt der Rollback-Ausgangspunkt.
 - Produktiv verifiziert: /api/release und X-Slop-Release stimmen mit UUID überein;
   aktive Cloudflare-Bindung AI_GENERATION_RELEASE=blocked und Versionsbindung per
   versions view bestätigt; config zeigt generationBlocked=true und null Runden.
@@ -150,8 +173,10 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
   config200, korrekte MIME-Typen und gültiges XML, CSP/noindex/no-store passend;
   anonyme Session/Statistik/Bild/WS-Zugriffe401, fremde Registrierung403.
   Authentifizierungsbildschirm bei 320/375px in Chromium/WebKit sichtbar, kein Overflow
-  oder JS-Fehler. Keine Formulare abgesendet, keine Benutzer/Räume/GPU-Jobs erstellt.
-  Positive angemeldete Produktionspartie und echte Abrechnung bleiben unbestätigt.
+  oder JS-Fehler. Dieser anonyme Smoke-Test erstellte keine Benutzer/Räume/GPU-Jobs.
+  Der nachfolgende angemeldete Zwei-Konten-Test bestand Anmeldung, Lobby, Reload,
+  Wiederverbindung, Hostrechte und KI-Sperren (siehe 51fc-Bericht oben). Eine
+  vollständige generierte Produktionspartie und echte Abrechnung bleiben unbestätigt.
   Nachweis: docs/audits/2026-10-30-shared-node-release.json. Keine laufenden Tests
   oder Deployments; lokale Prozesskennung aus dem abgeschlossenen Lauf nicht wiederverwenden.
 - Erforderliche Cloudflare-Secretnamen vorhanden, einschließlich HF_OAUTH_CLIENT_ID;
@@ -179,8 +204,10 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
    SHA ed1bb1cacd00f89c789b1d8d13657d71d49ad4a6. Fester MotionBoost-Merge, aber
    mutable spaces-Installation/AOTI-Quellen und fehlendes slop_model: keine
    Laufzeitfreigabe. Nicht gestartet/geändert. Details wan-service/PROGRESS.md.
-4. P0: echte HF-Abrechnung fehlt. Zwei Konten am28.10. lesend isoliert geprüft,
-   fremde Jobidentität abgewiesen, Budgets unverändert. RAM-Zugänge verworfen.
+4. P0: echte HF-Abrechnung fehlt. Zwei Konten am28.10. lesend isoliert geprüft;
+   am30.10. zusätzlich offizielle Anmeldung/persönliche Kontingente und reale
+   Zwei-Spieler-Lobby bestätigt. Fremde Jobidentität abgewiesen, Budgets unverändert.
+   Eigene Prüfverbindungen danach getrennt.
    Neue offizielle OAuth-Anmeldung erst für freigegebenen GPU-Test, keine Tokens
    im Chat/Repo/Log. Erfolgreiche Authentifizierung ist kein Belastungsnachweis.
 5. P1: M04 Altarchiv/Einspruch, M06 sichere Bestandsübernahme, M09/M11 echte Safari-/
@@ -205,5 +232,6 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 ## Referenzen
 
 Details: docs/IMPLEMENTATION-2026-10-25.md und beide Audits vom24.10.
+Aktueller gefilterter Nachweis: docs/audits/2026-10-30-four-gates-validation.json.
 Vollständige ältere Checkpoints: docs/progress/2026-10-29-before-release.md.
 Alte dort vermerkte Blocker nicht ungeprüft erneut übernehmen.

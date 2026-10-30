@@ -12,6 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  safety-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: moderation-service/package-lock.json
+      - name: Install moderation test dependencies
+        working-directory: moderation-service
+        run: npm ci
+      - name: Moderation technical regressions (no model downloads or inference)
+        working-directory: moderation-service
+        run: |
+          npm run build
+          npm test
+      - name: Controlled Wan contract regressions (stdlib only, no GPU)
+        run: python3 -m unittest discover -s wan-service -p 'test_*.py'
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 25

@@ -12,7 +12,7 @@ const selected = process.argv.includes('--case') ? process.argv[process.argv.ind
 const selectable: readonly string[] = [...evaluationCases.map(item => item.id), 'benign-five-second-video'];
 if (process.argv.includes('--case') && (!selected || !selectable.includes(selected))) throw new Error('Unknown diagnostic case');
 const protocol = process.argv.includes('--protocol') ? process.argv[process.argv.indexOf('--protocol') + 1] : undefined;
-if (process.argv.includes('--protocol') && !['json-v1', 'labels-v1', 'labels-v2'].includes(protocol || '')) throw new Error('Unknown diagnostic protocol');
+if (process.argv.includes('--protocol') && !['json-v1', 'labels-v1', 'labels-v2', 'roles-v1'].includes(protocol || '')) throw new Error('Unknown diagnostic protocol');
 const target = process.argv[process.argv.indexOf('--report') + 1];
 if (!process.argv.includes('--report') || !target) throw new Error('Use --report with a new report path. This opt-in command downloads pinned public CPU models.');
 // The benchmark needs no personal HF credential and must not accidentally use one.

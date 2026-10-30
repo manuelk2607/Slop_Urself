@@ -5,6 +5,7 @@ import { assess, policyFor, type Assessment, type Decision, type ModelLock, type
 import { checkAbort, inspectVideo, MAX_MEDIA_EDGE } from './media.js';
 import { configureContextImages } from './preprocessing.js';
 import { snapshotInput, newContextTokens, responseShape } from './context-output.js';
+import { contextMessages } from './context-messages.js';
 
 // The non-root container cannot write Transformers.js' node_modules cache.
 // Only pinned model weights, never player media, belong in this directory.
@@ -13,7 +14,7 @@ export interface ModelAssessment extends Assessment {
     format: { generatedTokens: number; atTokenLimit: boolean; fenced: boolean; startsObject: boolean; endsObject: boolean; shape: ReturnType<typeof responseShape> };
 }
 export async function createEngine(lock: ModelLock, stage: (stage: string) => void | Promise<void> = () => {}, observe: (assessment: ModelAssessment) => void = () => {}) {
-    const policy = policyFor(lock.decisionProtocol), maxTokens = lock.decisionProtocol?.startsWith('labels-') ? 12 : 96;
+    const policy = policyFor(lock.decisionProtocol), maxTokens = lock.decisionProtocol?.startsWith('labels-') || lock.decisionProtocol === 'roles-v1' ? 12 : 96;
     await stage('verifying_model_files');
     await ensureModelArtifacts(lock);
     const session_options = { intraOpNumThreads: 2, interOpNumThreads: 1 };
@@ -30,7 +31,7 @@ export async function createEngine(lock: ModelLock, stage: (stage: string) => vo
         const pixels = new RawImage(new Uint8Array(image.data), image.info.width, image.info.height, 3);
         const scores = await classifier(pixels, { top_k: 2 }) as Scores[];
         checkAbort(signal);
-        const messages = [{ role: 'user', content: [{ type: 'image' }, { type: 'text', text: `${policy}\nQuoted proposed action: ${JSON.stringify(prompt)}` }] }];
+        const messages = contextMessages(policy, prompt, lock.decisionProtocol === 'roles-v1');
         // The model's multimodal template accepts content blocks; v3's shared
         // Message declaration still describes text-only messages.
         const text = processor.apply_chat_template(messages as unknown as Parameters<typeof processor.apply_chat_template>[0], { add_generation_prompt: true });

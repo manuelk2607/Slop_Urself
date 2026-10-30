@@ -4,7 +4,7 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
-### Gezielte Vier-Punkte-Abnahme 30.10. – noch laufend
+### Gezielte Vier-Punkte-Abnahme 30.10. – Teilnachweise, KI bleibt gesperrt
 
 Keine neue Gesamtauditphase: Moderations-Statistikauswertung, kontrollierter Wan-
 Kern und echter Zwei-Profil-Produktionsversuch bearbeitet. Die konkrete Live-Störung
@@ -21,6 +21,13 @@ beschrifteten Fällen und keinen erlaubten harmlosen semantisch auswertbaren Fal
 Neue Metriken weisen FP1/1, FN0/3 und die Unsicherheit kleiner Stichproben getrennt
 aus; das ist keine repräsentative oder fachliche Qualitätsfreigabe. Keine erneute
 CPU-Inferenz auf dem unveränderten gescheiterten Kandidaten. Dienst-Build/27 Tests.
+Anschließend neuer, getrennter Versuch mit Rollenprotokoll roles-v1: ein harmloser
+synthetischer Ball plus Bewegungsanweisung endet nach15.638ms in context_format/review.
+Die Formatprüfung bleibt streng; dies ist kein semantischer Risikotreffer. Keine
+Qualifikation oder Standardumstellung. Neu: Aktionsdaten JSON-treu ohne rohe
+Chat-/Bild-Begrenzer, Fingerprint umfasst das neue Serialisierungsmodul. Build und
+29 technische Tests bestanden; keine reale Bild-/Videomoderationsabnahme. GitHub-CI
+erhält separate modell-/GPU-freie Dienst- und Wan-Vertragstests.
 
 Wan: unabhängiger kontrollierter Kern, Artefakt-/Rezeptvalidierung, eingefrorene
 Linux-Abhängigkeiten und sechs CPU-Tests. 22 Artefakt-Pins; große Gewichte nicht
@@ -30,12 +37,17 @@ Private Space unverändert pausiert. Modellkarte nennt Lizenz/Provenienz nur als
 Platzhalter; 68,8GB Artefakte, gratis Hosting, native Laufzeit und Endpoint-Adapter
 bleiben unqualifiziert. Keine stillschweigende Modellalternative oder Freigabe.
 
-Zwei echte isolierte Produktionsprofile wurden angemeldet, aber der defekte
-Quota-Parser verhinderte die Übernahme der vom Benutzer bestätigten HF-Grants.
-Keine positive Lobby-/Runden-/Abrechnungsabnahme behauptet. Eigene Verbindungen
-getrennt, bestehende Daten erhalten, keine GPU-Aufträge. Neue vollständige Matrix
-mit231 Units und98PASS ist vollständig bestanden (Exit0, siehe PROGRESS.md).
-Echte Generierung bleibt trotz Quota-Parserkorrektur ausdrücklich gesperrt.
+Der erste Zwei-Profil-Produktionsversuch scheiterte am obigen Quota-Parser. Nach
+Korrektur und Veröffentlichung (Quelle59588a7, Worker
+e66410fd-369a-4ffa-bbab-8c1f5bbb78bb) bestand der erneute reale Test: zwei verschiedene
+HF-Konten, persönliche Kontingente vor/nach je300/300, synchrone Lobby, Reload,
+Verbindungsabbruch/Wiederverbindung, Hostrechte, serverseitige Upload-/Startsperren,
+Mobile375px, keine JS-Fehler. Beide eigenen Verbindungen danach getrennt; keine
+Profile gelöscht, keine GPU-Aufträge. Vollständige Videorunde und tatsächliche
+Kontingentbelastung sind ausdrücklich nicht geprüft. Root-Matrix231 Units/98PASS
+bestanden (Exit0). Öffentlicher Smoke-Test und Release-ID nach Deployment bestätigt.
+Echte Generierung bleibt gesperrt. Gefilterte Nachweise und Grenzen:
+[Vier-Punkte-Validierung](audits/2026-10-30-four-gates-validation.json).
 
 ### Neuester Stand, 30.10.: alle Eingabepfade und vollständige Testmatrix
 

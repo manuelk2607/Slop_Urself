@@ -153,6 +153,14 @@ Qualifikationsvideos müssen mindestens 80 unterschiedliche Frames nachweisen.
 Technische Tests sind keine semantische Qualitätsabnahme. Siehe
 [28.10.-Diagnose](../docs/audits/2026-10-28-moderation-labels-v2.json).
 
+30.10.: Das explizite Experiment `--protocol roles-v1` trennt unveränderte
+Sicherheitsregeln und unzuverlässige Aktionsdaten in System-/Benutzerrollen.
+Ein neuer CPU-Test mit harmlosem synthetischem Ballbild scheiterte weiter an
+`context_format` (review, 15.638ms). Keine Qualitätsfreigabe, keine Standardänderung.
+Die Serialisierung verhindert rohe Chat-/Bild-Begrenzer im Aktionsstring;
+das verhindert keine semantische Prompt-Injection. Das Modul ist Teil des
+Laufzeitfingerprints. 29 technische Tests ersetzen keine Modellqualifikation.
+
 Qualifikationsberichte benötigen je Fall zusätzlich `assessmentReason` aus der
 festen Entscheidungsmenge. `context_format`, `context_schema`, `classifier_schema`
 und technische Ausfälle zählen niemals als semantischer Treffer, auch wenn sie
@@ -194,12 +202,14 @@ und `x-moderation-mode: validate` das bestätigte Ticket wiederfinden. Es wird k
 neuer POST gesendet. Evaluation- und Validierungstickets bleiben getrennt.
 Synchrone `/validate`-Instanzen separat nicht parallel gegen dieselbe CPU betreiben.
 
-**Raum-/Service-Orchestrierung bleibt offen:** Die Spielseite persistiert Tickets
-noch nicht und wartet maximal 30 Sekunden. Dienstseitige Prozess-Recovery ersetzt
-keine Wiederaufnahme nach Room-/Worker-Eviction. Ein unqualifiziertes Modell bleibt
-gesperrt; die SQLite-Tests sind technische Prüfungen, keine semantische Abnahme.
+**Raum-/Service-Orchestrierung, Stand 30.10.:** Spielseite und Services-DO
+persistieren Eingabe-/Ausgabetickets; private Gemeinschaftsbilder und der
+Node-Entwicklungspfad nutzen ebenfalls Prüfaufträge. Cloudflare übernimmt diese
+nach Room-/Worker-Neuerstellung. Node-Spielräume bleiben RAM-basiert; Neustart
+verwirft verwaiste private Eingaben sicher. Diese technischen Recovery-Tests
+qualifizieren weder die Moderationsqualität noch ein dauerhaftes Hosting-Volume.
+Ein unqualifiziertes Modell und echte Generierung bleiben gesperrt.
 
-Spieltransport: MODERATION_URL kann auf /jobs/validate zeigen. Die zentrale
-Spielprüfung kann Pending-Tickets sicher pollen, wartet aber bis zur persistenten
-Room-/Service-Orchestrierung maximal 30 Sekunden. Diese Einbindung allein macht
-mehrminütige Moderation und Neustart-Recovery noch nicht produktionsbereit.
+Spieltransport: MODERATION_URL kann auf /jobs/validate zeigen; Polling setzt
+persistierte Tickets fort. Das allein macht die mehrminütige Moderation noch
+nicht produktionsbereit. Aktuelle Nachweise/Grenzen stehen in ../PROGRESS.md.

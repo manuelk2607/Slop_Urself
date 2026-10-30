@@ -7,7 +7,7 @@ export async function runtimeVersion(lock: ModelLock) {
     // Approval also expires when inference, parsing or dependency code changes,
     // even if model weights and the written policy remain identical.
     const extension = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
-    for (const name of ['engine', 'context-output', 'artifacts', 'media', 'preprocessing', 'http', 'jobs', 'policy', 'evidence', 'server', 'version']) {
+    for (const name of ['engine', 'context-output', 'context-messages', 'artifacts', 'media', 'preprocessing', 'http', 'jobs', 'policy', 'evidence', 'server', 'version']) {
         hash.update(name).update(await readFile(new URL(`./${name}${extension}`, import.meta.url)));
     }
     hash.update(await readFile('package-lock.json'));
