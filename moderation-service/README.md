@@ -93,6 +93,16 @@ Hostinglogs/Backups und reale Löschwirkung müssen gesondert geprüft werden.
 
 ## Begrenzter lokaler Diagnoselauf
 
+Vorhandene Messungen können ohne erneute Modellinitialisierung ausgewertet werden:
+`node --import tsx src/summarize-quality.ts INPUT.json NEUER-BERICHT.json`.
+Die Auswertung nennt technische Ausfälle getrennt von semantischen Fehlalarmen/
+Fehlfreigaben, fehlende Labels, P95 und eine Wilson-Obergrenze der Fehlfreigaberate.
+Sie bleibt immer unqualifiziert. Null beobachtete Fehlfreigaben bei drei abstrakten
+Risikoanfragen sind kein Nachweis zuverlässiger Bild-/Videomoderation. Die aktuelle
+Diagnose vom28.10. enthält vier technische Ausfälle unter acht beschrifteten Fällen,
+einen zurückgehaltenen harmlosen Fall und drei semantische Review-Entscheidungen.
+Ein unbeschrifteter Fünf-Frame-Clip ist keine qualifizierende Videostichprobe.
+
 `npm run evaluate:local -- --report /tmp/neuer-diagnosebericht.json` lädt die
 festgelegten öffentlichen Modelle, nutzt ausschließlich CPU, eigene nicht sexuelle
 Zeichnungen und nichtgrafische Moderationsanfragen. Es werden weder Videos per HF

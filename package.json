@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node --import tsx tools/build.ts",
     "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:wan:cpu": "python3 -m unittest discover -s wan-service -p 'test_*.py'",
     "test:e2e": "node --import tsx tests/e2e/browser.e2e.mts",
     "test:ci": "npm run build && npm test && node --import tsx tests/run-ci.mts",
     "test:db": "node --import tsx tests/integration/db.integration.mts",

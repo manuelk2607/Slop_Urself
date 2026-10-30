@@ -16,7 +16,7 @@ function fixture() {
         HF_TOKEN: 'central', AI_PROVIDER: 'wan22', AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AI_IMAGE_PROFILE: 'bounded' as const };
     const tokens: Record<string, { id: string; name: string }> = { central: { id: 'self', name: 'owner' } };
     const seconds: Record<string, number> = { self: 300 };
-    let nextToken = '', exchanges = 0, quotaStatus = 200, devicePolls = 0, deviceError = 'authorization_pending', deviceUsed = false;
+    let nextToken = '', exchanges = 0, quotaStatus = 200, devicePolls = 0, deviceError = 'authorization_pending', deviceUsed = false, identityNetworkFailure = false;
     const original = globalThis.fetch;
     globalThis.fetch = async (input, options) => {
         const url = String(input), token = new Headers(options?.headers).get('authorization')?.replace('Bearer ', '') || '';
@@ -33,7 +33,10 @@ function fixture() {
         }
         const user = tokens[token];
         if (!user) return new Response(null, { status: 401 });
-        if (url.endsWith('/oauth/userinfo')) return Response.json({ sub: user.id, preferred_username: user.name });
+        if (url.endsWith('/oauth/userinfo')) {
+            if (identityNetworkFailure) throw new Error('private-provider-token-and-url');
+            return Response.json({ sub: user.id, preferred_username: user.name });
+        }
         if (url.endsWith('/api/whoami-v2')) return Response.json(user);
         if (url.endsWith('/zero-gpu/quota')) return Response.json({ base: 300, current: seconds[user.id], resetsAt: null, runs: { remaining: 8 } }, { status: quotaStatus });
         throw new Error('Unexpected external request in isolated HF test');
@@ -50,8 +53,24 @@ function fixture() {
     }
     return { storage, data, config, connections, tokens, seconds, connect, exchanges: () => exchanges,
         devicePolls: () => devicePolls, deviceError(value: string) { deviceError = value; },
-        setQuotaStatus(value: number) { quotaStatus = value; }, restore() { globalThis.fetch = original; } };
+        setQuotaStatus(value: number) { quotaStatus = value; }, setIdentityNetworkFailure(value: boolean) { identityNetworkFailure = value; }, restore() { globalThis.fetch = original; } };
 }
+
+test('identity transport failures have a safe stage and reuse the sealed device grant after recovery', async () => {
+    const f = fixture(), originalNow = Date.now; let now = originalNow(); Date.now = () => now;
+    try {
+        await f.connect('a', 'hf-a');
+        const account = { id: 'a', name: 'a', identityProof: 'owner' as const, expiresAt: now + 60_000 }, origin = 'https://game.test';
+        const start = await f.connections.startDevice(account, origin);
+        f.deviceError(''); f.setIdentityNetworkFailure(true); now += 5000;
+        await assert.rejects(f.connections.pollDevice(start.nonce, account, origin), error => error instanceof HfOAuthError
+            && error.code === 'identity_failed' && !error.message.includes('private-provider'));
+        const exchanged = f.exchanges(); f.setIdentityNetworkFailure(false); now += 15_000;
+        const restored = new HfConnections(f.storage, f.config), result = await restored.pollDevice(start.nonce, account, origin);
+        assert.equal(result.connected, true); assert.equal(f.exchanges(), exchanged);
+        assert.equal((await restored.credential(result.connection, account.id)).subject, 'hf-a');
+    } finally { Date.now = originalNow; f.restore(); }
+});
 
 test('HF OAuth uses PKCE, minimal scopes and one-time browser-bound state; secrets stay encrypted', async () => {
     const f = fixture();

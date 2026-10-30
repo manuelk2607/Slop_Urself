@@ -1,5 +1,15 @@
 # Controlled Wan producer preparation
 
+Latest package 30.10.: a CPU-testable controlled core now exists in producer.py,
+with a measured 22-file model manifest and a fully hash-pinned Linux/Python3.12
+dependency resolution. Six CPU tests pass, including the actual app image-size
+contract. No weight downloads or GPU invocation.
+Source/model identity and recipe checks are implemented; endpoint adapter, native
+installation, inference, hosting and qualification remain open. In particular,
+68,788,615,789 bytes of artifacts and a missing declared model license are concrete
+preconditions, not a successful free deployment. See README.md. Historical notes
+below describe the earlier preparation stage and must not override this checkpoint.
+
 Objective: Prepare a pinned, locally verifiable Gradio producer compatible with
 `src/ai/provider-trust.ts` and `src/ai/generation.ts`. Work stays in this folder.
 No GPU jobs, deployment, secrets, DB, release changes or commits.

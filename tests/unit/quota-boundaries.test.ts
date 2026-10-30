@@ -2,6 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fetchGpuQuota, QuotaBudget, type Reservation } from '../../src/ai/quota';
 
+test('fresh real HF quota with a null daily-run reset is accepted without inventing a reset time', async () => {
+    const original = globalThis.fetch;
+    try {
+        globalThis.fetch = async () => Response.json({ base: 300, current: 300, resetsAt: null,
+            overquotaUsed: false, runs: { used: 0, limit: 8, remaining: 8, resetsAt: null } });
+        assert.deepEqual(await fetchGpuQuota({ HF_TOKEN: 'fixture-only' }), { base: 300, current: 300, resetsAt: null, runs: { remaining: 8 } });
+        for (const invalid of [false, 0, '', {}, [], 'not-a-date']) {
+            globalThis.fetch = async () => Response.json({ base: 300, current: 300, resetsAt: null, runs: { remaining: 8, resetsAt: invalid } });
+            await assert.rejects(fetchGpuQuota({ HF_TOKEN: 'fixture-only' }));
+        }
+    } finally { globalThis.fetch = original; }
+});
+
 test('HF quota reads bound response bytes, reject redirects, strip unrelated fields and normalize dates', async () => {
     const original = globalThis.fetch;
     let payload: unknown = { base: 300, current: 175.5, resetsAt: '2026-10-28T20:00:00+01:00', runs: { remaining: 7 }, privateBillingField: 'must-not-propagate' };

@@ -10,6 +10,51 @@ freigabe. Keine destruktiven Produktivdatenänderungen. Repository ausschließli
 
 ## Implementiert und erhalten
 
+- **Laufendes Vier-Punkte-Paket 30.10. (nach 556c5a7, uncommittet):**
+  Moderationsauswertung trennt technische Ausfälle, semantische FP/FN, fehlende
+  Labels und Unsicherheit kleiner Stichproben. Dienst-Build/27 Tests bestanden.
+  Bestehende labels-v2-Messung: 8 beschriftet, 4 technische Ausfälle, FP1/1 harmlose
+  semantische Fälle, FN0/3 abstrakte Risikoanfragen (Wilson95-Obergrenze56,15%).
+  KEINE repräsentative Qualifikation; keine erneute Inferenz auf dem gescheiterten Modell.
+  Wan-Kern mit 22 SHA256-/Größen-Pins, festem Rezept, lokalen Safetensors und
+  Hash-Lock der Linux/Python3.12-Abhängigkeiten implementiert. Sechs CPU-Tests,
+  synthetischer Encoder81Frames/5,0625s/H.264/yuv420p sowie Wiedergabe/Seek/Range
+  in Chromium und WebKit bestanden; kein Wan-Modell geladen, keine GPU-Aufträge.
+  Modellartefakte68.788.615.789Bytes; Modellkarte nennt Lizenz/Herkunft nur als
+  Platzhalter. Native Kompatibilität, gratis Hosting und Endpoint-Adapter bleiben offen.
+- Produktionsversuch mit zwei neuen isolierten geschützten Profilen: Registrierung
+  und Refresh200, Benutzer bestätigt beide HF-Gerätefreigaben. Übernahme im Spiel
+  jedoch503/generische Meldung; keine akzeptierte Verbindung/Quota-Messung und
+  keine Lobby-Partie. Test nach20min beendet, eigene Grants getrennt, keine Profile
+  gelöscht. Vorversuch erzeugte zwei weitere Testprofile, ebenfalls ohne GPU.
+  Private Berichte .local/production-party-{edfd5332,79a806ea}*.json; erster
+  ungültiger Namensversuch9b43e7ca wurde mit422 abgewiesen, ohne Kontoanlage.
+  Keine Ursache aus allgemeinem503 ableiten. Live-Tail45s ergab keine verwertbaren
+  passenden Ereignisse. Nach Benutzer-Anmeldung im IAB-Cloudflare-Dashboard wurden
+  gezielt35 Meldungen `[HF] OAuth callback failed quota_unavailable` im letzten
+  Stundenfenster gelesen (u.a.10:46–10:48 MEZ). Keine Rohlogs/Secrets gespeichert,
+  keine Einstellungen geändert. Identitätsprüfungen liegen vor der Kontingentprüfung;
+  anschließende lesende Reproduktion mit dem lokalen Betreiber-PAT liefert mit200
+  300/300 und8Runs, aber `runs.resetsAt:null`; derselbe echte Body wurde vom bisherigen
+  fetchGpuQuota abgewiesen. Nach Korrektur wird er akzeptiert, ohne Reset zu erfinden.
+  Nachgewiesener Schemafehler behoben: nullable Run-Reset wie unbekannten Reset
+  behandeln; ungültige andere Typen bleiben verboten. Neuer Unitfall und workerd-
+  OAuth-/Kontingenttest nutzen den realen Feldaufbau. Dies ist KEIN Abrechnungsnachweis
+  und noch keine bestätigte erfolgreiche produktive Verbindung nach dem Fix.
+- Korrektur des nachgewiesenen Diagnoseverlusts: HF-Fehlercodes gehen jetzt durch
+  Services-DO/Worker bis zum HTTP-Client, fixe sichere Texte/Logging statt Provider-
+  Meldungen; Identitäts-Transportfehler sind klassifiziert. Neue Units und workerd-
+  Regression prüfen Quota-Ausfall, Wiederanlauf und denselben versiegelten Einmalgrant.
+  Build/230 Units und98PASS komplett bestanden, Session67400 Exit0. Log
+  `.local/audit-tests/ci-2026-10-30-four-gates-final.log`, SHA256
+  0d958ce3e44c3ed1f8604c55005bafdf6c0cd034087c5fe853c6467bda8edf19.
+  **Nach nullable-Reset-Fix Vollmatrix vollständig bestanden, Session51879 Exit0**,
+  Build/231Units und98PASS, Log `.local/audit-tests/ci-2026-10-30-quota-null-final.log`,
+  SHA256620da86c36ae3a03ac089850f8d9afd40333d463d88d04a5765541f2b61df063.
+  Keine laufenden Tests; geprüften Anwendungscode nicht erneut komplett testen.
+  Vorlauf scheiterte ausschließlich am fehlenden PLAYWRIGHT_BROWSERS_PATH, zählt
+  nicht als Gesamterfolg. Kein neues Deployment dieses Pakets. Produktion unten bleibt gültig.
+
 - Aktuelles geprüftes Paket 30.10.: Gemeinschaftsbilder in Cloudflare
   ebenfalls privat/dauerhaft prüfen, Start bis Freigabe sperren, Besitzer/Phase/
   Variante vor Veröffentlichung erneut prüfen. Neuerstellung vollendet auch die

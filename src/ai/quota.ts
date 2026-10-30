@@ -44,7 +44,9 @@ export async function fetchGpuQuota(config: QuotaConfig): Promise<GpuQuota> {
     if (!Number.isFinite(quota.current) || quota.current < 0 || !Number.isFinite(quota.base) || quota.base < 0 ||
         (quota.runs && (!Number.isInteger(quota.runs.remaining) || quota.runs.remaining < 0)) ||
         (quota.resetsAt !== null && (typeof quota.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.resetsAt))))
-        || (quota.runs?.resetsAt !== undefined && (typeof quota.runs.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.runs.resetsAt))))) throw new Error('Ungültiges KI-Kontingent.');
+        // HF returns null before any daily run has started. This is not a
+        // malformed timestamp or permission failure; keep the reset unknown.
+        || (quota.runs?.resetsAt != null && (typeof quota.runs.resetsAt !== 'string' || !Number.isFinite(Date.parse(quota.runs.resetsAt))))) throw new Error('Ungültiges KI-Kontingent.');
     // Never propagate unrelated billing/profile fields received from upstream.
     return { base: quota.base, current: quota.current, resetsAt: quota.resetsAt === null ? null : new Date(quota.resetsAt).toISOString(),
         ...(quota.runs ? { runs: { remaining: quota.runs.remaining,

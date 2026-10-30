@@ -23,6 +23,25 @@ export async function requirePlayerHf(config: { AI_PROVIDER?: string }, account:
 export class HfOAuthError extends Error {
     constructor(readonly code: 'state_invalid' | 'exchange_failed' | 'token_invalid' | 'identity_failed' | 'identity_invalid' | 'identity_unclaimed' | 'validation_failed' | 'quota_forbidden' | 'quota_unavailable', message: string) { super(message); }
 }
+const oauthMessages = {
+    state_invalid: 'Die HF-Anmeldung ist abgelaufen. Bitte erneut verbinden.',
+    exchange_failed: 'Hugging Face konnte den Anmeldecode gerade nicht austauschen. Bitte die Verbindung später erneut prüfen.',
+    token_invalid: 'Der erhaltene HF-Zugang ist ungültig oder abgelaufen. Bitte erneut verbinden.',
+    identity_failed: 'Das öffentliche HF-Profil ist gerade nicht erreichbar. Es wurde keine KI-Generierung freigegeben.',
+    identity_invalid: 'Die HF-Identitätsangaben stimmen nicht überein. Bitte erneut anmelden.',
+    identity_unclaimed: 'Dieses Spielprofil konnte diesem HF-Konto nicht sicher zugeordnet werden. Bitte den bisherigen Profilzugang verwenden.',
+    validation_failed: 'Der HF-Zugang konnte beim Anbieter gerade nicht bestätigt werden. Es wurde keine KI-Generierung freigegeben.',
+    quota_forbidden: 'HF verweigert den Kontingentabruf. Bitte die Freigabe read-billing und den HF-Kontostatus prüfen.',
+    quota_unavailable: 'HF hat die Anmeldung bestätigt, aber das ZeroGPU-Kontingent ist gerade nicht lesbar. Der erhaltene Zugang bleibt für einen begrenzten erneuten Prüfversuch geschützt gespeichert.'
+} as const;
+export function isHfOAuthCode(code: unknown): code is HfOAuthError['code'] {
+    return typeof code === 'string' && Object.hasOwn(oauthMessages, code);
+}
+export const hfOAuthMessage = (code: HfOAuthError['code']) => oauthMessages[code];
+async function hfFetch(url: string, options: RequestInit, code: HfOAuthError['code']) {
+    try { return await fetch(url, options); }
+    catch { throw new HfOAuthError(code, hfOAuthMessage(code)); }
+}
 interface Pending { account: Account; verifier: string; nonce: string; origin: string; expiresAt: number }
 interface ReceivedGrant { access_token: string; expires_in: number; token_type: string; receivedAt: number; connection: string }
 interface PendingDevice { account: Account; origin: string; client: string; deviceCode: string; userCode: string; verificationUrl: string; interval: number; nextPollAt: number; expiresAt: number; grant?: ReceivedGrant; completed?: { connection: string; expiresAt: number } }
@@ -186,12 +205,12 @@ export class HfConnections {
         this.validToken(result);
         const expiresAt = receivedAt + Math.min(result.expires_in, 8 * 60 * 60) * 1000;
         if (expiresAt <= Date.now()) throw new HfOAuthError('token_invalid', 'Der erhaltene HF-Zugang ist abgelaufen. Bitte erneut verbinden.');
-        const identity = await fetch('https://huggingface.co/oauth/userinfo', { redirect: 'manual', headers: { Authorization: `Bearer ${result.access_token}` }, signal: AbortSignal.timeout(10_000) });
+        const identity = await hfFetch('https://huggingface.co/oauth/userinfo', { redirect: 'manual', headers: { Authorization: `Bearer ${result.access_token}` }, signal: AbortSignal.timeout(10_000) }, 'identity_failed');
         if (!identity.ok) throw new HfOAuthError('identity_failed', 'Dein HF-Konto konnte nicht verifiziert werden.');
         const user = await boundedJson(identity, 32_768) as { sub?: unknown; preferred_username?: unknown };
         if (typeof user.sub !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(user.sub)
             || typeof user.preferred_username !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(user.preferred_username)) throw new HfOAuthError('identity_invalid', 'Ungültiges HF-Profil.');
-        const whoResponse = await fetch('https://huggingface.co/api/whoami-v2', { redirect: 'manual', headers: { Authorization: `Bearer ${result.access_token}` }, signal: AbortSignal.timeout(10_000) });
+        const whoResponse = await hfFetch('https://huggingface.co/api/whoami-v2', { redirect: 'manual', headers: { Authorization: `Bearer ${result.access_token}` }, signal: AbortSignal.timeout(10_000) }, 'validation_failed');
         if (!whoResponse.ok) throw new HfOAuthError('validation_failed', 'HF-Zugang kann nicht für die Videoerstellung verifiziert werden.');
         const who = await boundedJson(whoResponse, 65_536) as { id?: unknown; name?: unknown };
         if (typeof who.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(who.id) || who.name !== user.preferred_username) throw new HfOAuthError('identity_invalid', 'Widersprüchliche HF-Identität.');
@@ -262,8 +281,8 @@ export class HfConnections {
         pending.nextPollAt = Date.now() + pending.interval * 1000;
         await this.save(`hf-device:${nonce}`, pending);
         if (!pending.grant) {
-            const response = await fetch('https://huggingface.co/oauth/token', { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ client_id: pending.client, grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: pending.deviceCode }), signal: AbortSignal.timeout(15_000) });
+            const response = await hfFetch('https://huggingface.co/oauth/token', { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ client_id: pending.client, grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: pending.deviceCode }), signal: AbortSignal.timeout(15_000) }, 'exchange_failed');
             const result = await boundedJson(response, 32_768) as { error?: unknown; access_token?: unknown; expires_in?: unknown; token_type?: unknown };
             if (!response.ok) {
                 if (result.error === 'authorization_pending') return { pending: true, retryAfter: pending.interval };

@@ -3,16 +3,17 @@ import { Response } from 'miniflare';
 import { cloudflareRuntime } from '../support/cloudflare';
 
 let generations = 0;
+let quotaStatus = 200, tokenExchanges = 0;
 const runtime = await cloudflareRuntime({ bindings: { AI_PROVIDER: 'wan22', AI_PROVIDER_CHAIN: 'wan22,wan22-fast', AUTH_MODE: '', HF_TOKEN: 'central', HF_OAUTH_CLIENT_ID: 'test-public-client' },
     outboundService: async request => {
         const url = new URL(request.url), token = request.headers.get('authorization')?.replace('Bearer ', '');
         assert.equal(url.hostname, 'huggingface.co');
         if (url.pathname === '/oauth/device') return Response.json({ device_code: 'private-device-code', user_code: 'ABCD-1234', verification_uri: 'https://hf.co/oauth/device', expires_in: 300, interval: 5 });
-        if (url.pathname === '/oauth/token') return Response.json({ access_token: 'personal', token_type: 'Bearer', expires_in: 28800 });
+        if (url.pathname === '/oauth/token') { tokenExchanges++; return Response.json({ access_token: 'personal', token_type: 'Bearer', expires_in: 28800 }); }
         assert.equal(token, 'personal', 'The server token must never be sent to HF.');
         if (url.pathname === '/oauth/userinfo') return Response.json({ sub: 'personal', preferred_username: 'HF_Test' });
         if (url.pathname === '/api/whoami-v2') return Response.json({ id: token, name: token === 'personal' ? 'HF_Test' : 'Central' });
-        if (url.pathname === '/api/spaces/zero-gpu/quota') return Response.json({ base: 300, current: token === 'personal' ? 300 : 75, resetsAt: null, runs: { remaining: 8 } });
+        if (url.pathname === '/api/spaces/zero-gpu/quota') return Response.json({ base: 300, current: token === 'personal' ? 300 : 75, resetsAt: null, runs: { remaining: 8, resetsAt: null } }, { status: quotaStatus });
         generations++; throw new Error('No GPU endpoints permitted in OAuth runtime test');
     } });
 try {
@@ -81,8 +82,14 @@ try {
     await runtime.unsafeEvictDurableObject('slopurself-test', 'ServiceDurableObject', { name: 'global' });
     assert.equal((await (await request('/api/hf/device', 'GET', deviceCookie)).json()).userCode, 'ABCD-1234');
     await new Promise(resolve => setTimeout(resolve, 5100));
+    quotaStatus = 503;
+    const held = await request('/api/hf/device-poll', 'POST', deviceCookie);
+    assert.equal(held.status, 503); assert.equal((await held.json()).code, 'quota_unavailable');
+    const exchanged = tokenExchanges;
+    quotaStatus = 200; await new Promise(resolve => setTimeout(resolve, 5100));
     const approved = await request('/api/hf/device-poll', 'POST', deviceCookie);
     assert.deepEqual(await approved.json(), { connected: true });
+    assert.equal(tokenExchanges, exchanged, 'Quota recovery must reuse the sealed one-time grant.');
     const deviceConnection = approved.headers.getSetCookie().find(value => value.startsWith('slop_hf='))!.split(';')[0];
     assert.equal((await (await request('/api/hf', 'GET', `${auth}; ${deviceConnection}`)).json()).remainingSeconds, 300);
     assert.equal(generations, 0);

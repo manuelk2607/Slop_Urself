@@ -1,7 +1,7 @@
 import type { Env } from './types';
 import { roundLimit } from '../../game/rules';
 import { HistoryError } from '../statistics';
-import { HfRequiredError } from '../../auth/huggingface';
+import { HfRequiredError, HfOAuthError, isHfOAuthCode, hfOAuthMessage } from '../../auth/huggingface';
 import { ModerationError } from '../../security/moderation';
 
 export async function service(env: Env, path: string, payload?: unknown) {
@@ -14,6 +14,7 @@ export async function service(env: Env, path: string, payload?: unknown) {
     const result = await response.json() as Record<string, any>;
     if (!response.ok) {
         if (result.code === 'hf_required') throw new HfRequiredError();
+        if (isHfOAuthCode(result.code)) throw new HfOAuthError(result.code, hfOAuthMessage(result.code));
         if (['moderation_unavailable', 'content_blocked', 'content_review'].includes(result.code)) throw new ModerationError(result.code, result.error);
         throw new HistoryError(result.error || 'KI- oder Videospeicher nicht erreichbar.', response.status);
     }

@@ -1,4 +1,4 @@
-import { hfCookie, hfOrigin, hfClient, hfClientMetadata, HfOAuthError, HF_COOKIE, HF_STATE_COOKIE, type HfConfig } from '../auth/huggingface';
+import { hfCookie, hfOrigin, hfClient, hfClientMetadata, HfOAuthError, hfOAuthMessage, isHfOAuthCode, HF_COOKIE, HF_STATE_COOKIE, type HfConfig } from '../auth/huggingface';
 import { requestAccount, authFailureStatus } from '../auth/session';
 
 export type HfService = (path: string, data: Record<string, unknown>) => Promise<Record<string, any>>;
@@ -76,5 +76,13 @@ export async function huggingFaceResponse(request: Request, config: HfConfig, se
             return json({ ok: true });
         }
         return json({}, 405);
-    } catch { return json({ error: 'HF-Verbindung konnte nicht aktualisiert werden. Bitte versuche es erneut.' }, 503); }
+    } catch (error) {
+        const code = error instanceof HfOAuthError && isHfOAuthCode(error.code) ? error.code : 'unclassified';
+        const stage = url.pathname === '/api/hf/device-poll' ? 'device_poll' : url.pathname === '/api/hf' ? 'status_or_disconnect' : 'connection';
+        // Log only fixed stage/enum fields at the outer Worker boundary; never
+        // request metadata, tokens, provider messages or exception stacks.
+        console.info(JSON.stringify({ type: 'hf_connection_failed', stage, code }));
+        return json(code !== 'unclassified' ? { error: hfOAuthMessage(code), code }
+            : { error: 'HF-Verbindung konnte nicht aktualisiert werden. Bitte versuche es erneut.' }, 503);
+    }
 }

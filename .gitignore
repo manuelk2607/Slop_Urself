@@ -17,3 +17,6 @@ cloudflare/.wrangler/
 cloudflare/.dev.vars
 cloudflare/public/*
 !cloudflare/public/README.md
+wan-service/__pycache__/
+wan-service/.venv/
+wan-service/models/

@@ -4,6 +4,39 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Gezielte Vier-Punkte-Abnahme 30.10. – noch laufend
+
+Keine neue Gesamtauditphase: Moderations-Statistikauswertung, kontrollierter Wan-
+Kern und echter Zwei-Profil-Produktionsversuch bearbeitet. Die konkrete Live-Störung
+wurde über35 gefilterte Cloudflare-Meldungen quota_unavailable eingegrenzt und
+mit der aktuellen echten HF-Antwort lokal reproduziert: runs.resetsAt:null bei
+ungenutztem Kontingent wurde als Fehler abgewiesen. Parserkorrektur akzeptiert
+diesen zulässigen unbekannten Reset, ohne Budgetwerte oder Resetzeit zu erfinden.
+Zusätzlich bleiben HF-Fehlercodes durch DO/HTTP erhalten; feste sichere Texte und
+Diagnosefelder ersetzen unkontrollierte Providertexte. Workerd prüft Quota-Ausfall
+und Wiederaufnahme desselben versiegelten Einmalgrants ohne zweiten Tokenaustausch.
+
+Die vorhandene Moderationsdiagnose enthält vier technische Ausfälle unter acht
+beschrifteten Fällen und keinen erlaubten harmlosen semantisch auswertbaren Fall.
+Neue Metriken weisen FP1/1, FN0/3 und die Unsicherheit kleiner Stichproben getrennt
+aus; das ist keine repräsentative oder fachliche Qualitätsfreigabe. Keine erneute
+CPU-Inferenz auf dem unveränderten gescheiterten Kandidaten. Dienst-Build/27 Tests.
+
+Wan: unabhängiger kontrollierter Kern, Artefakt-/Rezeptvalidierung, eingefrorene
+Linux-Abhängigkeiten und sechs CPU-Tests. 22 Artefakt-Pins; große Gewichte nicht
+geladen. Synthetischer Encoder erzeugt81 decodierbare H.264/yuv420p-Frames/5,0625s;
+Chromium/WebKit spielen ab, suchen und lesen Teilbereiche. Kein Wan-Inferenztest.
+Private Space unverändert pausiert. Modellkarte nennt Lizenz/Provenienz nur als
+Platzhalter; 68,8GB Artefakte, gratis Hosting, native Laufzeit und Endpoint-Adapter
+bleiben unqualifiziert. Keine stillschweigende Modellalternative oder Freigabe.
+
+Zwei echte isolierte Produktionsprofile wurden angemeldet, aber der defekte
+Quota-Parser verhinderte die Übernahme der vom Benutzer bestätigten HF-Grants.
+Keine positive Lobby-/Runden-/Abrechnungsabnahme behauptet. Eigene Verbindungen
+getrennt, bestehende Daten erhalten, keine GPU-Aufträge. Neue vollständige Matrix
+mit231 Units und98PASS ist vollständig bestanden (Exit0, siehe PROGRESS.md).
+Echte Generierung bleibt trotz Quota-Parserkorrektur ausdrücklich gesperrt.
+
 ### Neuester Stand, 30.10.: alle Eingabepfade und vollständige Testmatrix
 
 M02/M31/M32: Cloudflare prüft nun auch Gemeinschaftsbilder mit privaten persistenten
