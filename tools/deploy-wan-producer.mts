@@ -9,6 +9,15 @@ const directory=resolve(process.argv[index+1]);if(!directory.startsWith(resolve(
 const env=dotenv.parse(await readFile('.env.local'));const token=env.HF_DEPLOY_TOKEN;
 if(!token)throw new Error('Set a fine-grained HF_DEPLOY_TOKEN scoped only to the designated Space in ignored .env.local. Never post it in chat.');
 const permitted=['app.py','official.py','jobs.py','producer.py','prepare_official.py','official-model-lock.json','requirements.txt','README.md'];
+// Reviewed original prototype helpers are preserved, never imported by the new
+// endpoint. In particular aoti.py's download helper must remain unreachable.
+// Any change to them or any other executable/build input requires fresh review.
+const inactiveLegacy:Record<string,string>={
+    'aoti.py':'92adfd213748f1495a2527042f3c0665b70e515858d62745d5c0138cea2b2102',
+    'model/loss.py':'b763359f98e045a808059d0447a02861ee87c5d246a9cdb668cad1e21bf59cf3',
+    'model/pytorch_msssim/__init__.py':'5dd27d39466adaf5c2515452dbbd9a3e7ea4b9ec8d3f8d0c5808496d9caf023e',
+    'model/warplayer.py':'e8cc55924f8b7aacc9534111154649d1c6ad94465d0a6cde795ab2d906a75f5e'
+};
 const evidence=JSON.parse(await readFile(resolve(directory,'DEPLOYMENT.json'),'utf8'));
 if(evidence.qualified!==false||evidence.defaultModelLoading!==false||Object.keys(evidence.files).sort().join()!==[...permitted].sort().join())throw new Error('Invalid deployment scope');
 const contents:Record<string,Buffer>={};
@@ -20,7 +29,14 @@ async function api(path:string,init:RequestInit={}){
 const metadata=await(await api('')).json() as {sha:string;private?:boolean;runtime?:{stage?:string;hardware?:{current?:string|null;requested?:string|null}};siblings?:{rfilename:string}[]};
 if(metadata.runtime?.stage!=='PAUSED'||!/^[a-f0-9]{40}$/.test(metadata.sha))throw new Error('The designated Space must be paused; never resume or select hardware automatically.');
 if(metadata.private!==true||[metadata.runtime.hardware?.current,metadata.runtime.hardware?.requested].some(v=>v!=null&&!['cpu-basic','zero-a10g'].includes(v)))throw new Error('Only the existing private free/ZeroGPU Space may be updated.');
-if(metadata.siblings?.some(f=>(f.rfilename.endsWith('.py')&&!permitted.includes(f.rfilename))||f.rfilename==='pre-requirements.txt'||f.rfilename.startsWith('.env')))throw new Error('Review unlisted runtime/build inputs before uploading; nothing is deleted automatically.');
+if(metadata.siblings?.some(f=>(f.rfilename.endsWith('.py')&&!permitted.includes(f.rfilename)&&!Object.hasOwn(inactiveLegacy,f.rfilename))||f.rfilename==='pre-requirements.txt'||f.rfilename.startsWith('.env')))throw new Error('Review unlisted runtime/build inputs before uploading; nothing is deleted automatically.');
+for(const file of metadata.siblings||[]){
+    if(!Object.hasOwn(inactiveLegacy,file.rfilename))continue;
+    const r=await fetch(`https://huggingface.co/spaces/${repo}/resolve/${metadata.sha}/${file.rfilename}`,{redirect:'error',headers:{authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});
+    if(!r.ok||Number(r.headers.get('content-length'))>100000){await r.body?.cancel();throw new Error('Legacy source review unavailable');}
+    const bytes=Buffer.from(await r.arrayBuffer());
+    if(bytes.length>100000||createHash('sha256').update(bytes).digest('hex')!==inactiveLegacy[file.rfilename])throw new Error('Retained inactive source drift; no upload');
+}
 // Set only the explicitly disabled state; never activate inference. Dedicated
 // signing material is local/HF only and not copied into the package or output.
 let secret=env.WAN_PRODUCER_SECRET;

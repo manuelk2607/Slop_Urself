@@ -42,6 +42,10 @@ Der Uploader ist auf den bestehenden privaten pausierten Test-Space beschränkt,
 aktiviert kein Modell/GPU/Hardware und kopiert ausschließlich acht geprüfte
 Dateien. Keine .env/Tokens/Gewichte gelangen in das Paket. HF_DEPLOY_TOKEN dient
 nur der Bereitstellung und wird niemals für persönliche Generierung verwendet.
+Vier alte reine Prototype-Helfer bleiben erhalten. Der neue Endpunkt importiert
+sie nicht; der Uploader prüft ihre tatsächlich gelesenen SHA256 vor jeder Änderung.
+Insbesondere wird der alte AOTI-Downloadpfad nicht mehr ausgeführt. Weitere oder
+geänderte ausführbare Dateien/Build-Eingaben werden abgewiesen statt gelöscht.
 Danach explizite Gewichts-Vorbereitung auf geeignetem kostenlosem Host mit
 mindestens34,2GB freiem Speicher plus Reserve, kein Download auf dem Mac nötig:
 
