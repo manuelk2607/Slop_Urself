@@ -53,6 +53,18 @@ mindestens34,2GB freiem Speicher plus Reserve, kein Download auf dem Mac nötig:
 python prepare_official.py --download-public-snapshot --destination models/official
 ```
 
+Für die gesondert freigegebene **ausschließlich externe** Initialisierungsprüfung:
+erst das geprüfte Paket im pausierten Space bereitstellen, dann
+`tools/prepare-wan-space.mts --prepare-free-remote-only --revision <HF-Quell-SHA>`.
+Der Helfer prüft den privaten pausierten Space, unveränderte kostenlose ZeroGPU-
+Hardware, übereinstimmenden Vorbereitungscode und die produktive Generierungssperre.
+Er setzt ausdrücklich `WAN_PREPARATION_ONLY=yes` und startet nur diesen Space.
+In diesem Modus wird **keine GPU-Funktion registriert**. Gewichte landen nur im
+temporären HF-Dateisystem, nicht auf dem Mac; kein Bucket/Bezahlspeicher wird gebucht.
+Der lokale Download bleibt ein separater, nicht ausgeführter manueller Befehl.
+Ein Neustart ist noch kein Beleg für ausreichenden Speicher oder native Kompatibilität:
+die Remote-Prüfereignisse und `/healthz` müssen dies tatsächlich bestätigen.
+
 Voraussetzungen für tatsächliche Aktivierung: geprüftes kostenloses ZeroGPU-
 Hosting, native Installation/Artefaktprüfung, qualifizierter Moderator,
 WAN_PRODUCER_SECRET auf Spiel und Producer, nach Deployment genau gepinnte

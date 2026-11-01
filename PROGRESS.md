@@ -9,6 +9,9 @@ Nur kostenlose synthetische Moderationstests erlaubt. Kostenpflichtige OpenAI-
 Kontextaufrufe ausdrücklich abgelehnt. Gemini-Projekt laut Nutzer Free/ohne
 Abrechnungskonto. Keine Freigabe echter Spielerbilder an neue Moderationsdienste.
 Keine echten GPU-Aufträge freigegeben oder gestartet. Keine Produktivdaten löschen.
+Neu freigegeben:34,2GB ausschließlich im bestehenden kostenlosen HF-ZeroGPU-
+Space herunterladen und nativ initialisieren, keine Gewichte auf dem Mac,
+kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
 
 ## Aktuelles Paket – implementiert und lokal geprüft
 
@@ -63,29 +66,41 @@ Keine echten GPU-Aufträge freigegeben oder gestartet. Keine Produktivdaten lös
   Erster eingeschränkter Lauf:237 Units und workerd-Grenzen bestanden, macOS
   verweigerte anschließend Chromium-Mach-Port vor Browserstart. Kein Codefehler,
   kein Gesamterfolg. Finaler SHA256: cd5770215269d30f3847ed214da3086c7ae53ccb91d3e5464f9ec1220a0b5b3b.
-- Letzter veröffentlichter Anwendungscode59588a7, Worker
-  e66410fd-369a-4ffa-bbab-8c1f5bbb78bb. Nachtrag43b6619 gepusht.
-  Neues Paket noch uncommittet/unveröffentlicht; bestehende Commits erhalten.
-- HF_DEPLOY_TOKEN jetzt vom Nutzer lokal bereitgestellt (niemals ausgeben).
-  Ziel-Metadaten lesend200: privater PAUSED-Space, requested zero-a10g, Quelle
-  ed1bb1cacd00f89c789b1d8d13657d71d49ad4a6. Noch keine Änderung übertragen.
-  Nur CPU/unready-Upload autorisiert; Modellladen/GPU bleiben deaktiviert.
+- Commits e2df2a2/b3f965e auf origin/codex/audit-remediation gepusht/verifiziert.
+  Cloudflare veröffentlicht:6c6d1e83-10cf-41a5-b876-306245af4f52, Anwendungscode
+  b3f965e. Produktiver Smoke-Test vollständig bestanden:Release/Header, Startseite,
+  robots/sitemap200, Metadaten/CSP, private APIs401, fremde Herkunft403,
+  Producer-Claim503 und offengelegte KI-Sperre. Keine Schreib-/Inferenzaufrufe.
+  Kein aktueller angemeldeter positiver Produktionstest; lokale Matrix ist simuliert.
+- Privater pausierter HF-Space veröffentlicht und acht Quelldateien unabhängig
+  gehasht:4cd4df2894e8c1c8ad6c50080fd38097a8856647. ZeroGPU unverändert,
+  Modellladen=no bestätigt, kein Gewichts-/GPU-Aufruf. Scoped Deploy-Zugang nur
+  lokal/HF, nie im Repository. Neue Vorbereitungsversion folgt gesondert.
+- Externer Vorbereitungsmodus implementiert und19CPU-/HTTP-Tests bestanden:
+  lokaler/ohne Flags erfolgender Download verweigert; echte freie Bytes vor
+  Download, Hashprüfung bestehender Dateien, keine doppelte Blob-/Xet-Ablage;
+  preparation-only registriert auch nach Modellinitialisierung keine GPU-Funktion.
+  Native Installation/Speicher/Modell noch nicht nachgewiesen. Kein Freigabeersatz.
 - Persönliche Zwei-HF-Konten und Produktionslobby am30.10. bereits bestanden,
   je300/300 unverändert, Verbindungen danach getrennt. Nicht erneut anmelden,
   solange kein tatsächlich ausführbarer freigegebener GPU-Test ansteht.
 
 ## Nächste Schritte (nicht neu auditieren)
 
-1. Matrix ist beendet; nur Abschluss-/Diff-/Secretprüfungen,
-   Nachweise/Dokumentation, Commit und Push auf denselben Branch abschließen.
-2. Aus geprüftem Commit Whitelist-Paket bauen, privaten PAUSED-Test-Space mit
-   neuem scoped Deploy-Token aktualisieren, Quelle/Deaktivierung prüfen. Danach
-   sichere Cloudflare-Version deployen, Release-ID und Sperren extern prüfen.
+1. Neues Vorbereitungs-Paket nach bestandenem Build/Typprüfung committen/pushen,
+   privaten PAUSED-Space aktualisieren. Remote-SHA/hashgeprüft explizit mit
+   `tools/prepare-wan-space.mts --prepare-free-remote-only --revision <HF-SHA>`
+   starten. Nur unverändertes zero-a10g, keine Storage-/Hardware-/Sichtbarkeitsänderung.
+   Modellgewichte ausschließlich extern, bei Platzmangel abbrechen. Gefilterte
+   Build-/Prüfereignisse und /healthz lesen; nicht blind neu starten.
+2. Native Ergebnisse dokumentieren und erforderlichenfalls gezielt reparieren.
+   Cloudflare-Code unverändert; kein erneutes App-Deployment für reine Space-/Docs-
+   Änderungen erforderlich. Aktuelle Produktionssperre beibehalten.
 3. Verbleibende Moderationsrisikogruppen/kuratierten sicheren Korpus und fachliche
    Betreiberabnahme vervollständigen; aktuellen Bericht nicht als qualifiziert
    ausgeben. Dauerhaftes kostenloses Diensthosting und Datenschutzfreigabe fehlen.
-4. Native Modell-/Host-/Diskprüfung vorbereiten; tatsächliches Laden benötigt
-   gesonderten nächsten Einrichtungsschritt. Zweites Konto braucht Zugriff auf
+4. Native Modell-/Host-/Diskprüfung jetzt nur im genehmigten externen Gratis-
+   Umfang. Zweites Konto braucht Zugriff auf
    privaten Producer; keine automatische öffentliche Sichtbarkeit.
 5. Erst nach ausreichend geprüften Voraussetzungen separat begrenzten Test mit
    je einem persönlichen Auftrag/max120large-GPU-Sekunden und Quota vor/nach

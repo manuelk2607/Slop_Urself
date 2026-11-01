@@ -1,0 +1,108 @@
+{
+  "date": "2026-11-01",
+  "applicationCommit": "b3f965ef425c45f5a29059f8d79d13809d9e081a",
+  "branch": "codex/audit-remediation",
+  "cloudflareWorkerVersion": "6c6d1e83-10cf-41a5-b876-306245af4f52",
+  "url": "https://slopurself.maki26.workers.dev",
+  "productionSmoke": {
+    "release": "6c6d1e83-10cf-41a5-b876-306245af4f52",
+    "origin": "https://slopurself.maki26.workers.dev",
+    "probes": [
+      {
+        "path": "/api/release",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/robots.txt",
+        "status": 200
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200
+      },
+      {
+        "path": "/robots.txt",
+        "status": 200
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200
+      },
+      {
+        "path": "/api/config",
+        "status": 200
+      },
+      {
+        "path": "/api/session",
+        "status": 401
+      },
+      {
+        "path": "/api/stats",
+        "status": 401
+      },
+      {
+        "path": "/api/stats/videos",
+        "status": 401
+      },
+      {
+        "path": "/api/stats/rooms",
+        "status": 401
+      },
+      {
+        "path": "/api/rooms/0000/image",
+        "status": 401
+      },
+      {
+        "path": "/ws/0000",
+        "status": 401
+      },
+      {
+        "path": "/api/producer/claim",
+        "status": 503
+      }
+    ],
+    "foreignOriginRejected": true,
+    "producerGpuClaimRejected": true,
+    "generationHoldExposed": true,
+    "inferenceCalls": 0,
+    "databaseWrites": 0,
+    "limitations": [
+      "No authenticated positive multiplayer or real GPU/billing test.",
+      "Googlebot user-agent is not evidence of a real Google crawl."
+    ]
+  },
+  "privateHfStaging": {
+    "space": "Manuel2607/SlopUrself-Wan22-GPU-Test",
+    "sourceRevision": "4cd4df2894e8c1c8ad6c50080fd38097a8856647",
+    "applicationSourceCommit": "b3f965ef425c45f5a29059f8d79d13809d9e081a",
+    "private": true,
+    "stage": "PAUSED",
+    "requestedHardware": "zero-a10g",
+    "modelLoading": false,
+    "sourceFilesVerified": 8,
+    "qualified": false,
+    "gpuCalls": 0
+  },
+  "nextPreparation": {
+    "authorized": true,
+    "remoteSpaceOnly": true,
+    "paidStorageOrHardwareAuthorized": false,
+    "nativeModelInitialized": false,
+    "actualWeightDownloadStarted": false,
+    "technicalTestsPassed": 19,
+    "technicalLogSha256": "ec63c3d58fc7b1c964c7da34174aa59f7c96d7ed785f9d054096a3a52fa87354"
+  },
+  "qualified": false,
+  "realGpuCalls": 0,
+  "paidModelCalls": 0,
+  "limitations": [
+    "No representative moderation qualification",
+    "No actual native Wan initialization yet",
+    "No real personal GPU debits or full generated production party",
+    "GitHub remote CI results not verified here"
+  ]
+}

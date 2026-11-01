@@ -43,6 +43,8 @@ let secret=env.WAN_PRODUCER_SECRET;
 if(!secret){secret=randomBytes(32).toString('hex');await appendFile('.env.local',`\nWAN_PRODUCER_SECRET=${secret}\n`,{mode:0o600});}
 if(secret.length<32)throw new Error('Invalid dedicated producer secret');
 await(await api('/variables',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({key:'WAN_ENABLE_MODEL_LOADING',value:'no'})})).body?.cancel();
+await(await api('/variables',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({key:'WAN_PREPARE_PUBLIC_WEIGHTS',value:'no'})})).body?.cancel();
+await(await api('/variables',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({key:'WAN_PREPARATION_ONLY',value:'yes'})})).body?.cancel();
 await(await api('/secrets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({key:'WAN_PRODUCER_SECRET',value:secret})})).body?.cancel();
 const payload=[{key:'header',value:{summary:'Deploy reviewed disabled official Wan producer',description:`Application source ${evidence.sourceCommit}; CPU/unready only. No weights or GPU activation.`,parentCommit:metadata.sha}},
     ...permitted.map(path=>({key:'file',value:{path,encoding:'base64',content:contents[path].toString('base64')}}))].map(v=>JSON.stringify(v)).join('\n')+'\n';

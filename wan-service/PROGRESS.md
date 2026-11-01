@@ -1,3 +1,18 @@
+# Controlled Wan – current checkpoint, 1 November 2026
+
+- Official 5B endpoint, pinned 20-file/34.2GB manifest and frozen native dependencies implemented.
+- Existing private paused Space updated to 4cd4df2894e8c1c8ad6c50080fd38097a8856647;
+  eight source files remotely hashed, loading disabled, zero-a10g unchanged.
+- Remote-only preparation approved by user, conditional on no Mac weight downloads
+  and no paid storage/hardware. New preparation-only implementation passes 19 CPU
+  and real HTTP tests; native install/model initialization is not yet verified.
+- Next: publish checked preparation-only source, start only the existing free Space,
+  observe disk/download/hash/native-init events, preserve game inference block.
+- No GPU calls authorized or performed. No moderation/billing qualification.
+- Root PROGRESS.md is authoritative for release IDs and subsequent checkpoints.
+
+## Historical preparation notes (superseded where contradicted above)
+
 # Controlled Wan producer preparation
 
 Latest package 30.10.: a CPU-testable controlled core now exists in producer.py,

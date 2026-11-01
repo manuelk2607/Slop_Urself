@@ -838,3 +838,21 @@ Externe Semantik-/Abrechnungs-
 prüfung nicht durch simulierte Antworten ersetzt. Den tatsächlich vorhandenen,
 pausierten privaten Wan-Prototyp einschließlich unverifizierter Laufzeitabhängigkeiten
 beschreibt nun wan-service/PROGRESS.md; keine Space-Änderung und kein GPU-Auftrag.
+
+
+## 1.11.2026 – Veröffentlichung und kostenlose externe Modellvorbereitung
+
+Commits e2df2a2/b3f965e gepusht; Worker6c6d1e83-10cf-41a5-b876-306245af4f52
+produktiv veröffentlicht. Öffentlicher Smoke-Test einschließlich KI-/Claim-Sperre,
+privater API-Grenzen, robots/sitemap und Releasekennung bestanden. Keine
+Datenbankänderung oder GPU-Generierung. Gefilterter Nachweis:
+`docs/audits/2026-11-01-release.json`. Privater HF-Space auf4cd4df2 bereitgestellt,
+8Quelldateien unabhängig gehasht, PAUSED/Modellladen=no bestätigt.
+
+Nutzer genehmigt Gewichtsdownload und native Initialisierung ausschließlich im
+bestehenden kostenlosen HF-ZeroGPU-Space, nicht auf dem Mac; keine kostenpflichtige
+Hardware/Storage. Remote-only-Vorbereitung implementiert, standardmäßig aus,
+Freispeicherprüfung mit Hashprüfung wiederverwendeter Dateien/Reserve, kein zweiter
+Blob-Cache. Vorbereitung registriert keine GPU-Funktion, auch nach Modellladen.
+19CPU-/HTTP-Tests und Tools-Typprüfung bestanden. Native Modell-/Hostprüfung noch
+ausstehend; dies ist keine fachliche Moderations-/Abrechnungsfreigabe.

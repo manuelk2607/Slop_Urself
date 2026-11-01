@@ -80,16 +80,25 @@ def build_app():
     output_root=Path(os.environ.get('WAN_OUTPUT_DIR','/tmp/slop-wan/private'))
     output_root.mkdir(parents=True,exist_ok=True,mode=0o700)
     ledger=JobLedger(os.environ.get('WAN_JOB_DB','/tmp/slop-wan/jobs.sqlite'))
-    gpu=None
+    gpu=None;model_loaded=False
+    preparation_only=os.environ.get('WAN_PREPARATION_ONLY')=='yes'
     if os.environ.get('WAN_ENABLE_MODEL_LOADING')=='yes':
         if not re.fullmatch(r'[a-z0-9-]+\.hf\.space',os.environ.get('SPACE_HOST','')):
             raise ValueError('Expected explicit HF Space host before model loading')
         import spaces
-        pipe=load_pipeline(os.environ.get('WAN_MODEL_DIRECTORY','models/official'))
-        @spaces.GPU(duration=120,size='large')
-        def allocate(image,prompt,seed,steps,duration_seconds):
-            return infer(pipe,image,prompt,seed,steps,duration_seconds)
-        gpu=allocate
+        directory=os.environ.get('WAN_MODEL_DIRECTORY','models/official')
+        if os.environ.get('WAN_PREPARE_PUBLIC_WEIGHTS')=='yes':
+            from prepare_official import prepare_on_space
+            prepare_on_space(directory)
+        print(json.dumps({'event':'native_model_initializing','revision':lock['revision'],'gpuCalls':0}),flush=True)
+        pipe=load_pipeline(directory);model_loaded=True
+        print(json.dumps({'event':'native_model_initialized','revision':lock['revision'],
+            'preparationOnly':preparation_only,'gpuCalls':0}),flush=True)
+        if not preparation_only:
+            @spaces.GPU(duration=120,size='large')
+            def allocate(image,prompt,seed,steps,duration_seconds):
+                return infer(pipe,image,prompt,seed,steps,duration_seconds)
+            gpu=allocate
     # Typed request must be injected by Gradio rather than becoming an API input.
     def generate_video(input_image: dict, prompt: str, seed: int, steps: int, duration_seconds: float, permit: str, request: gr.Request):
         if gpu is None:
@@ -147,6 +156,11 @@ def build_app():
         finally:
             ledger.close()
     app=FastAPI(lifespan=lifespan)
+    @app.get('/healthz')
+    def health():
+        return JSONResponse({'modelLoaded':model_loaded,'preparationOnly':preparation_only,
+            'generationAvailable':gpu is not None,'revision':lock['revision'] if model_loaded else None},
+            headers={'cache-control':'no-store'})
     @app.get('/config')
     def pinned_config():
         # Gradio rebuilds its config during queue/mount setup. Inject the

@@ -16,6 +16,23 @@ AVAILABLE=importlib.util.find_spec('gradio') is not None
 
 @unittest.skipUnless(AVAILABLE,'Install the pinned adapter CPU test dependencies; no models are required')
 class AdapterTests(unittest.TestCase):
+    def test_preparation_only_initializes_but_never_registers_a_gpu_function(self):
+        import app
+        import prepare_official
+        import gradio as gr
+        from fastapi.testclient import TestClient
+        spaces=types.SimpleNamespace(GPU=lambda **kwargs:self.fail('Preparation must not decorate a GPU job'))
+        with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{'WAN_PRODUCER_SECRET':SECRET,'WAN_OUTPUT_DIR':root+'/private','WAN_JOB_DB':root+'/jobs.sqlite','GRADIO_TEMP_DIR':root+'/uploads','WAN_ENABLE_MODEL_LOADING':'yes','WAN_PREPARE_PUBLIC_WEIGHTS':'yes','WAN_PREPARATION_ONLY':'yes','SPACE_HOST':'fixture.hf.space','GRADIO_ANALYTICS_ENABLED':'False'}),patch.dict(sys.modules,{'spaces':spaces}),patch.object(app,'load_pipeline',return_value=object()) as load,patch.object(prepare_official,'prepare_on_space') as prepare:
+            api,ready=app.build_app();self.assertFalse(ready)
+            prepare.assert_called_once();load.assert_called_once()
+            mounted=next(route.app for route in api.routes if hasattr(route,'app') and hasattr(route.app,'get_blocks'))
+            function=next(f.fn for f in mounted.get_blocks().fns.values() if f.api_name=='generate_video')
+            with self.assertRaises(gr.Error):function({},'The ball bounces.',1,50,5,'invalid',gr.Request())
+            with TestClient(api) as client:
+                health=client.get('/healthz').json()
+                self.assertTrue(health['modelLoaded']);self.assertTrue(health['preparationOnly'])
+                self.assertFalse(health['generationAvailable']);self.assertNotIn('slop_model',client.get('/config').json())
+
     def test_disabled_http_adapter_has_schema_but_never_advertises_a_loaded_model(self):
         import app
         from fastapi.testclient import TestClient
