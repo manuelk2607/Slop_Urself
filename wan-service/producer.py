@@ -118,15 +118,15 @@ def infer(pipe, image, prompt, seed, steps, negative_prompt):
     return result
 
 
-def write_video(frames, path):
-    if len(frames) != 81 or Path(path).suffix != ".mp4":
-        raise ValueError("Expected exactly 81 frames and MP4 output")
+def write_video(frames, path, expected_frames=81, fps=16):
+    if (expected_frames, fps) not in ((81, 16), (121, 24)) or len(frames) != expected_frames or Path(path).suffix != ".mp4":
+        raise ValueError("Expected a fixed frame/fps recipe and MP4 output")
     import imageio_ffmpeg
     width, height = frames[0].size
     parameters("Validate output dimensions", width, height, 0, 8)
     if frames[0].mode != "RGB":
         raise ValueError("Expected RGB frames")
-    writer = imageio_ffmpeg.write_frames(str(path), (width, height), fps=16, codec="libx264",
+    writer = imageio_ffmpeg.write_frames(str(path), (width, height), fps=fps, codec="libx264",
         pix_fmt_in="rgb24", pix_fmt_out="yuv420p", output_params=["-movflags", "+faststart"])
     try:
         writer.send(None)

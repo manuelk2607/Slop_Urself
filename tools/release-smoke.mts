@@ -46,6 +46,12 @@ const forged = await fetch(new URL('/api/session', origin), { method: 'POST', re
     headers: { origin: 'https://foreign.invalid', 'content-type': 'application/json' },
     body: JSON.stringify({ mode: 'create', username: 'NeverCreated' }), signal: AbortSignal.timeout(20_000) });
 assert.equal(forged.status, 403, 'Foreign-origin registration rejected before writes.');
+const producer = await fetch(new URL('/api/producer/claim', origin), { method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permit: 'deliberately-invalid-test-permit' }), signal: AbortSignal.timeout(20_000) });
+assert.equal(producer.status, 503, 'Blocked release must never acknowledge a producer GPU claim.');
+assert.equal((await producer.json() as { error?: string }).error, 'producer_claim_rejected');
+probes.push({ path: '/api/producer/claim', status: producer.status });
 console.info(JSON.stringify({ release: expected, origin: origin.origin, probes, foreignOriginRejected: true,
+    producerGpuClaimRejected: true,
     generationHoldExposed: settings.generationBlocked,
     inferenceCalls: 0, databaseWrites: 0, limitations: ['No authenticated positive multiplayer or real GPU/billing test.', 'Googlebot user-agent is not evidence of a real Google crawl.'] }, null, 2));

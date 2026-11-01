@@ -4,6 +4,36 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Umsetzungspaket 31.10.–1.11.: ausführbare Alternativen und echte Gratis-Tests
+
+M02/M03/M17/M31/M32 teilweise weiter umgesetzt: neuer verwalteter Moderator mit
+festen Endpunkten, klar getrenntem Gratis-Screening/Kontextprüfung, SQLite-
+Anfragebudget, bestehenden persistenten Jobs und strikten Fail-Closed-Antworten.
+Kostenpflichtige Aufrufe wurden vom Nutzer abgelehnt und nicht ausgeführt.
+OpenAI-Screening übersah im echten Test1/4 abstrakte Risikoanfragen. Die explizit
+gewählte kostenlose Gemini3.5-Alternative erkannte diese NCII-Anfrage und erlaubte
+20 harmlose Fälle. Ein weiterer Risikofall lieferte keine auswertbare Antwort.
+Alle3 tatsächlichen synthetischen5,06s-Videos bestanden mit81/81 unterschiedlichen
+nativen Frames in7,9–10,6s. Keine zeitliche Auswahl, keine Thumbnail-Prüfung.
+Dies ist keine vollständige fachliche Sicherheitsqualifikation.
+
+Offizieller Wan5B-Endpunkt jetzt implementiert: unveränderliche20-Datei-
+Gewichtsspezifikation, fremde/kanonisch überschreibende Dateien verweigern,
+eigene50-Schritt-Rezeptur, persönlicher HF-Token, Konto/Bild/Prompt/Seed gebundene
+Freigabe, lokales Journal und persistentes einmaliges Services-DO-Claim vor GPU.
+Privater Medienabruf mit TTL/Range. Hashgefrorene kompatible Abhängigkeiten und
+Whitelist-Uploadwerkzeuge; Standardstart lädt kein Modell. Hardware, Sichtbarkeit
+und echte Generierungsfreigabe werden nicht automatisch geändert.
+
+Verifiziert: Build/237 Units und98 Integrations-/Browser-Prüfschritte mit
+Chromium/WebKit auf Node/workerd; darin vollständige klassische simulierte
+Partien. Dienst-Build/37 technische Tests;15 Wan-CPU-/echte Gradio-HTTP-Tests,
+einschließlich Krypto-, Wiederanlauf-, Replay- und privatem Range-Vertrag.
+Keine realen Wan-Gewichte geladen, keine GPU-Aufträge oder tatsächliche persönliche
+HF-Belastung geprüft. HF-Test-Space-Upload/Cloudflare-Release werden nach dem
+geprüften Commit separat in PROGRESS.md nachgetragen. Nachweis:
+[gemessene Ergebnisse und Grenzen](audits/2026-11-01-managed-official.json).
+
 ### Gezielte Vier-Punkte-Abnahme 30.10. – Teilnachweise, KI bleibt gesperrt
 
 Keine neue Gesamtauditphase: Moderations-Statistikauswertung, kontrollierter Wan-

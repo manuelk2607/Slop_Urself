@@ -19,6 +19,7 @@ import { releaseId, releaseResponse } from '../../security/release';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 import { blockedGenerationCapacity } from '../../security/moderation';
+import { producerClaimResponse } from '../../security/producer-claims';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
 export type { Env } from './types';
@@ -37,6 +38,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         if (url.pathname === '/api/release') return releaseResponse(request.method, env.CF_VERSION_METADATA?.id);
         const seoResponse = publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
+        if (url.pathname === '/api/producer/claim') return producerClaimResponse(request, env, async permit => { await service(env, '/security/producer/claim', { permit }); });
         const auth = cloudflareAuth(env);
         const canReadVideo = async (path: string, account: Account) => {
             if (account.id === env.ADMIN_ACCOUNT_ID) return true;

@@ -1,0 +1,108 @@
+{
+  "date": "2026-11-01",
+  "scope": "Implementation and measured diagnostics, not a global safety or inference release",
+  "baselineCommit": "43b6619a753c854614ea74171f843eec7c122ae0",
+  "qualified": false,
+  "realGpuCalls": 0,
+  "paidModelCalls": 0,
+  "rootTests": {
+    "exitCode": 0,
+    "unitTests": 237,
+    "integrationBrowserCheckpoints": 98,
+    "browsers": [
+      "chromium",
+      "webkit"
+    ],
+    "runtimes": [
+      "node",
+      "workerd"
+    ],
+    "servicesSimulated": true,
+    "logSha256": "cd5770215269d30f3847ed214da3086c7ae53ccb91d3e5464f9ec1220a0b5b3b"
+  },
+  "moderationTechnical": {
+    "buildPassed": true,
+    "testsPassed": 37,
+    "logSha256": "43b6871a3c6b87760c50e1b3f2c4f666b5bb2eeb900521b646c0f5476f6fdd9c"
+  },
+  "wanCpuHttp": {
+    "testsPassed": 15,
+    "realGradioVersion": "6.31.0",
+    "modelInference": "fixtures only",
+    "actualWanLoaded": false,
+    "privateRangeReplayIdentityChecksPassed": true,
+    "logSha256": "264c78328e6cac1eb5062936938622f824cd03e7be108773b096e22b00b9738d",
+    "linuxFullDependencyResolutionOnly": true,
+    "requirementsSha256": "4401cb76a7950ebf2b7ac9773af32e6dc6b44af63effcd2244583087b7f9336d",
+    "modelManifestSha256": "d0d3081085255231d4ffcef4e4b136d2bbde4af4df6807bedded6548f7df3904"
+  },
+  "liveModeration": {
+    "media": "synthetic nonsexual calibration images/videos; no real-person or unlawful test media",
+    "billing": "User confirmed Gemini Free with no linked billing account; not independently retrievable using an API key",
+    "openaiFreeScreen": {
+      "requests": 24,
+      "benignAllows": 20,
+      "abstractRiskHolds": 3,
+      "abstractRiskTotal": 4,
+      "missed": "intent-ncii",
+      "reportSha256": "5db9fb216affb793d0ee8e15251d1361f1ab520f664e0698d4f1776ffeb04193"
+    },
+    "geminiContext": {
+      "model": "gemini-3.5-flash-lite",
+      "previousModel2_5": "HTTP404 for new project, explicitly replaced after API/catalog review, no runtime fallback",
+      "benignAllows": 20,
+      "nciiRequestBlocked": true,
+      "otherRiskGroupsNotQualified": true,
+      "diagnosticIncompleteCase": "intent-minor-exploitation; response was not classified and is not a test success",
+      "initialRateLimit": 429,
+      "resumeSkippedCompletedCases": true,
+      "sourceReportSha256": [
+        "164080c4dc089ba9b44bc56cbea4ad83fb3ca0ff02d3fee892c5d4e5584fbcc0",
+        "87856493b5cf480e94c9be1c969822a26cd90d58751e4ecc6b177f95728655b5"
+      ]
+    },
+    "video": {
+      "clips": 3,
+      "framesPerClip": 81,
+      "uniqueFramesCheckedPerClip": 81,
+      "nativeFramesTransmittedWithoutTemporalSampling": true,
+      "latencyMs": [
+        10584,
+        7943,
+        8502
+      ],
+      "geminiRequests": 6,
+      "passed": true,
+      "representativeQualityQualification": false,
+      "reportSha256": "fefc7bdac9f62c7543e0a71b39d49c01ac3a646daa1fe0c3ef6bdeb63e5382ae"
+    }
+  },
+  "inferenceSafety": {
+    "productionHoldMustRemain": true,
+    "ownerHfInferenceTokenForbidden": true,
+    "permittedJobScope": [
+      "subject",
+      "image hash",
+      "exact prompt hash",
+      "seed",
+      "model identity",
+      "expiry"
+    ],
+    "durableCloudflareClaimBeforeGpu": true,
+    "localSpaceJournalIsNotAssumedRebuildDurable": true,
+    "billingVerified": false,
+    "twoAccountProductionLobbyWasAlreadyVerifiedOn": "2026-10-30",
+    "completeRealGeneratedPartyVerified": false
+  },
+  "remaining": [
+    "Complete safe representative risk corpus and operator/expert review; do not count format failures as semantic recognition.",
+    "Validate durable moderation hosting and data consent before any real player images.",
+    "Stage fixed producer source, then separately arrange verified public weights/native runtime and second-account access without an automatic visibility change.",
+    "Only after sufficient safety validation and explicit bounded scope approval: one personal GPU job per account and available quota evidence.",
+    "Complete real production playback/voting/scoring/archive acceptance."
+  ],
+  "privacy": [
+    "No API keys, HF access tokens, session cookies, raw model outputs or private player records in this report.",
+    "No production users, games, videos or database schema deleted or changed by diagnostics."
+  ]
+}

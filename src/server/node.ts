@@ -51,6 +51,7 @@ import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEna
 import { roundInput } from '../game/persistence';
 import { participants, participantForConnection, isSpectator, resetReady, startProblem, checkJoin, prepareRematch } from '../game/participants';
 import { NodeInputs } from './node-inputs';
+import { ProducerClaims, producerClaimResponse } from '../security/producer-claims';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -74,6 +75,8 @@ const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthC
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
 const reports = new ContentReports(nodeHfStorage(process.env.MODERATION_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/moderation')));
 const archiveReservations = new ArchiveReservations(nodeHfStorage(process.env.ARCHIVE_RESERVATIONS_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/archive-reservations')));
+const producerClaims = new ProducerClaims(nodeHfStorage(process.env.PRODUCER_CLAIMS_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/producer-claims')), config.WAN_PRODUCER_SECRET);
+let producerClaimOperations: Promise<unknown> = Promise.resolve();
 const archiveInventory = new ArchiveStatusCache(config);
 const nodeInputs = new NodeInputs(nodeHfStorage(process.env.NODE_INPUT_STORAGE_DIR || path.join(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local', `node-${PORT}`), 'input-moderation')), config);
 let startupReady = false;
@@ -163,6 +166,12 @@ function webRequest(req: express.Request) {
     return new Request(`${req.protocol}://${req.get('host')}${req.originalUrl}`, { method: req.method, headers, body: typeof req.body === 'string' && req.method !== 'GET' && req.method !== 'HEAD' ? req.body : undefined });
 }
 app.all('/api/release', (req, res) => { void webResponse(releaseResponse(req.method, process.env.APP_RELEASE_ID), res); });
+app.all('/api/producer/claim', express.text({ type: '*/*', limit: '8kb' }), async (req, res) => {
+    await webResponse(await producerClaimResponse(webRequest(req), config, permit => {
+        const work = producerClaimOperations.then(() => producerClaims.claim(permit));
+        producerClaimOperations = work.catch(() => {}); return work;
+    }), res);
+});
 async function webResponse(response: Response, res: express.Response) {
     res.status(response.status);
     for (const [key, value] of response.headers) if (key !== 'set-cookie') res.setHeader(key, value);

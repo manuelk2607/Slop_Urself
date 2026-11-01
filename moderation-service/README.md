@@ -213,3 +213,57 @@ Ein unqualifiziertes Modell und echte Generierung bleiben gesperrt.
 Spieltransport: MODERATION_URL kann auf /jobs/validate zeigen; Polling setzt
 persistierte Tickets fort. Das allein macht die mehrminütige Moderation noch
 nicht produktionsbereit. Aktuelle Nachweise/Grenzen stehen in ../PROGRESS.md.
+# Managed backend, Stand 1. November 2026
+
+Der lokale NSFW-/SmolVLM-Kandidat ist weiterhin nicht qualifiziert. Eine
+ausführbare verwaltete Alternative ist jetzt vorhanden: `MODERATION_BACKEND=managed`
+und explizit `MODERATION_MANAGED_SCREENING=gemini-only` nutzt ausschließlich
+`gemini-3.5-flash-lite`. Es gibt keinen automatischen Modell-/Providerwechsel.
+Gemini2.5 wurde für dieses neue Projekt mit404 abgewiesen; der3.5-Ersatz wurde
+nach Modellliste und offizieller Dokumentation ausdrücklich im Code geprüft.
+Antwort-Modellversion, striktes JSON, vollständige Antwort und alle Risikofelder
+werden geprüft. Modell-/Schemaabweichung, Quotenfehler oder Timeout geben nichts frei.
+
+Erforderliche separate Hoster-Konfiguration (keine echten Werte im Repository):
+
+```text
+MODERATION_BACKEND=managed
+MODERATION_MANAGED_SCREENING=gemini-only
+GEMINI_MODERATION_API_KEY=<serverseitiges Secret>
+GEMINI_UNBILLED_PROJECT_CONFIRMED=yes
+MODERATION_MAX_REQUESTS=100
+MODERATION_SECRET=<mindestens 32 zufällige Zeichen>
+MODERATION_JOB_KEY=<separater Schlüssel>
+MODERATION_JOB_DB=/data/slop/jobs.sqlite
+MODERATION_BUDGET_DB=/data/slop/budget.sqlite
+```
+
+`/data` ist ein Beispiel für ein **tatsächlich dauerhaftes** Volume, kein behauptetes
+Gratisangebot. Das SQLite-Anfragebudget überlebt Prozessstarts, nicht den Verlust
+des Volumes. Die Free-Einstufung wird vom Betreiber bestätigt; ein API-Schlüssel
+beweist weder ein fehlendes Abrechnungskonto noch eine Kostenobergrenze.
+Der Nutzer hat ausschließlich synthetische Tests im unbilled-Projekt erlaubt.
+**Echte Spielerbilder sind für diesen Dienst noch nicht freigegeben.** Der
+Gratis-Tarif kann Eingaben zur Produktverbesserung nutzen.
+
+`OPENAI_MODERATION_API_KEY` ist optional für die ausdrücklich gewählte zusätzliche
+Stufe `openai-and-context`. OpenAI-Screening alleine ist keine Freigabe; der echte
+24-Fälle-Test übersah eine NCII-Anfrage. Kostenpflichtige Responses-Aufrufe sind
+nicht autorisiert und bleiben ohne explizites `MODERATION_CONTEXT_APPROVED=yes`
+aus. Gemini-only kann diesen Endpunkt grundsätzlich nicht aufrufen.
+
+Videos: ffmpeg dekodiert alle nativen Frames; maximal zwei parallele Batches,
+je64Frames/8MiB (nur Gemini-only), keine zeitliche Auswahl oder verkleinerte
+Vorschaubilder. Byteidentische Frames dürfen nur innerhalb derselben Prüfung
+ein Ergebnis teilen. Alle drei tatsächlichen synthetischen81Frame-Clips bestanden
+mit81/81 geprüften Einzelbildern in7,9–10,6Sekunden. Das ist ein technischer
+Transport-/Latenznachweis, kein fachlicher Nachweis für Missbrauchserkennung.
+
+`/validate` und `/jobs/validate` bleiben ohne exakte aktuelle Qualifikation und
+deren geprüften Bericht gesperrt. `screenOnly` ist ausschließlich ein lokales
+Diagnoseverfahren und kein veröffentlichter Freigabe-Endpunkt. Es wurde keine
+qualification.json erfunden und der Dienst noch nicht produktiv bereitgestellt.
+
+Quellen: [Gemini3.5](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite),
+[Free-Tarif und Datennutzung](https://ai.google.dev/gemini-api/docs/pricing),
+[OpenAI-Moderationsgrenzen](https://developers.openai.com/api/docs/guides/moderation).

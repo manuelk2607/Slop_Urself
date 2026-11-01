@@ -9,11 +9,13 @@ import { GradioProviderError as AiProviderError, readQueueResult } from './gradi
 import { logAiEvent, type AiTelemetry } from './telemetry';
 import type { AiProgress } from '../shared/generation';
 import { buildVideoPrompt, VIDEO_NEGATIVE_PROMPT } from '../shared/video-prompt';
+import { officialPermit, requireOfficialRecipe } from './official-producer';
 export { buildVideoPrompt } from '../shared/video-prompt';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
 
 export interface AiConfig extends ProviderConfig, ModerationConfig {
+    WAN_PRODUCER_SECRET?: string;
     AI_PROVIDER?: string;
     AI_PROVIDER_CHAIN?: string;
     HF_TOKEN?: string;
@@ -104,6 +106,7 @@ export function parseServerSentResult(body: string): { data: unknown[] } {
 export function buildProviderValues(provider: Provider, prompt: string, image: unknown, config: AiConfig): Record<string, unknown> {
     const seed = Math.floor(Math.random() * 2_147_483_647);
     const duration = videoDuration(config);
+    if (provider === 'wan22-official') return { input_image: image, prompt: buildVideoPrompt(prompt), seed, steps: 50, duration_seconds: 5, permit: '' };
     if (provider === 'ltx') return {
         prompt: buildVideoPrompt(prompt), negative_prompt: VIDEO_NEGATIVE_PROMPT,
         input_image_filepath: image, input_video_filepath: null,
@@ -201,13 +204,25 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
         return '/assets/mock-video.mp4';
     }
     approvedProvider(config);
+    const official = parseProviderChain(config.AI_PROVIDER_CHAIN || config.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN).includes('wan22-official');
+    if (official) {
+        requireOfficialRecipe(config);
+        if (parseProviderChain(config.AI_PROVIDER_CHAIN || config.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN).length !== 1) throw new ProviderTrustError();
+    }
+    let subject: string | undefined;
     if (config.HF_TOKEN) {
         const response = await fetch('https://huggingface.co/api/whoami-v2', {
             headers: { Authorization: `Bearer ${config.HF_TOKEN}` }, redirect: 'manual', signal: AbortSignal.timeout(15_000)
         });
         if (response.status === 401 || response.status === 403) throw new Error('Der Hugging-Face-Zugang ist ungültig oder abgelaufen. Bitte die persönliche HF-Verbindung oder den Serverzugang erneuern.');
         if (!response.ok) throw new Error('Hugging-Face-Anmeldung ist momentan nicht erreichbar.');
+        if (official) {
+            const identity = await boundedJson(response, 64 * 1024) as { id?: unknown };
+            if (typeof identity.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(identity.id)) throw new ProviderTrustError();
+            subject = identity.id;
+        } else await response.body?.cancel();
     }
+    if (official && !subject) throw new ProviderTrustError();
     const errors: string[] = [];
     let providerError: AiProviderError | undefined;
     let attempt = 0;
@@ -244,7 +259,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const info = await boundedJson(infoResponse, 512 * 1024) as { named_endpoints: Record<string, { parameters: ApiParameter[] }> };
             const parameters = info.named_endpoints[endpoint]?.parameters;
             if (!parameters) throw new Error('Space bietet den erwarteten Video-Endpunkt nicht an.');
-            const queue = provider === 'wan22' || provider === 'wan22-fast';
+            const queue = provider === 'wan22' || provider === 'wan22-fast' || provider === 'wan22-official';
             let fnIndex: number | undefined;
             let providerIdentity: ProviderIdentity | undefined;
             if (queue) {
@@ -270,7 +285,9 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             // generation POST; do not silently run a newly merged model.
             await verifyPinnedProvider(providerIdentity!, root, async url => boundedJson(await get(url), 512 * 1024));
             const file = { path: uploaded[0], orig_name: filename, mime_type: image.mime, meta: { _type: 'gradio.FileData' } };
-            const data = orderProviderValues(parameters, buildProviderValues(provider, prompt, file, config));
+            const values = buildProviderValues(provider, prompt, file, config);
+            if (provider === 'wan22-official') values.permit = await officialPermit(config.WAN_PRODUCER_SECRET!, subject!, bytes, String(values.prompt), Number(values.seed));
+            const data = orderProviderValues(parameters, values);
             job = { provider, providerIdentity, root, endpoint, submittedAt: Date.now(), status: 'submitting',
                 ...(queue ? { sessionHash: crypto.randomUUID() } : {}),
                 seed: Number(data[parameters.findIndex(p => p.parameter_name === 'seed')]) || 0,

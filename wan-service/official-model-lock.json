@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "id": "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+  "revision": "b8fff7315c768468a5333511427288870b2e9635",
+  "declaredLicense": "apache-2.0",
+  "pipeline": "WanPipeline",
+  "scheduler": "UniPCMultistepScheduler",
+  "flowShift": 5,
+  "frames": 121,
+  "fps": 24,
+  "steps": 50,
+  "guidanceScale": 5,
+  "gpuSize": "large",
+  "maxGpuSeconds": 120,
+  "files": [
+    {
+      "path": "model_index.json",
+      "bytes": 499,
+      "sha256": "6a72faeb564b0e894aea8fc4ef27241106eb739e8584e869b61589a65473add7"
+    },
+    {
+      "path": "scheduler/scheduler_config.json",
+      "bytes": 820,
+      "sha256": "571a3eed68bcd943a61b9fea8efa9e141472216ada59f928c8b5128ce24b32e0"
+    },
+    {
+      "path": "text_encoder/config.json",
+      "bytes": 855,
+      "sha256": "a2bcb24699f6c009a2427432bdd483ef8b2b42a712abc9503759cdc77d171f07"
+    },
+    {
+      "path": "text_encoder/model-00001-of-00003.safetensors",
+      "bytes": 4935812536,
+      "sha256": "a8e861969c7433e707cc5a74065d795d36cca07ec96eb6763eb4083df7248f58"
+    },
+    {
+      "path": "text_encoder/model-00002-of-00003.safetensors",
+      "bytes": 4983103192,
+      "sha256": "d57d948ece4837d850b7a859a4415121d57cacf8b9ee1d4db200c67f592902d7"
+    },
+    {
+      "path": "text_encoder/model-00003-of-00003.safetensors",
+      "bytes": 1442935480,
+      "sha256": "0da9ee284e21d1406df708788db1d502d95d75f69faa25cd26151bf8829b7c5f"
+    },
+    {
+      "path": "text_encoder/model.safetensors.index.json",
+      "bytes": 22476,
+      "sha256": "31c4c7bcce679eaa0dd4667462394ddb013dc2f748e0bffc893dc9146a320dab"
+    },
+    {
+      "path": "tokenizer/special_tokens_map.json",
+      "bytes": 7079,
+      "sha256": "456b58fd240a06c743a7c2cf8008bec501240d68ebd1fc4018ea569505fea270"
+    },
+    {
+      "path": "tokenizer/spiece.model",
+      "bytes": 4548313,
+      "sha256": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458"
+    },
+    {
+      "path": "tokenizer/tokenizer.json",
+      "bytes": 16837459,
+      "sha256": "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
+    },
+    {
+      "path": "tokenizer/tokenizer_config.json",
+      "bytes": 61758,
+      "sha256": "1d8d2a216bf8e70ac15b7ddcea566c4dd0433c024b39a58ca5e4c66bd78defbd"
+    },
+    {
+      "path": "transformer/config.json",
+      "bytes": 495,
+      "sha256": "dc00d9866e72cf77db6b531aaa33be4dc7148fef9338442bd0ae9181f7075e9b"
+    },
+    {
+      "path": "transformer/diffusion_pytorch_model-00001-of-00005.safetensors",
+      "bytes": 4978254344,
+      "sha256": "511bec832a201caa410d09c5ce7dbbf8ad2708c345d82038f684fc74cce982be"
+    },
+    {
+      "path": "transformer/diffusion_pytorch_model-00002-of-00005.safetensors",
+      "bytes": 4846784976,
+      "sha256": "7c42724912b1911429125dc50c0e9a49ccbada5a601b657d4ed2e15e7597c193"
+    },
+    {
+      "path": "transformer/diffusion_pytorch_model-00003-of-00005.safetensors",
+      "bytes": 4972658392,
+      "sha256": "e9c3d0c76de786566382f8258101fea973ae37681c6e9fe0e5fe1fb93b806424"
+    },
+    {
+      "path": "transformer/diffusion_pytorch_model-00004-of-00005.safetensors",
+      "bytes": 4846785080,
+      "sha256": "a331121771790939678db6f585553fd5184609f7d02593c699a4d241b0d834c5"
+    },
+    {
+      "path": "transformer/diffusion_pytorch_model-00005-of-00005.safetensors",
+      "bytes": 354751840,
+      "sha256": "78b655685c47efdb2349f36826bb101264e9f212a16325d584aeb5f53c88e719"
+    },
+    {
+      "path": "transformer/diffusion_pytorch_model.safetensors.index.json",
+      "bytes": 73297,
+      "sha256": "d6c1f72d86fbddef8fb5ef1c03f5b56b2bfdb6ae58032db98c6019fd1dae9021"
+    },
+    {
+      "path": "vae/config.json",
+      "bytes": 1701,
+      "sha256": "d996c340fe9a7df5d7371f76a7d8d6956f6c98256080074d8434fa5eeac11360"
+    },
+    {
+      "path": "vae/diffusion_pytorch_model.safetensors",
+      "bytes": 2818777808,
+      "sha256": "62cd18f19438e35b32ac63020e2852f566e9b02f46b6cdbd87972a356e3c6f4b"
+    }
+  ]
+}

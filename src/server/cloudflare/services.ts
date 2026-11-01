@@ -16,6 +16,7 @@ import { ContentReports, type ReportReason } from '../../security/reports';
 import { ArchiveReservations } from '../../storage/reservations';
 import { verifyHfRoster } from '../../auth/hf-roster';
 import { StoredModerationJournal } from '../../security/moderation-journal';
+import { ProducerClaims } from '../../security/producer-claims';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -30,6 +31,7 @@ export class ServiceDurableObject {
     private archiveReservations: ArchiveReservations;
     private archiveInventory: ArchiveStatusCache;
     private moderationJournal: StoredModerationJournal;
+    private producerClaims: ProducerClaims;
     constructor(private state: DurableObjectState, private env: Env) {
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
         this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
@@ -37,16 +39,18 @@ export class ServiceDurableObject {
         this.archiveReservations = new ArchiveReservations(state.storage);
         this.archiveInventory = new ArchiveStatusCache(env);
         this.moderationJournal = new StoredModerationJournal(state.storage);
+        this.producerClaims = new ProducerClaims(state.storage, env.WAN_PRODUCER_SECRET);
         this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {
         const path = new URL(request.url).pathname;
         const action = async () => {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
-                participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number;
+                participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number; permit?: string;
                 account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
             const quality = generationQuality(data.quality);
             const blocked = blockedGenerationCapacity(this.env, data.players || 1);
+            if (path === '/security/producer/claim') { generationSafetyReady(this.env); await this.producerClaims.claim(data.permit); return json({ claimed: true }); }
             if (blocked && ['/quota/display', '/quota/capacity'].includes(path)) return json(blocked);
             if (blocked && ['/quota/reserve', '/quota/extend', '/quota/begin', '/quota/attempt'].includes(path)) generationSafetyReady(this.env);
             if (path === '/security/content/blocked') return json({ blocked: await this.reports.blocked(data.url) });

@@ -8,7 +8,10 @@ import { createHash } from 'node:crypto';
 const execute = promisify(execFile);
 export const MAX_MEDIA_EDGE = 1024;
 export function checkAbort(signal?: AbortSignal) { signal?.throwIfAborted(); }
-export async function inspectVideo(video: string, inspect: (frame: Uint8Array, signal?: AbortSignal) => Promise<Decision>, signal?: AbortSignal) {
+export async function inspectVideo(video: string, inspect: (frame: Uint8Array, signal?: AbortSignal) => Promise<Decision>, signal?: AbortSignal,
+    inspectBatch?: (frames: Uint8Array[], signal?: AbortSignal) => Promise<Decision>, batchLimits = { frames: 8, bytes: 8 * 1024 * 1024 }) {
+    if(!Number.isSafeInteger(batchLimits.frames)||batchLimits.frames<1||batchLimits.frames>64
+        ||!Number.isSafeInteger(batchLimits.bytes)||batchLimits.bytes<1024||batchLimits.bytes>8*1024*1024) throw new Error('Invalid bounded batch limits');
     checkAbort(signal);
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(video) || video.length % 4 || video.length > 20 * 1024 * 1024) throw new Error('Invalid video');
     const directory = await mkdtemp(join(tmpdir(), 'slop-moderation-'));
@@ -34,6 +37,43 @@ export async function inspectVideo(video: string, inspect: (frame: Uint8Array, s
         // Only byte-identical, fully decoded native frames within this request
         // share a result. No perceptual similarity, resizing or cross-user cache.
         const checked = new Map<string, Decision>();
+        if (inspectBatch) {
+            // Full native decoded frames, never temporal sampling or thumbnails.
+            // Bound resident frame batches and outbound concurrency separately.
+            const pending: { bytes: Uint8Array; digest: string }[] = [];
+            const seen = new Set<string>();
+            const running = new Set<Promise<void>>();
+            let failure: unknown, failed = false;
+            let pendingBytes=0;
+            const flush = () => {
+                const batch = pending.splice(0, batchLimits.frames);pendingBytes=0;
+                const task = (async () => {
+                    const result = await inspectBatch(batch.map(item=>item.bytes), signal);
+                    checkAbort(signal);
+                    if (!['allow','review','block'].includes(result)) throw new Error('Incomplete batch assessment');
+                    for (const item of batch) checked.set(item.digest,result);
+                })().catch(error=>{ failed=true;failure=error; });
+                running.add(task); void task.then(()=>running.delete(task));
+            };
+            try {
+                for (const file of files) {
+                    checkAbort(signal); if(failed) throw failure;
+                    const bytes=await readFile(join(directory,file)),digest=createHash('sha256').update(bytes).digest('hex');
+                    if(seen.has(digest)) continue;
+                    if(bytes.length>batchLimits.bytes) throw new Error('Decoded frame exceeds batch budget');
+                    if(pendingBytes+bytes.length>batchLimits.bytes){flush();if(running.size>=2)await Promise.race(running);}
+                    seen.add(digest);pending.push({bytes,digest});pendingBytes+=bytes.length;
+                    if(pending.length===batchLimits.frames) {flush();if(running.size>=2) await Promise.race(running);}
+                }
+                if(pending.length) flush();
+            } finally { await Promise.all(running); }
+            if(failed) throw failure;
+            if(checked.size!==seen.size) throw new Error('Incomplete batch frame coverage');
+            for(const result of checked.values()) {if(result==='block') decision='block';else if(result==='review'&&decision!=='block') decision='review';}
+            checkAbort(signal);
+            return { decision, decodeComplete:true,durationSeconds:duration,codec:stream.codec_name,pixelFormat:stream.pix_fmt,
+                frameCount:frames,framesChecked:files.length,uniqueFramesChecked:checked.size,assessmentMode:'all-native-frames-in-batches' };
+        }
         for (const file of files) {
             checkAbort(signal);
             const bytes = await readFile(join(directory, file));

@@ -1,4 +1,63 @@
-# Controlled Wan core – not released for public inference
+# Official controlled endpoint – not released for public inference
+
+Stand1.11.: `app.py` ist ein ausführbarer Gradio-/FastAPI-Adapter mit einem
+**explizit anderen** offiziellen Wan2.2-TI2V5B-Profil. Alte Merge-Vorbereitung
+bleibt unten als historische Referenz erhalten; sie ist kein Ersatzprofil.
+
+- `official-model-lock.json`:20 Dateien/34.201.418.400Bytes, offizieller Wan-AI-
+  Snapshot b8fff7315c768468a5333511427288870b2e9635, Apache2.0 laut Modellkarte.
+  Kleine Konfigurationen unabhängig gehasht; große Gewichte nur HF-LFS-Hashes,
+  noch nicht geladen. Vor nativem Laden alle lokalen Dateien hashen, Symlinks
+  und unaufgeführte Dateien ablehnen (auch alternative kanonische Gewichte).
+- Eigenes fixes Profil:50Schritte/121Frames/24fps/Guidance5/UniPC-Shift5,
+  `large`,120Sekunden harte GPU-Laufzeitgrenze. **Keine Laufzeitmessung** und
+  kein4-/8-Schritt-Lightning-Modell. Das Spiel muss ausdrücklich
+  `AI_PROVIDER_CHAIN=wan22-official` konfigurieren; gemischte Fallbackketten
+  werden verweigert. Alte Spielräume behalten ihr vorhandenes Profil.
+- Jeder Aufruf braucht einen persönlichen Bearer-Zugang, der vor GPU-Zuteilung
+  bei HF geprüft wird, und einen signierten, zeitlich begrenzten Auftrag für
+  genau Konto/Bild/Prompt/Seed/Modell. Betreiber-HF-Tokens im Prozess sind verboten.
+  Lokales SQLite-Journal und eine einmalige Freigabe im Cloudflare-Services-DO
+  verhindern auch nach einem Space-Rebuild die erneute Zuteilung. Bei unklarer
+  Freigabeantwort kein GPU-Aufruf/Neuversuch. HF-Abrechnung bleibt unbestätigt.
+- Ergebnisse liegen privat und werden nur mit kurzlebiger kryptografischer
+  Dateifreigabe abgerufen; generische Gradio-Dateirouten sind gesperrt. Nach15min
+  bereinigen. Export H.264/yuv420p/faststart;121Frames dauern5,0417s. Danach muss
+  die Spielseite weiterhin die komplette Ausgabemoderation bestehen.
+- `requirements-space.txt` fixiert die vollständige Linux/Python3.12-Auflösung
+  samt Paket-Hashes. Konkreter Konflikt behoben: Gradio6.31 und Transformers4.57
+  verwenden inkompatible Hub-Versionen. Endpoint-Profil verwendet ausdrücklich
+  Diffusers0.42.1/Transformers5.22.1/Hub2.4.0. Native CUDA-Kompatibilität bleibt
+  ungetestet; CPU-HTTP-Prüfungen verwenden keine Modellgewichte/keine GPU.
+
+Vorbereitung:
+
+```sh
+node --import tsx tools/package-wan-producer.mts
+# Erst mit gezieltem HF_DEPLOY_TOKEN und geprüfter Paketdatei:
+node --import tsx tools/deploy-wan-producer.mts --upload-paused-space --package .local/wan-producer-package-...
+```
+
+Der Uploader ist auf den bestehenden privaten pausierten Test-Space beschränkt,
+aktiviert kein Modell/GPU/Hardware und kopiert ausschließlich acht geprüfte
+Dateien. Keine .env/Tokens/Gewichte gelangen in das Paket. HF_DEPLOY_TOKEN dient
+nur der Bereitstellung und wird niemals für persönliche Generierung verwendet.
+Danach explizite Gewichts-Vorbereitung auf geeignetem kostenlosem Host mit
+mindestens34,2GB freiem Speicher plus Reserve, kein Download auf dem Mac nötig:
+
+```sh
+python prepare_official.py --download-public-snapshot --destination models/official
+```
+
+Voraussetzungen für tatsächliche Aktivierung: geprüftes kostenloses ZeroGPU-
+Hosting, native Installation/Artefaktprüfung, qualifizierter Moderator,
+WAN_PRODUCER_SECRET auf Spiel und Producer, nach Deployment genau gepinnte
+WAN_SPACE_REVISION sowie gesonderte GPU-Freigabe. Private-Space-Zugriff des zweiten
+Kontos muss geklärt sein; kein automatischer Wechsel zur öffentlichen Sichtbarkeit.
+`WAN_ENABLE_MODEL_LOADING` bleibt standardmäßig deaktiviert, `/config` behauptet
+dann keine geladene Modellidentität. Vorhandene Produktion bleibt blockiert.
+
+## Historischer Merge-Kern (nicht das offizielle Endpoint-Profil)
 
 This package replaces the prototype's mutable model selection, runtime installers,
 unpinned AOTI downloads and scheduler switches with a local, verified model core.

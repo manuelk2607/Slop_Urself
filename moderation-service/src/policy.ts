@@ -21,7 +21,7 @@ Return REVIEW for ambiguous sexualization, uncertain adult age or consent in sex
 Return ALLOW for clearly harmless nonsexual movement, family scenes, ordinary children, sport, art and fantasy.
 Answer exactly one word: ALLOW, BLOCK, or REVIEW. Do not describe the image and do not explain.`;
 }
-export interface Assessment { decision: Decision; reason: 'classifier_schema' | 'classifier_high_risk' | 'classifier_uncertain' | 'context_format' | 'context_schema' | 'context_prohibited' | 'context_sexual' | 'context_uncertain' | 'context_not_safe' | 'clear' }
+export interface Assessment { decision: Decision; reason: 'classifier_schema' | 'classifier_high_risk' | 'classifier_uncertain' | 'context_format' | 'context_schema' | 'context_prohibited' | 'context_sexual' | 'context_uncertain' | 'context_not_safe' | 'provider_safety_hold' | 'clear' }
 export function semanticAssessment(decision: unknown, reason: unknown) {
     if (decision === 'allow') return reason === 'clear';
     if (decision === 'block') return ['classifier_high_risk', 'context_prohibited'].includes(String(reason));
@@ -48,6 +48,14 @@ export function assess(scores: Scores[], context: string, protocol: DecisionProt
         return score >= 0.2 ? hold('classifier_uncertain') : { decision: 'allow', reason: 'clear' };
     }
     if (protocol !== 'json-v1') return hold('context_schema');
+    const result = assessContext(context);
+    if (score >= 0.2 && ['clear', 'context_not_safe'].includes(result.reason)) return hold('classifier_uncertain');
+    return result;
+}
+// Context-only assessment. Managed providers must not invent a local NSFW score
+// to reuse a parser; their preceding moderation stage is evaluated separately.
+export function assessContext(context: string): Assessment {
+    const hold = (reason: Assessment['reason']): Assessment => ({ decision: 'review', reason });
     let result: Record<string, unknown>;
     try { result = JSON.parse(context); } catch { return hold('context_format'); }
     const keys = ['safe', 'sexual', 'sexualMinors', 'nonConsensual', 'graphicAbuse', 'uncertain'];
@@ -56,7 +64,6 @@ export function assess(scores: Scores[], context: string, protocol: DecisionProt
     if (result.sexualMinors || result.nonConsensual || result.graphicAbuse) return { decision: 'block', reason: 'context_prohibited' };
     if (result.sexual) return hold('context_sexual');
     if (result.uncertain) return hold('context_uncertain');
-    if (score >= 0.2) return hold('classifier_uncertain');
     if (result.safe !== true) return hold('context_not_safe');
     return { decision: 'allow', reason: 'clear' };
 }
