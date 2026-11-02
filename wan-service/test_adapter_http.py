@@ -51,6 +51,27 @@ class AdapterTests(unittest.TestCase):
                 self.assertTrue(health['modelLoaded']);self.assertTrue(health['preparationOnly'])
                 self.assertFalse(health['generationAvailable']);self.assertNotIn('slop_model',client.get('/config').json())
 
+    def test_expired_public_window_hides_readiness_and_rejects_before_identity_or_gpu(self):
+        import app,uuid
+        import gradio as gr
+        from fastapi.testclient import TestClient
+        spaces=types.SimpleNamespace(GPU=lambda **kwargs:lambda fn:fn)
+        with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{'SPACE_ID':app.PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':'yes',
+            'WAN_VALIDATION_SUBJECTS':'account-a,account-b','WAN_VALIDATION_CAMPAIGN_ID':str(uuid.uuid4()),
+            'WAN_VALIDATION_EXPIRES_AT':str(int(time.time())+600),'WAN_PREPARATION_ONLY':'no','WAN_PRODUCER_SECRET':SECRET,
+            'WAN_OUTPUT_DIR':root+'/private','WAN_JOB_DB':root+'/jobs.sqlite','GRADIO_TEMP_DIR':root+'/uploads',
+            'WAN_ENABLE_MODEL_LOADING':'yes','SPACE_HOST':'fixture.hf.space','GRADIO_ANALYTICS_ENABLED':'False'}),patch.dict(sys.modules,{'spaces':spaces}),patch.object(app,'load_pipeline',return_value=object()),patch.object(app,'infer') as infer,patch.object(app,'hf_subject') as identity:
+            api,ready=app.build_app();self.assertTrue(ready)
+            mounted=next(route.app for route in api.routes if hasattr(route,'app') and hasattr(route.app,'get_blocks'))
+            function=next(f.fn for f in mounted.get_blocks().fns.values() if f.api_name=='generate_video')
+            with TestClient(api) as client:
+                self.assertTrue(client.get('/healthz').json()['generationAvailable'])
+                with patch.dict(os.environ,{'WAN_VALIDATION_EXPIRES_AT':'1'}):
+                    self.assertFalse(client.get('/healthz').json()['generationAvailable'])
+                    self.assertNotIn('slop_model',client.get('/config').json())
+                    with self.assertRaises(gr.Error):function({},'The ball bounces.',1,50,5,'invalid',gr.Request())
+                    infer.assert_not_called();identity.assert_not_called()
+
     def test_disabled_http_adapter_has_schema_but_never_advertises_a_loaded_model(self):
         import app
         from fastapi.testclient import TestClient
@@ -85,7 +106,13 @@ class AdapterTests(unittest.TestCase):
             args=({'path':str(image),'mime_type':'image/png'},'The ball bounces.',12,50,5)
             with self.assertRaises(gr.Error):function(*args,'invalid',gr.Request(headers={'authorization':'Bearer fixture'}))
             self.assertTrue(image.exists());self.assertEqual(calls,[])
-            result=function(*args,token,gr.Request(headers={'authorization':'Bearer fixture'}))
+            from gradio.context import LocalContext
+            import base64,json
+            proxy='e30.'+base64.urlsafe_b64encode(json.dumps({'exp':int(time.time())+600,'sub':'account-a'}).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
+            request=gr.Request(headers={'authorization':'Bearer fixture','x-ip-token':proxy})
+            context=LocalContext.request.set(request)
+            try:result=function(*args,token,request)
+            finally:LocalContext.request.reset(context)
             self.assertEqual(calls,['fixture-inference']);self.assertFalse(image.exists())
             self.assertEqual(claim.call_count,1)
             Image.new('RGB',(640,640),'yellow').save(image)

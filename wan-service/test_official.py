@@ -12,6 +12,8 @@ import uuid
 from unittest.mock import patch
 import official
 from jobs import JobLedger, validate_permit, media_capability, validate_media_capability
+from jobs import validation_window
+from jobs import validate_proxy_token
 from app import input_path, hf_subject, validation_subjects, PUBLIC_VALIDATION_SPACE
 
 SECRET='cpu-test-producer-key-not-for-production-1234'
@@ -26,6 +28,23 @@ def permit(**overrides):
 
 
 class OfficialTests(unittest.TestCase):
+    def test_proxy_context_rejects_sdk_missing_invalid_error_and_expired_fallback_paths(self):
+        def token(payload):return 'e30.'+base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
+        validate_proxy_token(token({'exp':int(time.time())+600}))
+        validate_proxy_token(token({'user':{'id':'account-a'}}),subject='account-a')
+        for payload in [{},{'sub':'account-b'},{'exp':int(time.time())+600}]:
+            with self.assertRaises(ValueError):validate_proxy_token(token(payload),subject='account-a')
+        for value in [None,'', 'not-a-token','e30.bm90LWpzb24.Zml4dHVyZQ',token({'error':'not-authenticated'}),token({'exp':int(time.time())-1}),token({'exp':'unknown'})]:
+            with self.assertRaises(ValueError):validate_proxy_token(value)
+    def test_live_window_expires_and_never_allows_private_unbounded_or_other_subject_sets(self):
+        flags={'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':'account-a,account-b',
+            'WAN_VALIDATION_CAMPAIGN_ID':str(uuid.uuid4()),'WAN_VALIDATION_EXPIRES_AT':str(int(time.time())+600)}
+        with patch.dict(os.environ,flags,clear=True):self.assertTrue(validation_window())
+        for change in [{'SPACE_ID':'Manuel2607/SlopUrself-Wan22-GPU-Test'},{'WAN_VALIDATION_ONLY':''},
+            {'WAN_VALIDATION_SUBJECTS':'account-a,account-a'},{'WAN_VALIDATION_CAMPAIGN_ID':'not-approved'},
+            {'WAN_VALIDATION_EXPIRES_AT':str(int(time.time())-1)},{'WAN_VALIDATION_EXPIRES_AT':str(int(time.time())+21601)}]:
+            with patch.dict(os.environ,{**flags,**change},clear=True):self.assertFalse(validation_window())
+
     def test_public_validation_copy_fails_closed_without_exactly_two_subjects(self):
         with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':''},clear=True):
             with self.assertRaises(ValueError):validation_subjects()
@@ -39,7 +58,7 @@ class OfficialTests(unittest.TestCase):
         from unittest.mock import MagicMock
         opener=MagicMock()
         response=opener.open.return_value.__enter__.return_value
-        with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':'account-a,account-b'},clear=True),patch('urllib.request.build_opener',return_value=opener):
+        with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_PREPARATION_ONLY':'yes','WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':'account-a,account-b'},clear=True),patch('urllib.request.build_opener',return_value=opener):
             for subject in ['account-a','account-b']:
                 response.read.return_value=json.dumps({'id':subject}).encode()
                 self.assertEqual(hf_subject('Bearer personal-test-access'),subject)

@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from official import manifest, parameters, load_pipeline, infer
 from producer import write_video
-from jobs import JobLedger, validate_permit, media_capability, validate_media_capability
+from jobs import JobLedger, validate_permit, media_capability, validate_media_capability, validation_window, validate_proxy_token
 
 PUBLIC_VALIDATION_SPACE='Manuel2607/SlopUrself-Wan22-Validated'
 CONTROLLED_SPACES={'Manuel2607/SlopUrself-Wan22-GPU-Test',PUBLIC_VALIDATION_SPACE}
@@ -51,6 +51,8 @@ def hf_subject(authorization):
         raise ValueError('Invalid personal identity')
     allowed=validation_subjects()
     if allowed and subject not in allowed:raise ValueError('This HF account is not part of the approved validation')
+    if os.environ.get('SPACE_ID')==PUBLIC_VALIDATION_SPACE and os.environ.get('WAN_PREPARATION_ONLY')!='yes' and not validation_window():
+        raise ValueError('The bounded validation window is not active')
     return subject
 
 
@@ -64,6 +66,16 @@ def input_path(value, upload_root):
     if root not in path.parents or not path.is_file() or path.stat().st_size>10*1024*1024:
         raise ValueError('Invalid upload path')
     return path
+
+
+def require_personal_gpu_context(request,subject):
+    # The pinned spaces SDK reads LocalContext.request, including when the GPU
+    # function is nested. An injected request alone must not hide a lost context.
+    from gradio.context import LocalContext
+    actual=LocalContext.request.get(None)
+    if actual is None or actual.headers.get('authorization')!=request.headers.get('authorization') or actual.headers.get('x-ip-token')!=request.headers.get('x-ip-token'):
+        raise ValueError('Personal Gradio context missing or changed; no GPU request')
+    validate_proxy_token(actual.headers.get('x-ip-token'),subject=subject)
 
 
 def claim_on_game(permit):
@@ -118,6 +130,8 @@ def build_app():
     ledger=JobLedger(os.environ.get('WAN_JOB_DB','/tmp/slop-wan/jobs.sqlite'))
     gpu=None;registered_gpu=None;model_loaded=False
     preparation_only=os.environ.get('WAN_PREPARATION_ONLY')=='yes'
+    if os.environ.get('SPACE_ID')==PUBLIC_VALIDATION_SPACE and not preparation_only and not validation_window():
+        raise ValueError('A finite approved validation window is required before activation')
     if os.environ.get('WAN_ENABLE_MODEL_LOADING')=='yes':
         if not re.fullmatch(r'[a-z0-9-]+\.hf\.space',os.environ.get('SPACE_HOST','')):
             raise ValueError('Expected explicit HF Space host before model loading')
@@ -137,13 +151,16 @@ def build_app():
             return infer(pipe,image,prompt,seed,steps,duration_seconds)
         registered_gpu=allocate
         if not preparation_only:gpu=allocate
+    def generation_available():
+        return gpu is not None and (os.environ.get('SPACE_ID')!=PUBLIC_VALIDATION_SPACE or validation_window())
     # Typed request must be injected by Gradio rather than becoming an API input.
     def generate_video(input_image: dict, prompt: str, seed: int, steps: int, duration_seconds: float, permit: str, request: gr.Request):
-        if preparation_only or gpu is None:
+        if preparation_only or not generation_available():
             raise gr.Error('Producer not ready; no GPU request started')
         path=None;consumed=False
         try:
             subject=hf_subject(request.headers.get('authorization'))
+            require_personal_gpu_context(request,subject)
             path=input_path(input_image,upload_root)
             data=path.read_bytes()
             if data[:8]!=b'\x89PNG\r\n\x1a\n':
@@ -158,6 +175,7 @@ def build_app():
             ledger.prune(output_root);ledger.reserve(job_id,subject)
             consumed=True
             claim_on_game(permit)
+            if os.environ.get('SPACE_ID')==PUBLIC_VALIDATION_SPACE and not validation_window():raise ValueError('Validation window expired before allocation')
         except Exception:
             raise gr.Error('Producer authorization or input validation failed; no GPU request started') from None
         finally:
@@ -200,15 +218,29 @@ def build_app():
     @app.get('/healthz')
     def health():
         return JSONResponse({'modelLoaded':model_loaded,'preparationOnly':preparation_only,
-            'generationAvailable':gpu is not None,'revision':lock['revision'] if model_loaded else None},
+            'generationAvailable':generation_available(),'revision':lock['revision'] if model_loaded else None},
             headers={'cache-control':'no-store'})
+    @app.get('/identity')
+    def identity_probe(request: HttpRequest):
+        # Free, read-only preflight. No proxy JWT, claims or credentials leave
+        # this host. Presence/binding is not an external billing receipt.
+        try:
+            subject=hf_subject(request.headers.get('authorization'))
+            payload=validate_proxy_token(request.headers.get('x-ip-token'))
+            try:validate_proxy_token(request.headers.get('x-ip-token'),subject=subject);bound=True
+            except ValueError:bound=False
+            keys=[k for k in payload if re.fullmatch(r'[A-Za-z0-9_]{1,64}',k)][:20]
+            return JSONResponse({'personalIdentityVerified':True,'proxySubjectMatches':bound,'proxyClaimKeys':keys,
+                'billingVerified':False,'gpuCalls':0},headers={'cache-control':'no-store'})
+        except Exception:
+            return JSONResponse({'error':'personal_proxy_context_unavailable','gpuCalls':0},status_code=403,headers={'cache-control':'no-store'})
     @app.get('/config')
     def pinned_config():
         # Gradio rebuilds its config during queue/mount setup. Inject the
         # verified identity at response time, never from an unverified env var.
         config=dict(demo.config)
         config.pop('slop_model',None)
-        if gpu is not None:
+        if generation_available():
             config['slop_model']={'id':lock['id'],'revision':lock['revision']}
         return JSONResponse(config,headers={'cache-control':'no-store'})
     @app.middleware('http')

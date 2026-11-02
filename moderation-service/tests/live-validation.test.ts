@@ -1,0 +1,60 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { once } from 'node:events';
+import { createHash, randomUUID } from 'node:crypto';
+import { validationModerator } from '../src/live-validation.js';
+import { POLICY_VERSION } from '../src/policy.js';
+const hash = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
+test('finite moderator rejects unknown inputs and keeps complete output private until exact operator review, including restart', async t => {
+    const directory = await mkdtemp(join(tmpdir(), 'slop-bounded-test-'));
+    const id = randomUUID(), accountA = randomUUID(), accountB = randomUUID(), jobId = randomUUID();
+    const secret = 'isolated-validation-protocol-fixture-secret-only-32', version = 'a'.repeat(64);
+    const image = `data:image/png;base64,${(await readFile('../tests/fixtures/live-validation/ball.png')).toString('base64')}`;
+    let inputs = 0, outputs = 0;
+    const options = { id, expiresAt: Date.now() + 3600_000, secret, version, directory, cases: [
+        { accountId: accountA, pixelSha256: 'f6860b738a396c974dd4bf5dcb102d5bc1bab769c532e5afc4b74749226efa03', prompt: 'Exact reviewed fixture.' },
+        { accountId: accountB, pixelSha256: '9ac5fd4a9da300556a44726fbf719441ca212627be9640965e2276951256c3d3', prompt: 'Other exact fixture.' }],
+        engine: { input: async () => { inputs++; return { decision: 'allow', decodeComplete: true }; }, output: async () => { outputs++; return { decision: 'allow', decodeComplete: true, codec: 'h264', pixelFormat: 'yuv420p', durationSeconds: 5.04, frameCount: 121, framesChecked: 121 }; } } };
+    let server = await validationModerator(options);
+    const start = async () => { server.listen(0, '127.0.0.1'); await once(server, 'listening'); const a = server.address(); assert.ok(a && typeof a !== 'string'); return `http://127.0.0.1:${a.port}`; };
+    let root = await start();
+    const close = () => new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); });
+    t.after(async () => { await close(); await rm(directory, { recursive: true, force: true }); });
+    const request = async (payload: object, authorization = secret, scoped = true) => {
+        const body = JSON.stringify({ policyVersion: POLICY_VERSION, modelVersion: version, validationScope: id, jobId, accountId: accountA, ...payload });
+        const digest = hash(body), headers = { authorization: `Bearer ${authorization}`, 'content-type': 'application/json', 'x-content-sha256': digest, ...(scoped ? { 'x-live-validation': id } : {}) };
+        const post = await fetch(root + '/jobs/validate', { method: 'POST', headers, body });
+        return { post, digest, headers };
+    };
+    const input = { stage: 'input', image, prompt: 'Exact reviewed fixture.' };
+    assert.equal((await request(input, 'wrong')).post.status, 401);
+    assert.equal((await request(input, secret, false)).post.status, 503);
+    assert.equal((await request({ ...input, prompt: 'Unknown action' })).post.status, 503);
+    assert.equal((await request({ ...input, accountId: randomUUID() })).post.status, 503);
+    assert.equal(inputs, 0);
+    const first = await request(input); assert.equal(first.post.status, 202);
+    const ticket = await first.post.json() as { id: string };
+    const get = (path: string, headers: HeadersInit) => fetch(root + path, { headers });
+    const until = async (condition: () => Promise<boolean>) => { for (let i = 0; i < 60; i++) { if (await condition()) return; await new Promise(r => setTimeout(r, 50)); } throw Error('Fixture job did not finish'); };
+    await until(async () => (await get('/jobs/' + ticket.id, first.headers)).status === 200);
+    assert.equal(inputs, 1);
+    assert.equal((await request({ ...input, jobId: randomUUID() })).post.status, 503);
+    const video = Buffer.from('synthetic HTTP protocol fixture, not a real safety qualification');
+    const output = await request({ stage: 'output', mime: 'video/mp4', video: video.toString('base64') });
+    assert.equal(output.post.status, 202); const outTicket = await output.post.json() as { id: string };
+    await until(async () => { try { return hash(await readFile(join(directory, jobId + '.mp4'))) === hash(video); } catch { return false; } });
+    assert.equal((await get('/jobs/' + outTicket.id, output.headers)).status, 202);
+    await writeFile(join(directory, 'output-approvals.json'), JSON.stringify([{ jobId, sha256: 'f'.repeat(64), operatorApproved: true, reviewedAt: Date.now() }]));
+    assert.equal((await get('/jobs/' + outTicket.id, output.headers)).status, 202);
+    await close(); server = await validationModerator(options); root = await start();
+    assert.equal((await request({ ...input, jobId: randomUUID() })).post.status, 503);
+    await writeFile(join(directory, 'output-approvals.json'), JSON.stringify([{ jobId, sha256: hash(video), operatorApproved: true, reviewedAt: Date.now() }]));
+    const approved = await get('/jobs/' + outTicket.id, output.headers); assert.equal(approved.status, 200);
+    const result = await approved.json() as Record<string, unknown>;
+    assert.equal(result.decision, 'allow'); assert.equal(result.validationScope, id); assert.equal(result.framesChecked, 121);
+    assert.equal(result.evaluationOnly, undefined); assert.equal(outputs, 1);
+    assert.equal((await fetch(root + '/' + jobId + '.mp4')).status, 401);
+});

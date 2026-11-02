@@ -50,6 +50,10 @@ try {
         await page.locator('#promptInput').fill('The subject waves.');
         await page.locator('#uploadButton').click();
         await Promise.all(pages.map(p => p.locator('#screenVoting').waitFor({ state: 'visible' })));
+        // This suite checks extensions, not autoplay. Explicitly acknowledge
+        // the creator preview through the UI: its legitimate 45s deadline can
+        // otherwise outlast the test's 30s final-screen wait in WebKit.
+        if (await page.locator('#finishPreviewButton').isVisible()) await page.locator('#finishPreviewButton').click();
     };
     await host.locator('#createRoomButton').click();
     await host.locator('#screenRoomLobby').waitFor({ state: 'visible' });

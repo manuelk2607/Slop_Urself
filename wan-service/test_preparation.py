@@ -38,6 +38,18 @@ class PreparationTests(unittest.TestCase):
         with patch.dict(os.environ,flags,clear=True),patch.object(preparation,'prepare') as download:
             preparation.prepare_on_space('models/official');download.assert_called_once_with('models/official')
 
+    def test_live_cold_start_prepares_only_in_a_finite_public_two_account_window(self):
+        import time,uuid
+        flags={'SPACE_ID':'Manuel2607/SlopUrself-Wan22-Validated','SPACE_HOST':'fixture.hf.space',
+            'WAN_ENABLE_MODEL_LOADING':'yes','WAN_PREPARE_PUBLIC_WEIGHTS':'yes','WAN_PREPARATION_ONLY':'no',
+            'WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':'account-a,account-b',
+            'WAN_VALIDATION_CAMPAIGN_ID':str(uuid.uuid4()),'WAN_VALIDATION_EXPIRES_AT':str(int(time.time())+600)}
+        with patch.dict(os.environ,flags,clear=True),patch.object(preparation,'prepare') as download:
+            preparation.prepare_on_space('models/official');download.assert_called_once()
+        with patch.dict(os.environ,{**flags,'WAN_VALIDATION_EXPIRES_AT':'1'},clear=True),patch.object(preparation,'prepare') as download:
+            with self.assertRaises(ValueError):preparation.prepare_on_space('models/official')
+            download.assert_not_called()
+
     def test_insufficient_space_and_corrupt_same_size_existing_file_stop_before_network(self):
         contents=b'verified model fixture'
         lock={'id':'fixture/model','revision':'a'*40,'files':[{'path':'weights.safetensors',

@@ -10,6 +10,7 @@ import { logAiEvent, type AiTelemetry } from './telemetry';
 import type { AiProgress } from '../shared/generation';
 import { buildVideoPrompt, VIDEO_NEGATIVE_PROMPT } from '../shared/video-prompt';
 import { officialPermit, requireOfficialRecipe } from './official-producer';
+import { validationScope, validationMember, validationInput } from '../security/live-validation';
 export { buildVideoPrompt } from '../shared/video-prompt';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
@@ -196,6 +197,8 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: AiPr
 export async function generateAiVideo(imageBase64: string, prompt: string, config: AiConfig, progress: AiProgress = () => {}, allowAttempt?: (seconds: number) => Promise<void>, lifecycle: AiLifecycle = {}) {
     prompt = validatePrompt(prompt);
     imageBase64 = await normalizeImage(imageBase64);
+    const validation = validationScope(config);
+    if (validation) await validationInput(config, validation.accountId, imageBase64, prompt);
     await moderateInput(imageBase64, buildVideoPrompt(prompt), config);
     const image = validateImage(imageBase64);
     const size = config.AI_IMAGE_PROFILE === 'bounded' ? preparedImageSize(image.base64) : undefined;
@@ -220,6 +223,7 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const identity = await boundedJson(response, 64 * 1024) as { id?: unknown };
             if (typeof identity.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(identity.id)) throw new ProviderTrustError();
             subject = identity.id;
+            if (validation && validationMember(validation, validation.accountId).subject !== subject) throw new ProviderTrustError();
         } else await response.body?.cancel();
     }
     if (official && !subject) throw new ProviderTrustError();
@@ -286,7 +290,8 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             await verifyPinnedProvider(providerIdentity!, root, async url => boundedJson(await get(url), 512 * 1024));
             const file = { path: uploaded[0], orig_name: filename, mime_type: image.mime, meta: { _type: 'gradio.FileData' } };
             const values = buildProviderValues(provider, prompt, file, config);
-            if (provider === 'wan22-official') values.permit = await officialPermit(config.WAN_PRODUCER_SECRET!, subject!, bytes, String(values.prompt), Number(values.seed));
+            if (validation) values.seed = validationMember(validation, validation.accountId).seed;
+            if (provider === 'wan22-official') values.permit = await officialPermit(config.WAN_PRODUCER_SECRET!, subject!, bytes, String(values.prompt), Number(values.seed), Date.now(), validation?.jobId);
             const data = orderProviderValues(parameters, values);
             job = { provider, providerIdentity, root, endpoint, submittedAt: Date.now(), status: 'submitting',
                 ...(queue ? { sessionHash: crypto.randomUUID() } : {}),

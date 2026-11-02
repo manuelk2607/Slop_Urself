@@ -100,6 +100,14 @@ async function decodePng(bytes: Uint8Array) {
 }
 
 /** Decodes with bounded pixel/memory limits and emits one metadata-free opaque PNG. */
+export async function imagePixelDigest(value: string, expected?: { width: number; height: number }) {
+    const image = validateImage(value);
+    if (image.mime !== 'image/png') throw bad();
+    const decoded = await decodePng(Uint8Array.from(atob(image.base64), c => c.charCodeAt(0)));
+    if (expected && (decoded.width !== expected.width || decoded.height !== expected.height)) throw bad();
+    return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', decoded.data as Uint8Array<ArrayBuffer>)), b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export async function normalizeImage(value: unknown) {
     const image = validateImage(value), bytes = Uint8Array.from(atob(image.base64), c => c.charCodeAt(0));
     if (image.mime === 'image/webp') throw new Error('Bitte wähle das WebP-Bild über die Bildauswahl aus, damit es sicher umgewandelt wird.');

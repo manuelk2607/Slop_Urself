@@ -20,6 +20,7 @@ import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 import { blockedGenerationCapacity } from '../../security/moderation';
 import { producerClaimResponse } from '../../security/producer-claims';
+import { parseValidationCampaign } from '../../security/live-validation';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
 export type { Env } from './types';
@@ -38,7 +39,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         if (url.pathname === '/api/release') return releaseResponse(request.method, env.CF_VERSION_METADATA?.id);
         const seoResponse = publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
-        if (url.pathname === '/api/producer/claim') return producerClaimResponse(request, env, async permit => { await service(env, '/security/producer/claim', { permit }); });
+        if (url.pathname === '/api/producer/claim') return producerClaimResponse(request, env, async permit => { await service(env, '/security/producer/claim', { permit }); }, true);
         const auth = cloudflareAuth(env);
         const canReadVideo = async (path: string, account: Account) => {
             if (account.id === env.ADMIN_ACCOUNT_ID) return true;
@@ -56,6 +57,17 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             } catch { return json({ error: 'Das Spiel ist gerade nicht erreichbar.' }, { status: 503 }); }
         }
 
+        if (url.pathname === '/api/hf/validation') {
+            if (request.method !== 'GET') return json({}, { status: 405 });
+            let account;
+            try { account = await requestAccount(request, auth); }
+            catch (error) { return json({}, { status: authFailureStatus(error) }); }
+            try {
+                const campaign = parseValidationCampaign(env.LIVE_VALIDATION_CAMPAIGN);
+                if (!account || !campaign?.members.some(m => m.accountId === account.id)) return json({}, { status: 403 });
+                return json(await service(env, '/security/validation/identity', { code: campaign.room, accountId: account.id, connection: account.hfConnectionId }));
+            } catch { return json({ error: 'Persönliche Proxy-Prüfung nicht verfügbar. Kein GPU-Auftrag gestartet.' }, { status: 503 }); }
+        }
         if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
         if (url.pathname === '/api/session') return sessionResponse(request, auth, serviceProfiles(env));

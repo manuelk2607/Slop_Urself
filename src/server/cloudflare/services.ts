@@ -16,7 +16,9 @@ import { ContentReports, type ReportReason } from '../../security/reports';
 import { ArchiveReservations } from '../../storage/reservations';
 import { verifyHfRoster } from '../../auth/hf-roster';
 import { StoredModerationJournal } from '../../security/moderation-journal';
-import { ProducerClaims } from '../../security/producer-claims';
+import { ProducerClaims, verifyProducerPermit } from '../../security/producer-claims';
+import { validationConfig, validationScope, validationMember, parseValidationCampaign, ValidationLedger, type ValidationAdmission } from '../../security/live-validation';
+import { boundedJson } from '../body';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -46,13 +48,50 @@ export class ServiceDurableObject {
         const path = new URL(request.url).pathname;
         const action = async () => {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
-                participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number; permit?: string;
+                participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number; permit?: string; admission?: Omit<ValidationAdmission, 'claimed'>;
                 account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
             const quality = generationQuality(data.quality);
-            const blocked = blockedGenerationCapacity(this.env, data.players || 1);
-            if (path === '/security/producer/claim') { generationSafetyReady(this.env); await this.producerClaims.claim(data.permit); return json({ claimed: true }); }
+            const config = validationConfig(this.env, data.code || ''), scope = validationScope(config);
+            const campaign = parseValidationCampaign(this.env.LIVE_VALIDATION_CAMPAIGN);
+            const ledger = campaign && new ValidationLedger(this.state.storage, campaign);
+            const budget = scope ? new PlayerQuotaBudget(this.state.storage, config, this.hf, (player, subject) => {
+                if (validationMember(scope, player.accountId).subject !== subject) throw new HfRequiredError();
+            }) : this.budget;
+            const blocked = blockedGenerationCapacity(config, data.players || 1);
+            if (path === '/security/producer/claim') {
+                if (ledger) await ledger.claim(await verifyProducerPermit(data.permit, this.env.WAN_PRODUCER_SECRET));
+                else { generationSafetyReady(this.env); await this.producerClaims.claim(data.permit); }
+                return json({ claimed: true });
+            }
+            if (path === '/security/validation/context') {
+                if (!scope || !ledger || !data.jobId) throw new Error('Keine aktive begrenzte Prüfung.');
+                return json({ accountId: (await ledger.context(data.jobId)).accountId });
+            }
+            if (path === '/security/validation/identity') {
+                if (!scope) throw new Error('Keine begrenzte Prüfung.');
+                const member = validationMember(scope, data.accountId), credential = await this.hf.credential(data.connection, data.accountId);
+                if (credential.subject !== member.subject) throw new HfRequiredError();
+                const response = await fetch('https://manuel2607-slopurself-wan22-validated.hf.space/identity', {
+                    redirect: 'error', headers: { authorization: `Bearer ${credential.token}` }, signal: AbortSignal.timeout(20_000)
+                });
+                if (!response.ok) { await response.body?.cancel(); throw new Error('Persönlicher ZeroGPU-Proxy-Kontext nicht nachweisbar. Kein GPU-Auftrag gestartet.'); }
+                const result = await boundedJson(response, 8192) as { personalIdentityVerified?: unknown; proxySubjectMatches?: unknown; proxyClaimKeys?: unknown };
+                if (result.personalIdentityVerified !== true || typeof result.proxySubjectMatches !== 'boolean' || !Array.isArray(result.proxyClaimKeys)
+                    || result.proxyClaimKeys.some(k => typeof k !== 'string' || !/^[A-Za-z0-9_]{1,64}$/.test(k))) throw new Error('Ungültige persönliche Proxy-Prüfung.');
+                return json({ personalIdentityVerified: true, proxySubjectMatches: result.proxySubjectMatches, proxyClaimKeys: result.proxyClaimKeys, billingVerified: false, gpuCalls: 0 });
+            }
+            if (path === '/security/validation/admit') {
+                if (!scope || !ledger || !data.admission || !data.participant || data.participant.accountId !== data.admission.accountId) throw new Error('Kein persönlicher Prüfauftrag.');
+                const credential = await this.hf.credential(data.participant.hfConnectionId, data.participant.accountId);
+                if (credential.subject !== data.admission.subject) throw new HfRequiredError();
+                await ledger.admit(data.admission); return json({ ok: true });
+            }
+            if (scope && ['/quota/reserve', '/quota/extend'].includes(path) && (path.endsWith('extend') || data.rounds !== 1 || data.players !== 2
+                || data.participants?.length !== 2 || new Set(data.participants.map(p => p.accountId)).size !== 2)) throw new Error('Nur eine vollständige Zwei-Spieler-Prüfrunde ist freigegeben.');
+            if (scope && path === '/quota/begin' && (await ledger!.context(data.jobId!)).accountId !== data.participant?.accountId) throw new Error('Prüfauftrag ohne passende persönliche Zulassung.');
+            if (scope && path === '/quota/attempt' && data.seconds !== 120) throw new Error('Nicht genehmigtes GPU-Budget.');
             if (blocked && ['/quota/display', '/quota/capacity'].includes(path)) return json(blocked);
-            if (blocked && ['/quota/reserve', '/quota/extend', '/quota/begin', '/quota/attempt'].includes(path)) generationSafetyReady(this.env);
+            if (blocked && ['/quota/reserve', '/quota/extend', '/quota/begin', '/quota/attempt'].includes(path)) generationSafetyReady(config);
             if (path === '/security/content/blocked') return json({ blocked: await this.reports.blocked(data.url) });
             if (path === '/security/content/allowed') return json({ allowedUrls: await this.reports.allowed(data.urls) });
             if (path === '/security/content/list') return json({ reports: await this.reports.list() });
@@ -89,21 +128,29 @@ export class ServiceDurableObject {
                 await this.state.storage.put('rateBuckets', buckets);
                 return json({ retryAfter });
             }
-            if (path === '/quota/display') return json(await this.budget.displayCapacity(data.players, quality, data.participants));
-            if (path === '/quota/capacity') return json(await this.budget.capacity(data.players, quality, data.participants));
-            if (path === '/quota/token') return json({ token: await this.budget.tokenForJob(data.code, data.jobId!) });
-            if (path === '/quota/reserve') await this.budget.reserve(data.code, data.rounds, data.players, quality, data.participants);
-            else if (path === '/quota/extend') await this.budget.extend(data.code, data.players!, quality, data.participants);
-            else if (path === '/quota/begin') await this.budget.begin(data.code, data.generations, data.jobId, data.playerId, data.ownRemaining, data.participant);
-            else if (path === '/quota/consume') await this.budget.consume(data.code, data.jobId);
-            else if (path === '/quota/release') await this.budget.release(data.code);
-            else if (path === '/quota/drop') await this.budget.drop(data.code, data.generations, data.playerId);
-            else if (path === '/quota/attempt') await this.budget.allowAttempt(data.code, data.seconds, data.jobId);
+            if (path === '/quota/display') { const capacity = await budget.displayCapacity(data.players, quality, data.participants); return json(scope ? { ...capacity, aiRoundLimit: Math.min(1, capacity.aiRoundLimit) } : capacity); }
+            if (path === '/quota/capacity') { const capacity = await budget.capacity(data.players, quality, data.participants); return json(scope ? { ...capacity, aiRoundLimit: Math.min(1, capacity.aiRoundLimit) } : capacity); }
+            if (path === '/quota/token') return json({ token: await budget.tokenForJob(data.code, data.jobId!) });
+            if (path === '/quota/reserve') await budget.reserve(data.code, data.rounds, data.players, quality, data.participants);
+            else if (path === '/quota/extend') await budget.extend(data.code, data.players!, quality, data.participants);
+            else if (path === '/quota/begin') await budget.begin(data.code, data.generations, data.jobId, data.playerId, data.ownRemaining, data.participant);
+            else if (path === '/quota/consume') await budget.consume(data.code, data.jobId);
+            else if (path === '/quota/release') await budget.release(data.code);
+            else if (path === '/quota/drop') await budget.drop(data.code, data.generations, data.playerId);
+            else if (path === '/quota/attempt') await budget.allowAttempt(data.code, data.seconds, data.jobId);
             else if (path === '/archive') {
+                let archiveConfig = config;
+                if (scope) {
+                    if (!data.artifact || !ledger) throw new Error('Archivierung ohne Prüfauftrag.');
+                    const admission = await ledger.context(data.artifact.generationId), source = new URL(data.url);
+                    if (!admission.claimed || source.origin !== 'https://manuel2607-slopurself-wan22-validated.hf.space'
+                        || !source.pathname.endsWith(`/private-videos/${admission.jobId}.mp4`)) throw new Error('Unbekannte Prüfausgabe.');
+                    archiveConfig = validationConfig(this.env, data.code, { id: admission.jobId, accountId: admission.accountId });
+                }
                 const database = getDatabase(this.env.DATABASE_URL);
                 await this.scheduleCleanup(Date.now() + 360_000);
                 this.archiveInventory.invalidate();
-                const url = await archiveVideo(data.url, { ...this.env, moderationJournal: this.moderationJournal }, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
+                const url = await archiveVideo(data.url, { ...archiveConfig, moderationJournal: this.moderationJournal }, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
                     database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact, await this.archiveReservations.pendingBytes(data.artifact?.generationId));
                 if (url.startsWith('/api/videos/') && data.code) await this.archiveReservations.protect(data.code, url);
                 return json({ url });

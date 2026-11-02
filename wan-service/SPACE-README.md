@@ -34,3 +34,18 @@ Inference still requires qualified input/output moderation, confirmed personal
 quota isolation, controlled runtime and separately scoped inference approval.
 The game release gate remains independently blocked until acceptance; model
 initialization is not a moderation, billing or inference qualification.
+
+The clean public validation copy additionally requires exactly two fixed HF
+subjects. Inference activation needs a canonical campaign UUID and an explicit
+expiry no more than six hours away. Expiry hides readiness and rejects before
+GPU allocation. Cold starts may prepare the same verified public snapshot only
+inside that finite window; every GPU call still requires the exact input permit
+and durable game admission. The ordinary game release remains blocked.
+
+Before allocation the caller must retain the same Gradio LocalContext and a
+non-error HF proxy token identifying the verified HF subject. Missing, foreign
+or expired context is rejected rather than accepting the SDK's IP fallback.
+GET /identity provides an authenticated read-only preflight without disclosing
+the proxy token. This structural check is not signature attestation or proof of
+actual per-account billing; the separately approved quota measurements remain
+mandatory.

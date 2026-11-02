@@ -1,8 +1,9 @@
 import { OFFICIAL_WAN_MODEL } from '../ai/official-producer';
 import { generationSafetyReady, type ModerationConfig } from './moderation';
 import { boundedJson } from '../server/body';
+import { parseValidationCampaign } from './live-validation';
 interface ClaimsStorage { get<T>(key: string): Promise<T | undefined>; put(key: string, value: unknown): Promise<void> }
-interface Permit { id: string; expiresAt: number }
+export interface Permit { id: string; expiresAt: number; subject: string; imageSha256: string; promptSha256: string; seed: number }
 export async function verifyProducerPermit(token: unknown, secret: string | undefined, now = Date.now()): Promise<Permit> {
     if (typeof token !== 'string' || token.length > 4096 || !secret || secret.length < 32) throw new Error('Invalid producer permit');
     const match = /^([A-Za-z0-9_-]+)\.([a-f0-9]{64})$/.exec(token); if (!match) throw new Error('Invalid producer permit');
@@ -15,7 +16,7 @@ export async function verifyProducerPermit(token: unknown, secret: string | unde
         || !/^[A-Za-z0-9_-]{1,128}$/.test(body.subject) || !/^[a-f0-9]{64}$/.test(body.imageSha256) || !/^[a-f0-9]{64}$/.test(body.promptSha256)
         || !Number.isInteger(body.seed) || body.seed < 0 || body.seed >= 2 ** 31 || body.steps !== 50
         || !Number.isInteger(body.expiresAt) || body.expiresAt * 1000 <= now || body.expiresAt * 1000 > now + 300_000) throw new Error('Invalid producer scope');
-    return { id: body.id, expiresAt: body.expiresAt };
+    return { id: body.id, expiresAt: body.expiresAt, subject: body.subject, imageSha256: body.imageSha256, promptSha256: body.promptSha256, seed: body.seed };
 }
 // Caller serializes mutations. Cloudflare uses the persistent Services DO;
 // Node uses its durable local store. No input, credentials or raw permit saved.
@@ -30,15 +31,19 @@ export class ProducerClaims {
         await this.storage.put('producer-claims:v1', active);
     }
 }
-export async function producerClaimResponse(request: Request, config: ModerationConfig & { WAN_PRODUCER_SECRET?: string }, claim: (permit: string) => Promise<void>) {
+export async function producerClaimResponse(request: Request, config: ModerationConfig & { WAN_PRODUCER_SECRET?: string }, claim: (permit: string) => Promise<void>, validationClaims = false) {
     const headers = { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
     if (request.method !== 'POST') return new Response('{}', { status: 405, headers });
     try {
         if (config.AI_PROVIDER === 'mock') throw new Error('No producer in mock mode');
-        generationSafetyReady(config);
+        // The only exception is a separately approved bounded campaign. Its
+        // persistent admission/once-only fence is checked by the Services DO.
+        const campaign = validationClaims && config.AI_GENERATION_RELEASE === 'blocked' ? parseValidationCampaign(config.LIVE_VALIDATION_CAMPAIGN) : undefined;
+        if (!campaign) generationSafetyReady(config);
         if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') throw new Error('Invalid content type');
         const body = await boundedJson(request, 8192) as { permit?: unknown };
-        await verifyProducerPermit(body?.permit, config.WAN_PRODUCER_SECRET);
+        const permit = await verifyProducerPermit(body?.permit, config.WAN_PRODUCER_SECRET);
+        if (campaign && !campaign.members.some(m => m.subject === permit.subject)) throw new Error('Not an approved validation subject');
         await claim(body.permit as string);
         return new Response('{"claimed":true}', { status: 201, headers });
     } catch { return new Response('{"error":"producer_claim_rejected"}', { status: 503, headers }); }

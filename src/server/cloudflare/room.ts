@@ -31,6 +31,7 @@ import { releaseId } from '../../security/release';
 import type { GenerationStage } from '../../shared/generation';
 import { generationView } from '../../game/rules';
 import { approvedProvider } from '../../ai/provider-trust';
+import { validationConfig, validationScope, validationMember, validationInput, digest } from '../../security/live-validation';
 
 declare class WebSocketPair { 0: CloudflareWebSocket; 1: CloudflareWebSocket }
 
@@ -106,7 +107,7 @@ export class RoomDurableObject {
             if (this.room || await getDatabase(this.env.DATABASE_URL)?.roomExists(room.code)) return historyJson({ error: 'Raumcode belegt.' }, 409);
             if (!sanitizeRoomId(room.code) || !requestId || room.state !== 'LOBBY') return historyJson({}, 400);
             room.quota = isArchiveGame(room) ? archiveCapacity(await this.playableArchive(room), room.players.length)
-                : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
+                : await service(this.env, '/quota/capacity', { code: room.code, players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
             room.maxRounds = room.quota.aiRoundLimit ? maxRounds(room.maxRounds || 1, room.quota.aiRoundLimit) : 0;
             this.room = room; this.roomCode = room.code;
             // The initialization identity and room must survive together, including ambiguous responses.
@@ -245,7 +246,7 @@ export class RoomDurableObject {
         }
         const player: Player = { id: meta.socketId, accountId: meta.account?.id, sessionId: sanitizeSessionId(payload.sessionId) || crypto.randomUUID(), name: username, score: 0, connected: true };
         player.hfConnectionId = meta.account?.hfConnectionId;
-        const capacity = await service(this.env, '/quota/capacity', { players: 1, participants: [player] });
+        const capacity = await service(this.env, '/quota/capacity', { code: this.roomCode, players: 1, participants: [player] });
         this.room = {
             code: this.roomCode, hostId: player.id, players: [player], state: 'LOBBY',
             activeCreatorIndex: 0, currentVotes: {}, currentRound: 1,
@@ -264,6 +265,8 @@ export class RoomDurableObject {
         if (meta.playerId) throw new Error('Du bist bereits in diesem Raum.');
         if (!room) throw new Error('Raum wurde nicht gefunden.');
         const spectator = payload.role === 'spectator';
+        const validation = validationScope(validationConfig(this.env, room.code));
+        if (validation) { validationMember(validation, meta.account?.id); if (spectator) throw new Error('Diese Prüfung hat keine Zuschauerplätze.'); }
         if (room.rematch?.initialized) throw new Error('Bitte verwende den neuen Raumcode.');
         const name = meta.account?.name || sanitizeUsername(payload.username);
         if (!name) throw new Error('Bitte gib einen Spielernamen ein.');
@@ -331,6 +334,8 @@ export class RoomDurableObject {
         if (room.state !== 'LOBBY' || room.hostId !== player.id) return;
         if (this.input?.shared) throw new Error('Das gemeinsame Bild wird noch geprüft.');
         if (startProblem(room)) throw new Error(startProblem(room));
+        const validation = validationScope(validationConfig(this.env, room.code)), options = gameOptions(room.options);
+        if (validation && (room.players.length !== 2 || room.players.some(p => !validation.campaign.members.some(m => m.accountId === p.accountId)) || options.mode !== 'classic' || options.sharedImage || options.secretTasks || options.guessPrompt || options.phaseSeconds)) throw new Error('Nur die bestätigte klassische Zwei-Spieler-Prüfrunde ist freigegeben.');
         await service(this.env, '/hf/roster', { participants: room.players });
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
@@ -350,7 +355,7 @@ export class RoomDurableObject {
         const room = this.room;
         if (!room || (room.state !== 'LOBBY' && room.state !== 'GAME_OVER')) return;
         const capacity = isArchiveGame(room) ? archiveCapacity(await this.playableArchive(room), room.players.length)
-            : await service(this.env, '/quota/capacity', { players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
+            : await service(this.env, '/quota/capacity', { code: room.code, players: room.players.length, quality: gameOptions(room.options).quality, participants: room.players }) as QuotaCapacity;
         if (room.state === 'GAME_OVER') room.extensionQuota = capacity;
         else {
             room.quota = capacity;
@@ -405,9 +410,11 @@ export class RoomDurableObject {
         const room = this.room!;
         if (isArchiveGame(room) || room.state !== 'IDLE' || activeCreator(room)?.id !== player.id) return;
         const prompt = validatePrompt(payload.prompt);
-        generationSafetyReady(this.env);
-        if (this.env.AI_PROVIDER !== 'mock') approvedProvider(this.env);
+        const config = validationConfig(this.env, room.code);
+        generationSafetyReady(config);
+        if (this.env.AI_PROVIDER !== 'mock') approvedProvider(config);
         const imageBase64 = await normalizeImage(gameOptions(room.options).sharedImage ? await readSharedImage(this.state.storage, room.sharedImage) : payload.imageBase64);
+        await validationInput(config, player.accountId, imageBase64, prompt);
         if (this.env.AI_PROVIDER !== 'mock') {
             if (!player.accountId) throw new Error('Bitte bestätige dein Benutzerkonto.');
             if (!archiveEnabled(this.env)) throw new Error('Der Videospeicher ist nicht eingerichtet.');
@@ -462,10 +469,11 @@ export class RoomDurableObject {
             return work();
         });
         const work = (async () => {
-            generationSafetyReady(this.env);
+            const config = validationConfig(this.env, room.code, { id: input.id, accountId: input.accountId });
+            generationSafetyReady(config);
             if (input.expiresAt <= Date.now()) throw new Error('Die Inhaltsprüfung ist abgelaufen. Bitte sende dein Bild erneut.');
             const image = await readSharedImage(this.state.storage, input.image);
-            await moderateInput(image, input.shared ? '' : buildVideoPrompt(input.prompt), { ...this.env, moderationJournal: {
+            await moderateInput(image, input.shared ? '' : buildVideoPrompt(input.prompt), { ...config, moderationJournal: {
                 load: key => checked(() => journal.load(key)), save: (key, value) => checked(() => journal.save(key, value)),
                 clear: key => checked(() => journal.clear(key))
             } });
@@ -485,6 +493,15 @@ export class RoomDurableObject {
                     await this.saveRoom(); await this.inputs.remove(input, true); this.input = undefined; await this.saveRoom();
                     await deleteSharedImage(this.state.storage, old); this.broadcastRoomUpdate(); return;
                 }
+                const scope = validationScope(config);
+                if (scope) {
+                    const member = (await validationInput(config, input.accountId, image, input.prompt))!;
+                    const bytes = Uint8Array.from(atob(image.split(',')[1]), c => c.charCodeAt(0));
+                    await service(this.env, '/security/validation/admit', { code: room.code, participant: creator, admission: {
+                        jobId: input.id, accountId: input.accountId, subject: member.subject, pixelSha256: member.pixelSha256,
+                        imageSha256: await digest(bytes), promptSha256: await digest(buildVideoPrompt(input.prompt)), seed: member.seed
+                    } });
+                }
                 input.stage = 'starting'; await this.inputs.save(input);
                 await service(this.env, '/archive/preflight', { code: room.code, jobId: input.id });
                 await service(this.env, '/quota/begin', { code: room.code, generations: remainingVideos(room), jobId: input.id,
@@ -494,7 +511,7 @@ export class RoomDurableObject {
             });
         })().catch(error => this.enqueue(async () => {
             if (!this.inputMatches(room, input)) return;
-            if (error instanceof ModerationError && error.code === 'moderation_unavailable' && input.expiresAt > Date.now() && this.env.AI_GENERATION_RELEASE !== 'blocked') {
+            if (error instanceof ModerationError && error.code === 'moderation_unavailable' && input.expiresAt > Date.now() && (this.env.AI_GENERATION_RELEASE !== 'blocked' || validationScope(validationConfig(this.env, room.code)))) {
                 input.retryAt = Date.now() + 15_000; await this.inputs.save(input); return;
             }
             if (input.shared) {
@@ -597,7 +614,14 @@ export class RoomDurableObject {
 
     private async generationConfig(code: string, jobId: string, job?: RoomState['generationJob']) {
         if (job?.status === 'complete' && job.videoUrl) return this.env;
-        try { return { ...this.env, HF_TOKEN: (await service(this.env, '/quota/token', { code, jobId })).token as string | undefined }; }
+        try {
+            let config = validationConfig(this.env, code);
+            if (validationScope(config)) {
+                const context = await service(this.env, '/security/validation/context', { code, jobId });
+                config = validationConfig(this.env, code, { id: jobId, accountId: context.accountId as string });
+            }
+            return { ...config, HF_TOKEN: (await service(this.env, '/quota/token', { code, jobId })).token as string | undefined };
+        }
         catch (error) {
             if (job) {
                 if (Date.now() - job.submittedAt >= AI_JOB_MAX_AGE_MS) throw new AiExpiredError();

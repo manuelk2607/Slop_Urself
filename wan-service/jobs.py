@@ -13,6 +13,52 @@ import threading
 from official import MODEL_ID, MODEL_REVISION
 
 
+def validate_proxy_token(token,now=None,subject=None):
+    """Reject SDK's explicit missing/error/IP-fallback cases, not a billing proof.
+
+    HF verifies this opaque proxy token when scheduling. We cannot locally
+    attest its signature or infer a billing identity from undocumented claims.
+    """
+    now=time.time() if now is None else now
+    if not isinstance(token,str) or len(token)>16384 or not re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',token):
+        raise ValueError('A personal ZeroGPU proxy token is required; no IP fallback')
+    part=token.split('.')[1]
+    try:payload=json.loads(base64.urlsafe_b64decode(part+'='*(-len(part)%4)))
+    except Exception:raise ValueError('Invalid proxy context; no IP fallback') from None
+    if not isinstance(payload,dict) or payload.get('error') or ('exp' in payload and (type(payload['exp']) not in (int,float) or payload['exp']<=now)):
+        raise ValueError('Expired/error proxy context; no IP fallback')
+    def identifies(value,depth=0):
+        if depth>4:return False
+        if isinstance(value,str):return value==subject
+        if isinstance(value,dict):return any(identifies(v,depth+1) for v in list(value.values())[:128])
+        if isinstance(value,list):return any(identifies(v,depth+1) for v in value[:128])
+        return False
+    if subject is not None and (not isinstance(subject,str) or not identifies(payload)):
+        raise ValueError('Proxy context does not identify the verified personal subject')
+    return payload
+
+
+
+def validation_window(now=None):
+    """Only the approved public two-account host can enter a finite live window.
+
+    This authorizes model preparation, not a GPU call: the signed input permit
+    and durable game claim remain mandatory for every inference.
+    """
+    now=time.time() if now is None else now
+    subjects=os.environ.get('WAN_VALIDATION_SUBJECTS','').split(',')
+    expiry=os.environ.get('WAN_VALIDATION_EXPIRES_AT','')
+    campaign=os.environ.get('WAN_VALIDATION_CAMPAIGN_ID','')
+    try:
+        valid_id=str(uuid.UUID(campaign))==campaign
+    except (ValueError,AttributeError):return False
+    return (os.environ.get('SPACE_ID')=='Manuel2607/SlopUrself-Wan22-Validated'
+        and os.environ.get('WAN_VALIDATION_ONLY')=='yes' and valid_id
+        and len(subjects)==2 and len(set(subjects))==2
+        and all(re.fullmatch(r'[A-Za-z0-9_-]{1,128}',s) for s in subjects)
+        and re.fullmatch(r'[0-9]{10}',expiry) is not None and now<int(expiry)<=now+21600)
+
+
 def validate_permit(token, secret, subject, image_digest, prompt, seed, now=None):
     now = time.time() if now is None else now
     if not isinstance(secret, str) or len(secret) < 32 or not isinstance(token, str) or len(token) > 4096:

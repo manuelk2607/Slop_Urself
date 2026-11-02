@@ -10,7 +10,8 @@ interface Plan { owners: Owner[]; jobs: Record<string, string>; members: string[
 // Calls are serialized by the service object (or Node's withBudget), across all rooms.
 export class PlayerQuotaBudget {
     private legacy: QuotaBudget;
-    constructor(private storage: BudgetStorage, private config: QuotaConfig, private connections: HfConnections) {
+    constructor(private storage: BudgetStorage, private config: QuotaConfig, private connections: HfConnections,
+        private checkOwner?: (player: BudgetPlayer, subject: string) => void) {
         this.legacy = new QuotaBudget(storage, config);
     }
     private key(code: string, owner: Owner) { return `${code}:${owner.id}`; }
@@ -22,6 +23,7 @@ export class PlayerQuotaBudget {
         const owners: Owner[] = [];
         for (const player of players) {
             const credential = await this.connections.credential(player.hfConnectionId, player.accountId);
+            this.checkOwner?.(player, credential.subject);
             owners.push({ ...player, subject: credential.subject, central: credential.subject === cached?.subject });
         }
         return owners;

@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 from official import manifest,verify_directory
+from jobs import validation_window
 
 
 def prepare(destination):
@@ -54,7 +55,7 @@ def prepare_on_space(destination):
             or not re.fullmatch(r'[a-z0-9-]+\.hf\.space',os.environ.get('SPACE_HOST',''))
             or os.environ.get('WAN_ENABLE_MODEL_LOADING')!='yes'
             or os.environ.get('WAN_PREPARE_PUBLIC_WEIGHTS')!='yes'
-            or os.environ.get('WAN_PREPARATION_ONLY')!='yes'):
+            or (os.environ.get('WAN_PREPARATION_ONLY')!='yes' and not validation_window())):
         raise ValueError('Remote-only preparation requires the designated Space and explicit preparation-only flags')
     prepare(destination)
 

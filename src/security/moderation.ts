@@ -1,7 +1,8 @@
 import { moderationRequest } from './moderation-jobs';
+import { validationScope, type ValidationConfig } from './live-validation';
 export { validatePrompt } from '../shared/video-prompt';
 
-export interface ModerationConfig {
+export interface ModerationConfig extends ValidationConfig {
     AI_PROVIDER?: string;
     AI_GENERATION_RELEASE?: string;
     MODERATION_URL?: string;
@@ -24,11 +25,11 @@ export function moderationConfigured(config: ModerationConfig) {
     } catch { return false; }
 }
 export function generationSafetyReady(config: ModerationConfig) {
-    if (config.AI_PROVIDER !== 'mock' && config.AI_GENERATION_RELEASE === 'blocked') throw unavailable();
+    if (config.AI_PROVIDER !== 'mock' && config.AI_GENERATION_RELEASE === 'blocked' && !validationScope(config)) throw unavailable();
     if (config.AI_PROVIDER !== 'mock' && !moderationConfigured(config)) throw unavailable();
 }
 export function blockedGenerationCapacity(config: ModerationConfig, players: number) {
-    if (config.AI_PROVIDER === 'mock' || config.AI_GENERATION_RELEASE !== 'blocked') return;
+    if (config.AI_PROVIDER === 'mock' || config.AI_GENERATION_RELEASE !== 'blocked' || validationScope(config)) return;
     return { aiRoundLimit: 0, playerCount: players, quotaMode: 'unavailable' as const, generationBlocked: true,
         error: 'Neue KI-Videos sind derzeit gesperrt. Archivpartien bleiben verfügbar.' };
 }
@@ -42,6 +43,7 @@ function base64(bytes: Uint8Array) {
 }
 interface Verdict {
     evaluationOnly?: unknown;
+    validationScope?: unknown;
     decision?: unknown; digest?: unknown; policyVersion?: unknown; modelVersion?: unknown;
     decodeComplete?: unknown; frameCount?: unknown; framesChecked?: unknown; durationSeconds?: unknown;
     codec?: unknown; pixelFormat?: unknown;
@@ -49,7 +51,10 @@ interface Verdict {
 async function evaluate(stage: 'input' | 'output', payload: Record<string, unknown>, config: ModerationConfig) {
     if (config.AI_PROVIDER === 'mock') return;
     generationSafetyReady(config);
-    const body = JSON.stringify({ stage, policyVersion: config.MODERATION_POLICY_VERSION, modelVersion: config.MODERATION_MODEL_VERSION, ...payload });
+    const scope = validationScope(config);
+    if (scope && (!scope.jobId || !scope.accountId)) throw unavailable();
+    const body = JSON.stringify({ stage, policyVersion: config.MODERATION_POLICY_VERSION, modelVersion: config.MODERATION_MODEL_VERSION, ...payload,
+        ...(scope ? { validationScope: scope.campaign.id, jobId: scope.jobId, accountId: scope.accountId } : {}) });
     const digest = await sha256(new TextEncoder().encode(body));
     // Coalesce only concurrent checks under the same credentials. A prior
     // approval cannot establish that qualification is still valid now.
@@ -61,9 +66,10 @@ async function evaluate(stage: 'input' | 'output', payload: Record<string, unkno
         let verdict: Verdict;
         try {
             verdict = await moderationRequest(config.MODERATION_URL!, config.MODERATION_SECRET!, body, digest, undefined,
-                config.moderationJournal ? { journal: config.moderationJournal, key: await sha256(new TextEncoder().encode(key)) } : undefined) as Verdict;
+                config.moderationJournal ? { journal: config.moderationJournal, key: await sha256(new TextEncoder().encode(key)) } : undefined, scope?.campaign.id) as Verdict;
         } catch { throw unavailable(); }
         if (!verdict || verdict.evaluationOnly !== undefined || verdict.digest !== digest || verdict.policyVersion !== config.MODERATION_POLICY_VERSION || verdict.modelVersion !== config.MODERATION_MODEL_VERSION) throw unavailable();
+        if (scope ? verdict.validationScope !== scope.campaign.id : verdict.validationScope !== undefined) throw unavailable();
         if (verdict.decision === 'block') throw new ModerationError('content_blocked', 'Dieser Inhalt kann nach den Spielregeln nicht verarbeitet werden. Bitte wähle ein anderes Bild oder einen anderen Prompt.');
         if (verdict.decision === 'review') throw new ModerationError('content_review', 'Dieser Inhalt konnte nicht sicher freigegeben werden. Bitte wähle ein anderes Motiv oder wende dich an den Spielbesitzer.');
         if (verdict.decision !== 'allow' || verdict.decodeComplete !== true) throw unavailable();

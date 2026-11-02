@@ -10,13 +10,13 @@ export async function moderationRequest(url: string, secret: string, body: strin
         const aborted = () => { clearTimeout(timer); signal.removeEventListener('abort', aborted); reject(new Error('Moderation deadline')); };
         signal.addEventListener('abort', aborted, { once: true });
         if (signal.aborted) aborted();
-    }), durable?: { journal: ModerationJournal; key: string }) {
+    }), durable?: { journal: ModerationJournal; key: string }, validationId?: string) {
     const endpoint = new URL(url), asynchronous = endpoint.pathname.endsWith('/jobs/validate');
     // The room/service command must not hold its serial operation queue for
     // five minutes. Long jobs need a durable checkpoint/resume orchestrator;
     // until that exists, an overlong check remains unavailable, never approved.
     const signal = AbortSignal.timeout(30_000);
-    const headers = { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'x-content-sha256': digest, 'x-moderation-mode': 'validate' };
+    const headers = { authorization: `Bearer ${secret}`, 'content-type': 'application/json', 'x-content-sha256': digest, 'x-moderation-mode': 'validate', ...(validationId ? { 'x-live-validation': validationId } : {}) };
     const jobUrl = (id: string) => { const target = new URL(endpoint.href); target.pathname = endpoint.pathname.slice(0, -'validate'.length) + id; return target.href; };
     const request = async (target: string, method: 'GET' | 'POST') => {
         signal.throwIfAborted();

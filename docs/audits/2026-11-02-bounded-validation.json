@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-02",
+  "operatorInputApproval": "call_9a95454e394d46c78df5b6b7415d1687",
+  "approvedCases": 2,
+  "generalGenerationRelease": "blocked",
+  "actualGpuRequests": 0,
+  "individualBillingVerified": false,
+  "fullRealPartyVerified": false,
+  "boundedPath": {
+    "implemented": true,
+    "deployed": false,
+    "maximumAccounts": 2,
+    "maximumRounds": 1,
+    "maximumLargeSecondsPerAccount": 120,
+    "maximumCampaignHours": 6,
+    "pixelAndPromptBinding": true,
+    "persistentNonResettingSlots": true,
+    "outputOperatorDigestApprovalRequired": true
+  },
+  "checks": {
+    "applicationUnits": 241,
+    "focusedCampaignAndClaims": 7,
+    "moderationServiceTests": 39,
+    "nativeCpuHttpTests": 27,
+    "builds": true,
+    "toolsTypecheck": true,
+    "workerdGenerationFlow": "passed with all providers simulated; no real GPU requests",
+    "browserTargets": "all targets passed across main run and targeted continuation; not a single uninterrupted successful runner invocation"
+  },
+  "observedFailures": [
+    {
+      "area": "initial local browser launch",
+      "cause": "installed browser directory was not supplied; corrected environment, resumed integration/browser targets"
+    },
+    {
+      "area": "WebKit extension preview",
+      "observation": "30-second wait timed out during legal 45-second creator preview; isolated diagnostic rerun passed",
+      "correction": "test explicitly confirms creator preview through existing UI; corrected WebKit and Chromium tests passed; no unproven production synchronization fix claimed"
+    },
+    {
+      "area": "parallel follow-up Chromium test",
+      "cause": "test port reused too early; only the two identified owned processes stopped; successful sequential rerun"
+    }
+  ],
+  "pinnedSdkInspection": {
+    "package": "spaces0.51.3",
+    "source": "locally available pinned wheel, zero/client.py and zero/wrappers.py",
+    "observed": "scheduler reads Gradio LocalContext.request and can accept IP quota fallback for absent/error X-IP-Token",
+    "implemented": "require same personal context, non-error/unexpired proxy token and verified HF subject in payload; authenticated read-only probe",
+    "notVerified": "HF proxy token signature, real caller attribution, per-job billing"
+  },
+  "externalDependencies": {
+    "cloudflareAuthentication": "being checked with existing authorization; no new Cloudflare deployment yet",
+    "producerPublication": "new finite-window and proxy-context guards not yet uploaded",
+    "profileSessions": "must reuse the two existing profiles after fresh official HF proof; no session minting or token export"
+  }
+}

@@ -4,6 +4,41 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Begrenzter Spiel-Prüfpfad nach konkreter Betreiberfreigabe, 2.11.
+
+M01/M02/M03/M17/M31/M32:genau die zwei vom Nutzer betrachteten synthetischen
+Motive/Prompts wurden ausdrücklich bestätigt. Implementiert ist eine getrennte,
+serverseitige Prüfung für einen Raum, zwei unveränderliche Profil-/HF-Bindungen,
+eine Runde, zwei feste640²-Pixel-/Prompt-/Seed-Paare und120s je Konto. Allgemeine
+KI-Sperre und öffentliche Kapazität0 bleiben bestehen. Dauerhafte Zulassung vor
+GPU und verbrauchter Platz überleben neue Permit-/Job-IDs und Space-Neustarts.
+Room, persönliche Quota, Generator, Producer-Claims und Ausgabe-Archiv integriert.
+
+Separater Moderator-Gateway nutzt die bestehende tatsächliche Gemini-Pipeline,
+behauptet keine allgemeine Qualifikation, hält verschlüsselte Prüfjobs und
+verweigert andere Eingaben. Vollständige121-Frame-Ausgabe muss zusätzlich zur
+Maschinenprüfung konkret anhand ihres Hashs vom Betreiber bestätigt werden.
+Ohne diese Abnahme bleibt das Video privat und der bestehende HF-Auftrag wird
+nur wieder abgefragt. Keine automatische GPU-Wiederholung.
+
+Im tatsächlich gepinnten spaces0.51.3 liest der Scheduler LocalContext.request
+und kann bei fehlendem/fehlerhaftem X-IP-Token auf IP-Kontingent zurückfallen.
+Native zusätzliche Sperre fordert denselben persönlichen Gradio-Kontext und
+einen fehlerfreien Proxy-Token mit verifiziertem HF-Subjekt. Signatur-/Abrechnungs-
+attest kann daraus nicht abgeleitet werden. Neue geschützte Nur-Lese-Prüfung
+verifiziert den tatsächlichen Proxy-Kontext vor einem GPU-Auftrag. Finite native
+Aktivierung erlaubt einen notwendigen Kaltstart mit denselben Modellgewichten;
+nach Ablauf keine Bereitschaft, keine Modellbehauptung, kein GPU-Aufruf.
+
+Verifiziert:241 App-Units, zusätzliche gezielte Claim-/Kampagnen-Regressionen,
+39 Moderator-Tests/Build,27 native CPU-/HTTP-Tests und workerd-Fluss mit simulierten
+Diensten. Echte GPU-/Abrechnung-/Videopartie nicht durchgeführt. Browserziele
+Chromium/WebKit einschließlich Nachholprüfungen bestanden. Ein ursprünglicher
+WebKit-Zusatzrundentest wartete30s bei erlaubter45s-Erstellervorschau; der Test
+bestätigt diese nun ausdrücklich über den vorhandenen UI-Button, statt auf
+Autoplay zu vertrauen. Kein nachgewiesener Produkt-Synchronisationsfix daraus
+behauptet. Details/Veröffentlichungsstand in PROGRESS.md.
+
 ### Live-Validierung 2.11. – konkrete Teilnachweise, keine KI-Gesamtfreigabe
 
 M02/M03/M17:echter Gratis-Gemini-Korpus mit38 Fällen abgeschlossen:23 harmlose

@@ -95,7 +95,8 @@ Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
   geprüft:gelber Ball hüpft, roter Würfel dreht sich; jeweils exakter wirksamer
   Spielprompt, beide semantisch allow/clear. Diese Ergebnisse sind evaluationOnly,
   keine allgemeine Produktionsfreigabe. Beide tatsächlich dargestellten Motive
-  warten jetzt auf die gesonderte manuelle Betreiberabnahme im Chat.
+  wurden im Chat ausdrücklich für genau die zwei genehmigten Gratis-Testvideos
+  vom Betreiber freigegeben (Antwort auf call_9a95454e394d46c78df5b6b7415d1687).
 - Zwei echte Produktionsprofile LiveA_825b2353/LiveB_825b2353 vom Nutzer mit
   unterschiedlichen HF-Konten verbunden. Persönliche Restkontingente vor jedem
   GPU-Auftrag bisher300/300; RaumF4DD mit beiden Spielern, Reload und tatsächliche
@@ -134,10 +135,54 @@ Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
   Produktions-Gate-Vorprüfung im Uploader strikt typgeprüft; Nachweis-/Werkzeug-
   Commit3131acf ebenfalls gepusht. Keine neue CF-Anwendung veröffentlicht.
 
+## Abgenommenes lokales Paket nach konkreter Motivfreigabe – Veröffentlichung folgt
+
+- Eng begrenzter Prüfpfad implementiert:serverseitige, gebrandete Raumkonfiguration,
+  zwei feste Profil-/HF-Identitäten, exakte640²-Pixel/Prompts/Seeds,1Runde/2Aufträge,
+  120s je Konto, maximal6h. Öffentliche /api/config-Sperre bleibt unverändert.
+  Dauerhafte Services-Zulassung und verbrauchter Platz verhindern Wiederholung
+  durch neue UUID, abgelaufenen Permit oder verlorenen HF-Space-Datenträger.
+- Room/Quota/Generation/Producer-Claim/Archiv integriert. Node erhält keine
+  Kampagnen-Claim-Ausnahme. Neue private Moderator-Gateway-Instanz ist getrennt
+  von allgemeiner Qualifikation:echte Eingabeinferenz, vollständige Ausgabeprüfung,
+  persistente verschlüsselte Tickets; Veröffentlichung zusätzlich erst nach
+  exakter Ausgabehash-/Betreiberfreigabe. Keine pauschale qualification.json.
+- Zusatzkorrektur für tatsächlichen späteren Kaltstart:Producer darf öffentliche
+  Gewichte in einem zeitlich begrenzten Zwei-Konten-Livefenster vorbereiten, ohne
+  einen GPU-Auftrag zu starten. Vorbereitung-only bleibt Standard. Andernfalls
+  hätte Aktivierung nach Containerneustart keine Gewichte laden können.
+- Lokal gezielte4App-Regressionen, neuer echter HTTP-Gateway-Test und simulierte
+  workerd-Generierung einschließlich Drift/Evaluation/Replay geprüft. Alle
+  Anbieter dabei simuliert, keine tatsächlichen GPU-Aufträge! Vollständige
+  241App-Units, Moderator-Build/39Tests und27nativeCPU-/HTTP-Tests bestanden.
+  Alle Browserziele wurden einschließlich gezielter Nachholprüfungen bestanden.
+  Erster Browseranlauf hatte nur den falschen Browser-Cachepfad; nach Korrektur
+  Integrations-/Browserlauf separat gestartet, Units nicht unnötig wiederholt.
+  Dessen WebKit-Zusatzrundentest endete einmal im30s-Timeout bei zulässiger45s-
+  Erstellervorschau. Gezielte Diagnosewiederholung bestand; Test jetzt mit echter
+  UI-Vorschaubestätigung statt implizitem Autoplay, auf beiden Engines bestanden.
+  Kein unbelegter Produkt-Netzwerkfehler oder dessen Behebung behauptet.
+- Zusätzlich den tatsächlichen spaces0.51.3-Scheduler gelesen:fehlender/fehlerhafter
+  X-IP-Token kann IP-Quota nutzen. Producer verweigert fehlenden/fremden/fehlerhaften
+  persönlichen Gradio-/Proxy-Kontext vor GPU; geschützter Nur-Lese-Probe-Endpunkt.
+  Token-Payload wird nie ausgegeben, nur Bindungsstatus/Schlüsselnamen. Lokale
+  Strukturprüfung ist kein kryptografischer oder tatsächlicher Abrechnungsbeleg.
+- Neues Producer-Paket und CF-Code noch nicht gepusht/veröffentlicht. Öffentlicher
+  Producer bleibt Quelle5f2ee9d/preparationOnly, Cloudflare bleibt9dd44862/blocked.
+
+Konkreter nächster Schritt:finale Typ-/Diffprüfung und Commit/Push. Geänderten Producer als preparationOnly
+veröffentlichen, tatsächlich neuen Source-/Runtime-Pin im App-Code aktualisieren.
+Dann inaktive CF-Version veröffentlichen und genau zwei bestehende Testprofile
+neu offiziell verbinden lassen; keine neuen Profile oder exportierten Cookies.
+Erst danach Kampagne mit tatsächlichen Profil-IDs/Raum und privatem HTTPS-Prüf-
+Gateway konfigurieren und eng begrenztes natives Livefenster aktivieren. Keine
+GPU-Anfrage vor vollständiger Abnahme dieses Pfads. Danach exakt ein Auftrag je
+Konto, beide Quotas davor/danach messen, Ausgabe halten/präsentieren, dann Votes.
+
 ## Weiterhin offen / nächster konkreter Schritt
 
-1. Die dargestellten zwei Motive manuell bestätigen lassen. Ohne diese Antwort
-   keine konkrete Betreiberfreigabe behaupten oder Testkampagne aktivieren.
+1. Die genaue manuelle Eingabefreigabe liegt jetzt vor. Keine erneute Frage dazu.
+   Noch keine allgemeine Moderationsqualifikation oder GPU-Ausführung behaupten.
 2. Native Veröffentlichung/Vorbereitung ist abgeschlossen (oben). Nicht erneut
    hochladen, Gewichte laden oder neue Anmeldungen anfordern. Nächster technischer
    Schritt ist der folgende streng begrenzte Spiel-/Moderations-Prüfpfad; der
