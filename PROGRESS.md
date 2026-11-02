@@ -17,7 +17,32 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
 Tokens/Cookies niemals ausgeben oder ins Repository schreiben, keine selbst
 signierten Ersatzsitzungen und keine Nutzung des Betreiberkontos für Spielerjobs.
 
-## Verifizierter Entwicklungs- und Produktionsstand
+## Aktive Fortsetzung am 3. November
+
+- GitHub41543724347 für37f89f2 vollständig erfolgreich: safety-cpu, Chromium,
+  WebKit/macOS. Nutzer hat die erneuten offiziellen HF-Freigaben bestätigt;
+  tatsächliche APIs bestätigen beide bisherigen Profile owner=true, richtige
+  getrennte HF-Konten und300/300Sekunden. Neue LobbyF815. Keine erneuten Codes
+  anfordern. Die darunter beschriebenen verlorenen Sessions sind HISTORISCH.
+- Neuer Controller läuft als vom Arbeitsprozess getrennter ProzessPID90780 mit
+  maximal8h Lebensdauer, zwei isolierten RAM-Kontexten und ohne Cookieexport.
+  Aktueller Log.local/audit-tests/bounded-controller-20261103.log; Steuerung
+  .local/bounded-live-command.json / Ergebnis .local/bounded-live-result.json.
+  Frisch ausgeführtes status und room sind bestätigt; bisher0Video-Uploads.
+- Gezielte strukturelle Proxy-Diagnose implementiert (keine Actor-Regel gelockert):
+  nur Formatkategorien und feste Fehlercodes für Schema, whoami-Ausfall,
+  Identitätswechsel oder echten Actor-Mismatch.31 native Tests sowie9 betroffene
+  App-Tests/Build bestanden. Saubere HF-Quelle8a1467627cf78078fd7a857f3341769dea62b88d
+  mit9 überprüften Dateien veröffentlicht. Kostenloser eigener Space per/restart
+  aus PAUSED aufgeweckt; Modell lädt derzeit ausschließlich extern in
+  preparation-only. Keine Aktivierung und kein GPU-Auftrag. App-Pin/DOCs werden
+  mit bestandener echter workerd-Regression als nächstes gesichert/veröffentlicht.
+- Anschließend bei tatsächlichem RUNNING/Modellvorbereitung die neue Kampagne
+  fürF815 anlegen, privaten festen Moderator starten, Scope konfigurieren und
+  exakt die beiden kostenlosen Nur-Lese-Proben ausführen. Diagnosekategorien
+  dürfen nicht als Inhalts-/Abrechnungsqualifikation ausgegeben werden.
+
+## Verifizierter Entwicklungs- und Produktionsstand vor dieser Fortsetzung
 
 - Nachgewiesene Ursache der Producer-503 behoben: workerd unterstützt redirect:
   error nicht und wirft schon vor HTTP einen TypeError. Alle4 betreffenden src-
@@ -62,8 +87,8 @@ signierten Ersatzsitzungen und keine Nutzung des Betreiberkontos für Spielerjob
 248 App-Units,30 native CPU-/HTTP-Tests, Build sowie beide tatsächlichen workerd-
 Integrationen bestanden. Alle externen Anbieter dort simuliert, kein GPU-Nachweis.
 Vollständige GitHub-Matrix02948a8/Lauf41520218201 erfolgreich; aktueller Code37f89f2,
-Lauf41543724347 läuft: safety-cpu grün, Chromium/WebKit noch in Arbeit. Den
-Ausgang separat prüfen, keinen grünen Gesamtlauf behaupten.
+Lauf41543724347 für37f89f2 inzwischen vollständig bestanden; neue Diagnostik separat
+wie oben geprüft, deren spätere CI noch nicht als erfolgreich behaupten.
 Keine tatsächliche Zwei-Video-Partie, GPU-Abrechnung, Wiedergabe erzeugter Videos,
 Endwertung oder deren Archiv-/Statistikpersistenz erfolgreich geprüft.
 
@@ -88,10 +113,8 @@ persistiert; bei Unklarheit nie einen GPU-Auftrag wiederholen.
 
 ## Nächster konkreter Schritt
 
-1. GitHub-Lauf41543724347 für37f89f2 prüfen. Den lokalen Dokumentationscommit erst
-   danach pushen, damit keine Workflow-Concurrency den laufenden Code-Test abbricht.
-   Code37f89f2 ist bereits remote und produktiv. Bei Erfolg nur den Dokumentations-
-   checkpoint pushen, kein erneutes Deployment derselben App-Version.
+1. Aktiven Fortsetzungspunkt oben abarbeiten. GitHub37f89f2 ist vollständig grün;
+   neue sichere Diagnose mit exaktem8a14676-Producer-Pin geprüft veröffentlichen.
 2. Vor erneuter Kontofreigabe Testfenster so betreiben, dass eine Codex-Unterbrechung
    nicht wieder die einzigen Zugriffe vernichtet. Weiterhin keine Token-Dateien
    im Repository. Frische offizielle HF-Freigaben erst anfordern, wenn der Nutzer

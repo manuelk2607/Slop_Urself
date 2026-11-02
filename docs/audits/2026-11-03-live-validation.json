@@ -102,8 +102,8 @@
     "latestGithub": {
       "commit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
       "run": 41543724347,
-      "lastObservedStatus": "in_progress; safety-cpu passed, Chromium/WebKit running",
-      "conclusion": "pending; no success claimed"
+      "lastObservedStatus": "completed",
+      "conclusion": "success"
     }
   },
   "production": {
@@ -191,5 +191,29 @@
     "applicationCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
     "applicationPushVerified": true,
     "documentationCheckpoint": "local commit; push after run41543724347 finishes, preserving ongoing CI"
+  },
+  "activeContinuation": {
+    "freshPersonalConnectionsVerified": true,
+    "quotas": [
+      300,
+      300
+    ],
+    "controller": {
+      "pid": 90780,
+      "detached": true,
+      "maximumHours": 8,
+      "credentialsPersisted": false
+    },
+    "room": "F815",
+    "producerSource": "8a1467627cf78078fd7a857f3341769dea62b88d",
+    "producerRestartAcknowledged": true,
+    "mode": "preparation-only; startup in progress",
+    "newTests": {
+      "native": 31,
+      "focusedApp": 9,
+      "build": true,
+      "workerdProxyReadiness": true
+    },
+    "actualGpuRequests": 0
   }
 }
