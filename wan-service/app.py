@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from official import manifest, parameters, load_pipeline, infer
 from producer import write_video
-from jobs import JobLedger, validate_permit, media_capability, validate_media_capability, validation_window, validate_proxy_token
+from jobs import JobLedger, validate_permit, media_capability, validate_media_capability, validation_window, validate_proxy_token, proxy_user_format
 
 PUBLIC_VALIDATION_SPACE='Manuel2607/SlopUrself-Wan22-Validated'
 CONTROLLED_SPACES={'Manuel2607/SlopUrself-Wan22-GPU-Test',PUBLIC_VALIDATION_SPACE}
@@ -85,6 +85,10 @@ def input_path(value, upload_root):
     return path
 
 
+class ProxyBindingError(ValueError):
+    pass
+
+
 def verified_proxy_payload(request,subject):
     token=request.headers.get('x-ip-token')
     payload=validate_proxy_token(token)
@@ -92,11 +96,13 @@ def verified_proxy_payload(request,subject):
         validate_proxy_token(token,subject=subject)
         return payload,'subject-id'
     except ValueError:
-        if not isinstance(payload.get('user'),str):raise
-        identity=hf_subject(personal_authorization(request),include_username=True)
+        if not isinstance(payload.get('user'),str):raise ProxyBindingError('actor_schema_unknown') from None
+        try:identity=hf_subject(personal_authorization(request),include_username=True)
+        except Exception:raise ProxyBindingError('identity_lookup_unavailable') from None
         if not isinstance(identity,dict) or identity.get('id')!=subject:
-            raise ValueError('Personal HF identity changed during proxy verification')
-        validate_proxy_token(token,subject=subject,verified_username=identity['name'])
+            raise ProxyBindingError('identity_changed')
+        try:validate_proxy_token(token,subject=subject,verified_username=identity['name'])
+        except ValueError:raise ProxyBindingError('actor_mismatch') from None
         return payload,'canonical-name'
 
 
@@ -266,16 +272,20 @@ def build_app():
             subject=hf_subject(authorization)
             stage='personal_proxy_context_unavailable'
             payload=validate_proxy_token(request.headers.get('x-ip-token'))
+            failure=None
             try:_,binding=verified_proxy_payload(request,subject);bound=True
-            except Exception:bound=False;binding='unverified'
+            except ProxyBindingError as error:bound=False;binding='unverified';failure=str(error)
+            except Exception:bound=False;binding='unverified';failure='context_unavailable'
             keys=[k for k in payload if re.fullmatch(r'[A-Za-z0-9_]{1,64}',k)][:20]
             user=payload.get('user')
             print(json.dumps({'event':'identity_preflight','proxySubjectMatches':bound,'proxyClaimKeys':keys,
                 'proxyUserScalarMatchesSubject':isinstance(user,str) and user==subject,
                 'proxyUserType':'string' if isinstance(user,str) else 'object' if isinstance(user,dict) else 'other',
                 'proxyBinding':binding,
+                'proxyUserFormat':proxy_user_format(payload),'proxyBindingFailure':failure,
                 **received,'gpuCalls':0}),flush=True)
             return JSONResponse({'personalIdentityVerified':True,'proxySubjectMatches':bound,'proxyClaimKeys':keys,
+                'proxyUserFormat':proxy_user_format(payload),'proxyBindingFailure':failure,
                 'billingVerified':False,'gpuCalls':0},headers={'cache-control':'no-store'})
         except Exception:
             print(json.dumps({'event':'identity_preflight_rejected','code':stage,**received,'gpuCalls':0}),flush=True)

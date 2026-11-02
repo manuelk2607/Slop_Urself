@@ -4,6 +4,8 @@ import { personalHfHeaders } from './personal-headers';
 const codes = new Set(['validation_scope_unavailable', 'producer_unreachable', 'producer_redirect', 'proxy_response_invalid',
     'personal_authorization_unavailable', 'personal_identity_unavailable', 'personal_proxy_context_unavailable',
     ...[401, 403, 404, 429, 500, 502, 503, 504].map(status => `producer_http_${status}`), 'producer_http_rejected']);
+const userFormats = new Set(['object', 'other', 'empty', 'anonymous-label', 'role-label', 'credential-like', 'hex-id', 'uuid', 'json-object', 'json-array', 'other-string']);
+const bindingFailures = new Set(['actor_schema_unknown', 'identity_lookup_unavailable', 'identity_changed', 'actor_mismatch', 'context_unavailable']);
 export function personalProxyFailure(error: unknown) {
     return error instanceof Error && codes.has(error.message) ? error.message : 'validation_unavailable';
 }
@@ -24,5 +26,7 @@ export async function probePersonalProxy(token: string) {
         || !Array.isArray(result.proxyClaimKeys) || result.proxyClaimKeys.length > 20
         || result.proxyClaimKeys.some(k => typeof k !== 'string' || !/^[A-Za-z0-9_]{1,64}$/.test(k))) throw new Error('proxy_response_invalid');
     return { personalIdentityVerified: true, proxySubjectMatches: result.proxySubjectMatches,
-        proxyClaimKeys: result.proxyClaimKeys as string[], billingVerified: false, gpuCalls: 0 };
+        proxyClaimKeys: result.proxyClaimKeys as string[], billingVerified: false, gpuCalls: 0,
+        ...(typeof result.proxyUserFormat === 'string' && userFormats.has(result.proxyUserFormat) ? { proxyUserFormat: result.proxyUserFormat } : {}),
+        ...(result.proxyBindingFailure === null || typeof result.proxyBindingFailure === 'string' && bindingFailures.has(result.proxyBindingFailure) ? { proxyBindingFailure: result.proxyBindingFailure } : {}) };
 }

@@ -4,16 +4,20 @@ import { probePersonalProxy, personalProxyFailure } from '../../src/ai/personal-
 const identity = { personalIdentityVerified: true, proxySubjectMatches: true, proxyClaimKeys: ['sub'], billingVerified: false, gpuCalls: 0 };
 
 test('read-only proxy probes keep caller transport and never equate identity with billing', async t => {
-    let bound = true;
+    let bound = true, diagnostics: Record<string, unknown> = {};
     t.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
         assert.equal(url, 'https://manuel2607-slopurself-wan22-validated.hf.space/identity');
         assert.equal(options.redirect, 'manual'); assert.equal(options.method, undefined);
         const headers = new Headers(options.headers);
         for (const name of ['authorization', 'x-hf-authorization', 'x-slop-hf-authorization']) assert.equal(headers.get(name), 'Bearer fixture-personal');
-        return Response.json({ ...identity, proxySubjectMatches: bound, unrelatedSecret: 'never-return-this' });
+        return Response.json({ ...identity, proxySubjectMatches: bound, unrelatedSecret: 'never-return-this', ...diagnostics });
     });
     assert.deepEqual(await probePersonalProxy('fixture-personal'), identity);
     bound = false;
+    assert.deepEqual(await probePersonalProxy('fixture-personal'), { ...identity, proxySubjectMatches: false });
+    diagnostics = { proxyUserFormat: 'json-object', proxyBindingFailure: 'actor_mismatch' };
+    assert.deepEqual(await probePersonalProxy('fixture-personal'), { ...identity, proxySubjectMatches: false, ...diagnostics });
+    diagnostics = { proxyUserFormat: 'private-fixture-never-return', proxyBindingFailure: 'private-fixture-never-return' };
     assert.deepEqual(await probePersonalProxy('fixture-personal'), { ...identity, proxySubjectMatches: false });
 });
 

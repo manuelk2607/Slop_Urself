@@ -14,6 +14,26 @@ import threading
 from official import MODEL_ID, MODEL_REVISION
 
 
+def proxy_user_format(payload):
+    """Structural diagnostic only; never return a token, principal or IP value."""
+    value=payload.get('user')
+    if isinstance(value,dict):return 'object'
+    if not isinstance(value,str):return 'other'
+    if not value:return 'empty'
+    if value.lower() in ('anonymous','anon','none','null','guest'):return 'anonymous-label'
+    if value.lower() in ('free','pro','enterprise','user','authenticated'):return 'role-label'
+    if value.startswith(('hf_','Bearer ')):return 'credential-like'
+    if re.fullmatch(r'[a-f0-9]{24}',value):return 'hex-id'
+    if re.fullmatch(r'[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}',value):return 'uuid'
+    if len(value)<=8192:
+        try:
+            parsed=json.loads(value)
+            if isinstance(parsed,dict):return 'json-object'
+            if isinstance(parsed,list):return 'json-array'
+        except (ValueError,TypeError):pass
+    return 'other-string'
+
+
 def validate_proxy_token(token,now=None,subject=None,verified_username=None):
     """Reject SDK's explicit missing/error/IP-fallback cases, not a billing proof.
 
