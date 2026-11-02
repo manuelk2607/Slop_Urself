@@ -20,7 +20,7 @@ import { ProducerClaims, verifyProducerPermit } from '../../security/producer-cl
 import { validationConfig, validationScope, validationMember, parseValidationCampaign, ValidationLedger, type ValidationAdmission } from '../../security/live-validation';
 import { boundedJson } from '../body';
 import { approvedProvider, verifyPinnedProvider } from '../../ai/provider-trust';
-import { probePersonalProxy, personalProxyFailure } from '../../ai/personal-proxy';
+import { probePersonalProxy, personalProxyFailure, proxyTransport } from '../../ai/personal-proxy';
 import { releaseId } from '../../security/release';
 
 export class ServiceDurableObject {
@@ -52,7 +52,7 @@ export class ServiceDurableObject {
         const action = async () => {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
                 participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number; permit?: string; admission?: Omit<ValidationAdmission, 'claimed'>;
-                account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
+                account: Account; accountId: string; connection?: string; transport?: unknown; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
             if (path === '/security/validation/identity') {
                 let phase = 'scope';
                 try {
@@ -61,7 +61,7 @@ export class ServiceDurableObject {
                     phase = 'membership'; const member = validationMember(scope, data.accountId);
                     phase = 'credential'; const credential = await this.hf.credential(data.connection, data.accountId);
                     phase = 'ownership'; if (credential.subject !== member.subject) throw new HfRequiredError();
-                    phase = 'producer'; return json({ ...await probePersonalProxy(credential.token), serviceRelease: releaseId(this.env.CF_VERSION_METADATA?.id) });
+                    phase = 'producer'; return json({ ...await probePersonalProxy(credential.token, proxyTransport(data.transport)), serviceRelease: releaseId(this.env.CF_VERSION_METADATA?.id) });
                 } catch (error) {
                     const kind = error instanceof TypeError ? 'TypeError' : error instanceof HfRequiredError ? 'HfRequiredError' : 'Error';
                     return json({ probeFailed: true, phase, errorKind: kind, code: personalProxyFailure(error), gpuCalls: 0, billingVerified: false, serviceRelease: releaseId(this.env.CF_VERSION_METADATA?.id) });

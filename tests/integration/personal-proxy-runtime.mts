@@ -6,6 +6,8 @@ import { VALIDATION_PRODUCER_REVISION } from '../../src/security/live-validation
 // Real workerd Request/fetch and Services dispatch. All outbound providers are
 // fixtures; no live credentials, model inference, production DB or GPU calls.
 const accounts = [crypto.randomUUID(), crypto.randomUUID()];
+const expiry = Math.floor(Date.now() / 1000) + 240;
+const resourceTokens = [0, 1].map(index => `e30.${Buffer.from(JSON.stringify({ exp: expiry, fixtureOwner: index })).toString('base64url')}.Zml4dHVyZQ`);
 const campaign = { id: crypto.randomUUID(), room: 'TEST', approvedAt: Date.now(), expiresAt: Date.now() + 3600_000,
     operatorApproval: 'fixed-pair-approved-2026-11-02', members: accounts.map((accountId, i) => ({ accountId, subject: 'fixture-' + i })),
     moderatorUrl: 'https://fixture.trycloudflare.com/jobs/validate', moderatorVersion: 'a'.repeat(64) };
@@ -16,10 +18,10 @@ export {ServiceDurableObject};
 const members=${JSON.stringify(campaign.members)};
 HfConnections.prototype.credential=async function(connection,accountId){const i=members.findIndex(m=>m.accountId===accountId);if(i<0)throw Error('Unexpected fixture identity');return {...members[i],token:'fixture-personal-'+i};};
 export default {async fetch(request,env){
- const path=new URL(request.url).pathname;
+ const requestUrl=new URL(request.url),path=requestUrl.pathname;
  if(path==='/construction'){let rejected=false;try{new Request('https://never-called.invalid/',{redirect:'error'});}catch(e){rejected=e instanceof TypeError;}return Response.json({errorModeRejected:rejected,manual:new Request('https://never-called.invalid/',{redirect:'manual'}).redirect});}
  const ready=path==='/ready',i=path.endsWith('/b')?1:0;
- return env.SERVICES.get(env.SERVICES.idFromName('global')).fetch(new Request('https://internal/security/validation/'+(ready?'ready':'identity'),{method:'POST',body:JSON.stringify({code:'TEST',accountId:members[i].accountId,connection:'fixture-'+i,participants:members.map((m,i)=>({id:'p'+i,accountId:m.accountId,hfConnectionId:'fixture-'+i}))})}));
+ return env.SERVICES.get(env.SERVICES.idFromName('global')).fetch(new Request('https://internal/security/validation/'+(ready?'ready':'identity'),{method:'POST',body:JSON.stringify({code:'TEST',accountId:members[i].accountId,connection:'fixture-'+i,transport:requestUrl.searchParams.get('transport')||'personal',participants:members.map((m,i)=>({id:'p'+i,accountId:m.accountId,hfConnectionId:'fixture-'+i}))})}));
 }};`;
 const bundle = await build({ stdin: { contents, resolveDir: process.cwd(), sourcefile: 'proxy-runtime.ts' }, bundle: true, write: false, format: 'esm', platform: 'browser' });
 const values = { AI_PROVIDER: 'wan22', AI_GENERATION_RELEASE: 'blocked', LIVE_VALIDATION_CAMPAIGN: JSON.stringify(campaign),
@@ -37,6 +39,13 @@ const runtime = new Miniflare({ logRequests: false, telemetry: { enabled: false 
     const url = new URL(request.url); requests.push(url.origin + url.pathname);
     assert.equal(request.method, 'GET');
     if (url.hostname === 'storage.test') return new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>');
+    if (url.hostname === 'huggingface.co' && url.pathname.endsWith('/jwt')) {
+        const authorization = request.headers.get('authorization');
+        assert.ok(['Bearer fixture-personal-0', 'Bearer fixture-personal-1'].includes(authorization!));
+        const token = resourceTokens[authorization!.endsWith('-1') ? 1 : 0];
+        assert.equal(url.searchParams.get('expires_in'), '300');
+        return Response.json({ token, accessToken: `Bearer ${token}`, exp: expiry });
+    }
     if (url.pathname.endsWith('/refs')) return Response.json({ branches: [{ name: 'main', ref: 'refs/heads/main', targetCommit: VALIDATION_PRODUCER_REVISION }] });
     if (url.hostname === 'huggingface.co') return Response.json({ host: 'https://manuel2607-slopurself-wan22-validated.hf.space', sha: VALIDATION_PRODUCER_REVISION, runtime: { sha: VALIDATION_PRODUCER_REVISION } });
     if (url.pathname === '/config') return Response.json({ slop_model: { id: 'Wan-AI/Wan2.2-TI2V-5B-Diffusers', revision: 'b8fff7315c768468a5333511427288870b2e9635' } });
@@ -44,8 +53,10 @@ const runtime = new Miniflare({ logRequests: false, telemetry: { enabled: false 
     assert.equal(url.hostname, 'manuel2607-slopurself-wan22-validated.hf.space'); assert.equal(url.pathname, '/identity');
     const authorization = request.headers.get('authorization');
     assert.ok(['Bearer fixture-personal-0', 'Bearer fixture-personal-1'].includes(authorization!));
-    assert.equal(request.headers.get('x-hf-authorization'), authorization);
+    const index = authorization!.endsWith('-1') ? 1 : 0;
+    assert.ok([authorization, `Bearer ${resourceTokens[index]}`].includes(request.headers.get('x-hf-authorization')!));
     assert.equal(request.headers.get('x-slop-hf-authorization'), authorization);
+    if (request.headers.has('cookie')) assert.equal(request.headers.get('cookie'), `__sign=${resourceTokens[index]}`);
     if (mode === 'redirect') return new Response(null, { status: 302, headers: { location: 'https://never-forward.test/collect' } });
     return Response.json({ personalIdentityVerified: true, proxySubjectMatches: mode !== 'unbound', proxyClaimKeys: ['sub'], billingVerified: false, gpuCalls: 0 });
 } } } }] });
@@ -55,6 +66,10 @@ try {
     for (const slot of ['a', 'b']) {
         const proof = await (await runtime.dispatchFetch('https://test/proxy/' + slot)).json() as { proxySubjectMatches: boolean; billingVerified: boolean; gpuCalls: number };
         assert.equal(proof.proxySubjectMatches, true, JSON.stringify(proof)); assert.equal(proof.billingVerified, false); assert.equal(proof.gpuCalls, 0);
+    }
+    for (const transport of ['space-jwt', 'space-cookie']) for (const slot of ['a', 'b']) {
+        const result = await (await runtime.dispatchFetch(`https://test/proxy/${slot}?transport=${transport}`)).json() as { proxySubjectMatches: boolean; credentialRoute: string };
+        assert.equal(result.proxySubjectMatches, true); assert.equal(result.credentialRoute, transport);
     }
     assert.equal((await runtime.dispatchFetch('https://test/ready')).status, 200);
     mode = 'unbound'; assert.equal((await runtime.dispatchFetch('https://test/ready')).status, 503);
