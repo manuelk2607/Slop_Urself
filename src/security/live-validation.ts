@@ -8,7 +8,7 @@ export const VALIDATION_PAIR = [
     { pixelSha256: 'f6860b738a396c974dd4bf5dcb102d5bc1bab769c532e5afc4b74749226efa03', prompt: 'The yellow ball bounces gently in place. Static camera.', seed: 1 },
     { pixelSha256: '9ac5fd4a9da300556a44726fbf719441ca212627be9640965e2276951256c3d3', prompt: 'The red cube slowly rotates in place. Static camera.', seed: 2 }
 ] as const;
-export const VALIDATION_PRODUCER_REVISION = '5f2ee9d8e2aeea6a5f9b3dc1344159c6d8291763';
+export const VALIDATION_PRODUCER_REVISION = 'c61035015b73cc17e742d178b675db4b6516cfab';
 export interface ValidationMember { accountId: string; subject: string }
 export interface ValidationCampaign {
     id: string; room: string; approvedAt: number; expiresAt: number;

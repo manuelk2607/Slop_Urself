@@ -3,6 +3,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -25,16 +26,16 @@ def validate_proxy_token(token,now=None,subject=None):
     part=token.split('.')[1]
     try:payload=json.loads(base64.urlsafe_b64decode(part+'='*(-len(part)%4)))
     except Exception:raise ValueError('Invalid proxy context; no IP fallback') from None
-    if not isinstance(payload,dict) or payload.get('error') or ('exp' in payload and (type(payload['exp']) not in (int,float) or payload['exp']<=now)):
+    if not isinstance(payload,dict) or payload.get('error') or ('exp' in payload and (type(payload['exp']) not in (int,float) or not math.isfinite(payload['exp']) or payload['exp']<=now)):
         raise ValueError('Expired/error proxy context; no IP fallback')
-    def identifies(value,depth=0):
-        if depth>4:return False
-        if isinstance(value,str):return value==subject
-        if isinstance(value,dict):return any(identifies(v,depth+1) for v in list(value.values())[:128])
-        if isinstance(value,list):return any(identifies(v,depth+1) for v in value[:128])
-        return False
-    if subject is not None and (not isinstance(subject,str) or not identifies(payload)):
-        raise ValueError('Proxy context does not identify the verified personal subject')
+    if subject is not None:
+        # Never mistake a matching space-owner/audience/arbitrary nested value
+        # for the caller. Unknown actor schemas stay unavailable for review.
+        actors=[payload[k] for k in ('sub','userId','user_id') if k in payload]
+        user=payload.get('user')
+        if isinstance(user,dict):actors.extend(user[k] for k in ('id','_id') if k in user)
+        if not isinstance(subject,str) or not actors or any(v!=subject for v in actors):
+            raise ValueError('Proxy context does not identify the verified personal subject')
     return payload
 
 

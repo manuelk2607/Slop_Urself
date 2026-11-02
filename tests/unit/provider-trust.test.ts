@@ -14,6 +14,16 @@ test('provider release requires fixed source, matching running revision and decl
     assert.throws(() => verifyProviderIdentity(testProviderConfig, testProviderMetadata, {}));
     assert.throws(() => verifyProviderIdentity(testProviderConfig, testProviderMetadata, { slop_model: { id: 'other/model', revision: testProviderConfig.WAN_MODEL_REVISION } }));
 });
+test('a lagging Hub index needs an exact unambiguous main ref and still cannot replace runtime or model pins', () => {
+    const stale = { ...testProviderMetadata, sha: 'c'.repeat(40) };
+    const main = { name: 'main', ref: 'refs/heads/main', targetCommit: testProviderConfig.WAN_SPACE_REVISION };
+    assert.throws(() => verifyProviderIdentity(testProviderConfig, stale, testProviderSettings));
+    assert.equal(verifyProviderIdentity(testProviderConfig, stale, testProviderSettings, { branches: [main] }).spaceRevision, main.targetCommit);
+    for (const refs of [{}, { branches: [] }, { branches: [main, main] }, { branches: [main, { ...main, ref: 'refs/heads/other' }] }, { branches: [{ ...main, targetCommit: 'd'.repeat(40) }] }])
+        assert.throws(() => verifyProviderIdentity(testProviderConfig, stale, testProviderSettings, refs));
+    assert.throws(() => verifyProviderIdentity(testProviderConfig, { ...stale, runtime: { sha: 'd'.repeat(40) } }, testProviderSettings, { branches: [main] }));
+    assert.throws(() => verifyProviderIdentity(testProviderConfig, stale, { slop_model: { id: 'foreign/model', revision: testProviderConfig.WAN_MODEL_REVISION } }, { branches: [main] }));
+});
 test('archive outages retry completed jobs without allowing a new generation; blocked output stays blocked', () => {
     const job: AiJob = { provider: 'wan22', root: 'https://example.hf.space', endpoint: '/generate_video', submittedAt: Date.now(), status: 'complete', seed: 1, steps: 8, durationSeconds: 5, videoUrl: 'https://example.hf.space/result.mp4' };
     const error = new Error('storage down');

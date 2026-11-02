@@ -32,7 +32,8 @@ class OfficialTests(unittest.TestCase):
         def token(payload):return 'e30.'+base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
         validate_proxy_token(token({'exp':int(time.time())+600}))
         validate_proxy_token(token({'user':{'id':'account-a'}}),subject='account-a')
-        for payload in [{},{'sub':'account-b'},{'exp':int(time.time())+600}]:
+        for payload in [{},{'sub':'account-b'},{'exp':int(time.time())+600},{'spaceOwnerId':'account-a'},
+            {'context':['account-a']},{'sub':'account-b','user':{'id':'account-a'}},{'exp':float('nan'),'sub':'account-a'}]:
             with self.assertRaises(ValueError):validate_proxy_token(token(payload),subject='account-a')
         for value in [None,'', 'not-a-token','e30.bm90LWpzb24.Zml4dHVyZQ',token({'error':'not-authenticated'}),token({'exp':int(time.time())-1}),token({'exp':'unknown'})]:
             with self.assertRaises(ValueError):validate_proxy_token(value)

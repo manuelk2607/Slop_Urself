@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import dotenv from 'dotenv';
 import { parseValidationCampaign, VALIDATION_PRODUCER_REVISION } from '../src/security/live-validation.js';
+import { gitMainRevision } from '../src/ai/provider-trust.js';
 if (!process.argv.includes('--activate-approved-two-video-window')) throw Error('Explicit bounded free validation approval required');
 const flag = process.argv.indexOf('--campaign'), file = resolve(process.argv[flag + 1] || '');
 if (flag < 0 || !file.startsWith(resolve('.local/live-validation') + '/') || !file.endsWith('/campaign.json')) throw Error('Expected the reviewed local campaign file');
@@ -13,7 +14,8 @@ async function api(path: string, init: RequestInit = {}) {
     if (!r.ok) { await r.body?.cancel(); throw Error(`Activation HTTP ${r.status}; inspect status, no automatic retry`); } return r;
 }
 const meta = await (await api('')).json() as { private?: boolean; sha?: string; runtime?: { sha?: string; stage?: string; hardware?: { current?: string; requested?: string } } };
-if (meta.private !== false || meta.sha !== VALIDATION_PRODUCER_REVISION || meta.runtime?.sha !== meta.sha || meta.runtime.stage !== 'RUNNING'
+const main = gitMainRevision(await (await api('/refs')).json());
+if (meta.private !== false || main !== VALIDATION_PRODUCER_REVISION || meta.runtime?.sha !== main || meta.runtime.stage !== 'RUNNING'
     || meta.runtime.hardware?.current !== 'zero-a10g' || meta.runtime.hardware.requested !== 'zero-a10g') throw Error('Exact reviewed free public runtime required');
 const health = await fetch('https://manuel2607-slopurself-wan22-validated.hf.space/healthz', { redirect: 'error', signal: AbortSignal.timeout(15_000) });
 if (!health.ok) throw Error('Producer readiness unavailable');

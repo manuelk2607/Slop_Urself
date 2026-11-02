@@ -20,13 +20,25 @@ export async function verifyPinnedProvider(identity: ProviderIdentity, root: str
     // Resolve the actual Space host before sending credentials to a saved root.
     if (typeof host !== 'string' || !/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(host) || new URL(root).origin !== host) throw new ProviderTrustError();
     const settings = await get(`${root}/config`);
-    return verifyProviderIdentity(pinned, metadata, settings);
+    const refs = (metadata as { sha?: unknown } | null)?.sha !== identity.spaceRevision
+        ? await get(`https://huggingface.co/api/spaces/${identity.spaceId}/refs`) : undefined;
+    return verifyProviderIdentity(pinned, metadata, settings, refs);
 }
-export function verifyProviderIdentity(config: ProviderConfig, metadata: unknown, settings: unknown) {
+export function gitMainRevision(refs: unknown) {
+    const branches = (refs as { branches?: unknown } | null)?.branches;
+    if (!Array.isArray(branches) || branches.length > 1000) throw new ProviderTrustError();
+    const main = branches.filter(b => b?.name === 'main' || b?.ref === 'refs/heads/main');
+    if (main.length !== 1 || main[0].name !== 'main' || main[0].ref !== 'refs/heads/main' || !revision(main[0].targetCommit)) throw new ProviderTrustError();
+    return main[0].targetCommit as string;
+}
+export function verifyProviderIdentity(config: ProviderConfig, metadata: unknown, settings: unknown, refs?: unknown) {
     const expected = approvedProvider(config);
     const source = metadata as { sha?: unknown; runtime?: { sha?: unknown } } | null;
     const runtime = settings as { slop_model?: { id?: unknown; revision?: unknown } } | null;
-    if (source?.sha !== expected.spaceRevision || source.runtime?.sha !== expected.spaceRevision
+    // Hub's indexed sha can lag behind the actual Git main ref. An exact
+    // authoritative ref may replace that index value, never the runtime pin.
+    const head = refs === undefined ? source?.sha : gitMainRevision(refs);
+    if (head !== expected.spaceRevision || source?.runtime?.sha !== expected.spaceRevision
         || runtime?.slop_model?.id !== expected.modelId || runtime.slop_model.revision !== expected.modelRevision) throw new ProviderTrustError();
     return expected;
 }

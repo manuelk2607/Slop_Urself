@@ -219,3 +219,28 @@ docs/audits/2026-11-01-managed-official.json und2026-11-01-release.json sind
 historische Messstände. Private ignorierte Einzelberichte und Logs liegen in
 .local/audit-tests (keine Tokens/Originalantworten). PROGRESS-Vorgänger:
 docs/progress/2026-11-02-before-native-ready.md und2026-11-01-before-managed-official.md.
+
+### Veröffentlichungskorrektur / Fortsetzung nach17:00UTC, 2.11.
+
+- Paket47b21eef auf origin/codex/audit-remediation tatsächlich gepusht.27native
+  Tests bestanden. Öffentlicher HF-Commitc61035015b73cc17e742d178b675db4b6516cfab
+  tatsächlich veröffentlicht/Git-main/runtime identisch und alle9Quelldateien
+  gegen dieses Paket unabhängig gehasht; /healthz200/modellgeladen/preparationOnly.
+- Der Uploader brach nach bestätigtem Commit ab, weil HF metadata.sha weiterhin
+  den alten5f2ee9d meldet. Nur-Lese-Abgleich:Git-ls-remote, /refs und /commits/main
+  belegenc610350; Index bleibt auch mitcache-buster/no-cache alt. Kein zweiter
+  Upload desselben unklaren Auftrags. Modellidentität jetzt zusätzlich gegen
+  exakte eindeutige Git-main-Referenz prüfbar; runtime/model-Pins bleiben zwingend.
+  Neuer242.Unit und workerd-Indexlag-/Drift-Fall bestanden. Uploader sichert jetzt
+  Commitbestätigung vor Nachprüfung und prüft den echten Git-Baum; unveränderte
+  Vorbereitungsvariablen können ohne Neustart-Wiederholungen wiederverwendet werden.
+- Sicherheitsnachschärfung noch lokal:Proxy-Subjekt muss aus expliziten Actorfeldern
+  stammen; ein beliebiger übereinstimmender Space-Owner-Wert darf nicht genügen.
+  Erneut27nativeTests bestanden. Dieses kleine native Update vor Aktivierung
+  veröffentlichen und dessen neuen Source-/Runtime-Pin übernehmen.
+- Cloudflare-GeräteanmeldungHseFpUex vom Nutzer bestätigt; CLI meldetSuccessfully
+  logged in. Keine erneute Freigabe anfordern. CF-Code ist noch nicht deployed.
+- Nach finalem Push/Producer-Update/inaktivem CF-Deployment die bestehenden
+  ProfileLiveA_825b2353/LiveB_825b2353 genau einmal neu offiziell verbinden lassen.
+  Dann readonly /api/hf/validation vor jeder GPU-Freigabe:unbekannte/abweichende
+  Proxy-Actorclaims bleiben gesperrt, nicht als Abrechnungsbeleg ausgeben.

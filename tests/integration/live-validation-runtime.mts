@@ -44,7 +44,7 @@ const bundle = await build({ stdin: { contents, resolveDir: process.cwd(), sourc
 const binding = { AI_PROVIDER: 'wan22', AI_GENERATION_RELEASE: 'blocked', LIVE_VALIDATION_CAMPAIGN: JSON.stringify(campaign),
     MODERATION_SECRET: secret, WAN_PRODUCER_SECRET: secret, AUTH_COOKIE_SECRET: secret };
 let runtime: Miniflare;
-let mode: 'normal' | 'evaluation' | 'drift' = 'evaluation';
+let mode: 'normal' | 'evaluation' | 'drift' | 'index-lag' = 'evaluation';
 const allocations: string[] = [], joins: string[] = [];
 runtime = new Miniflare({ logRequests: false, telemetry: { enabled: false }, workers: [{ config: {
     name: 'bounded-generation-test', compatibilityDate: '2026-10-03', manifest: { mainModule: 'worker.js', modules: { 'worker.js': { type: 'esm', contents: bundle.outputFiles[0].text } } },
@@ -62,7 +62,8 @@ runtime = new Miniflare({ logRequests: false, telemetry: { enabled: false }, wor
     const subject = authorization!.endsWith('-a') ? 'fixture-a' : 'fixture-b';
     if (url.pathname === '/api/whoami-v2') return Response.json({ id: subject });
     if (url.pathname === '/api/spaces/zero-gpu/quota') return Response.json({ base: 300, current: 300, resetsAt: null });
-    if (url.hostname === 'huggingface.co') return Response.json({ host: 'https://manuel2607-slopurself-wan22-validated.hf.space', sha: mode === 'drift' ? 'b'.repeat(40) : VALIDATION_PRODUCER_REVISION, runtime: { sha: VALIDATION_PRODUCER_REVISION } });
+    if (url.pathname.endsWith('/refs')) return Response.json({ branches: [{ name: 'main', ref: 'refs/heads/main', targetCommit: mode === 'drift' ? 'b'.repeat(40) : VALIDATION_PRODUCER_REVISION }] });
+    if (url.hostname === 'huggingface.co') return Response.json({ host: 'https://manuel2607-slopurself-wan22-validated.hf.space', sha: ['drift','index-lag'].includes(mode) ? 'b'.repeat(40) : VALIDATION_PRODUCER_REVISION, runtime: { sha: VALIDATION_PRODUCER_REVISION } });
     if (url.pathname === '/gradio_api/info') return Response.json({ named_endpoints: { '/generate_video': { parameters: ['input_image', 'prompt', 'seed', 'steps', 'duration_seconds', 'permit'].map(parameter_name => ({ parameter_name, type: {} })) } } });
     if (url.pathname === '/config') return Response.json({ dependencies: [{ id: 0, api_name: 'generate_video' }], slop_model: { id: 'Wan-AI/Wan2.2-TI2V-5B-Diffusers', revision: 'b8fff7315c768468a5333511427288870b2e9635' } });
     if (url.pathname === '/gradio_api/upload') return Response.json(['/tmp/fixture/input.png']);
@@ -82,7 +83,7 @@ try {
     assert.equal((await runtime.dispatchFetch('https://game.test/run/a')).status, 409); assert.equal(joins.length, 0);
     mode = 'drift'; assert.equal((await runtime.dispatchFetch('https://game.test/run/a')).status, 409); assert.equal(joins.length, 0);
     mode = 'normal'; assert.equal((await runtime.dispatchFetch('https://game.test/run/a')).status, 200);
-    assert.equal((await runtime.dispatchFetch('https://game.test/run/b')).status, 200);
+    mode = 'index-lag'; assert.equal((await runtime.dispatchFetch('https://game.test/run/b')).status, 200);
     assert.deepEqual(allocations, ['fixture-a', 'fixture-b']);
     assert.equal((await runtime.dispatchFetch('https://game.test/run/a')).status, 409);
     assert.deepEqual(allocations, ['fixture-a', 'fixture-b'], 'A replay can never allocate again, even with a newly signed permit');

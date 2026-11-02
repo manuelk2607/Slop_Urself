@@ -270,7 +270,9 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
                 const settings = await boundedJson(await get(`${root}/config`), 512 * 1024) as { dependencies?: { id?: number; api_name?: string }[] };
                 fnIndex = settings.dependencies?.find(dependency => dependency.api_name === endpoint.slice(1))?.id;
                 if (typeof fnIndex !== 'number' || !Number.isInteger(fnIndex) || fnIndex < 0) throw new Error('Space bietet die erwartete Video-Queue nicht an.');
-                providerIdentity = verifyProviderIdentity(config, metadata, settings);
+                const refs = (metadata as { sha?: unknown }).sha !== config.WAN_SPACE_REVISION
+                    ? await boundedJson(await get(`https://huggingface.co/api/spaces/${space}/refs`), 512 * 1024) : undefined;
+                providerIdentity = verifyProviderIdentity(config, metadata, settings, refs);
                 verifyWanParameters(parameters, buildProviderValues(provider, prompt, null, config));
             }
             else throw new ProviderTrustError();
