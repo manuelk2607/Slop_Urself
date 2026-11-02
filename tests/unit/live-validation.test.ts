@@ -97,7 +97,12 @@ test('readiness is read-only and refuses preparation, moderator mismatch and for
         if (url.includes('huggingface.co/api/spaces/')) return Response.json({ host: 'https://manuel2607-slopurself-wan22-validated.hf.space', sha: 'b'.repeat(40), runtime: { sha: VALIDATION_PRODUCER_REVISION } });
         if (url.endsWith('/config')) return Response.json(mode === 'preparation' ? {} : { slop_model: { id: 'Wan-AI/Wan2.2-TI2V-5B-Diffusers', revision: 'b8fff7315c768468a5333511427288870b2e9635' } });
         if (url.endsWith('/health')) return Response.json({ scopedReady: true, validationScope: c.id, modelVersion: mode === 'moderator' ? 'b'.repeat(64) : c.moderatorVersion, qualifiedForGeneralUse: false });
-        assert.ok(url.endsWith('/identity')); return Response.json({ personalIdentityVerified: true, proxySubjectMatches: true });
+        assert.ok(url.endsWith('/identity'));
+        const headers = new Headers(options?.headers);
+        assert.ok(c.members.some(m => headers.get('authorization') === `Bearer isolated-${m.accountId}`));
+        assert.equal(headers.get('x-hf-authorization'), headers.get('authorization'));
+        assert.equal(headers.get('x-slop-hf-authorization'), headers.get('authorization'));
+        return Response.json({ personalIdentityVerified: true, proxySubjectMatches: true, proxyClaimKeys: ['sub'], billingVerified: false, gpuCalls: 0 });
     });
     const request = () => new Request('https://internal/security/validation/ready', { method: 'POST', body: JSON.stringify({ code: c.room, participants: c.members.map((m, i) => ({ id: 'player-' + i, accountId: m.accountId, hfConnectionId: 'connection-' + i })) }) });
     for (const state of ['preparation', 'foreign', 'moderator', 'ready'] as const) {

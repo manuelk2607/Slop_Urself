@@ -21,6 +21,7 @@ import type { Env } from './types';
 import { blockedGenerationCapacity } from '../../security/moderation';
 import { producerClaimResponse } from '../../security/producer-claims';
 import { parseValidationCampaign } from '../../security/live-validation';
+import { personalProxyFailure } from '../../ai/personal-proxy';
 export { RoomDurableObject } from './room';
 export { ServiceDurableObject } from './services';
 export type { Env } from './types';
@@ -66,7 +67,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
                 const campaign = parseValidationCampaign(env.LIVE_VALIDATION_CAMPAIGN);
                 if (!account || !campaign?.members.some(m => m.accountId === account.id)) return json({}, { status: 403 });
                 return json(await service(env, '/security/validation/identity', { code: campaign.room, accountId: account.id, connection: account.hfConnectionId }));
-            } catch { return json({ error: 'Persönliche Proxy-Prüfung nicht verfügbar. Kein GPU-Auftrag gestartet.' }, { status: 503 }); }
+            } catch (error) { return json({ error: 'Persönliche Proxy-Prüfung nicht verfügbar. Kein GPU-Auftrag gestartet.', code: personalProxyFailure(error) }, { status: 503 }); }
         }
         if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });

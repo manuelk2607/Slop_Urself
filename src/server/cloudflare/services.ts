@@ -20,6 +20,7 @@ import { ProducerClaims, verifyProducerPermit } from '../../security/producer-cl
 import { validationConfig, validationScope, validationMember, parseValidationCampaign, ValidationLedger, type ValidationAdmission } from '../../security/live-validation';
 import { boundedJson } from '../body';
 import { approvedProvider, verifyPinnedProvider } from '../../ai/provider-trust';
+import { probePersonalProxy } from '../../ai/personal-proxy';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -89,25 +90,16 @@ export class ServiceDurableObject {
                 for (const player of data.participants) {
                     const member = validationMember(scope, player.accountId), credential = await this.hf.credential(player.hfConnectionId, player.accountId);
                     if (credential.subject !== member.subject) throw new HfRequiredError();
-                    const r = await fetch(host + '/identity', { redirect: 'error', headers: { authorization: `Bearer ${credential.token}` }, signal: AbortSignal.timeout(20_000) });
-                    if (!r.ok) { await r.body?.cancel(); throw new Error('Persönlicher Proxy-Kontext nicht bereit.'); }
-                    const identity = await boundedJson(r, 8192) as Record<string, unknown>;
+                    const identity = await probePersonalProxy(credential.token);
                     if (identity.personalIdentityVerified !== true || identity.proxySubjectMatches !== true) throw new Error('Persönliche ZeroGPU-Zuordnung nicht bestätigt.');
                 }
                 return json({ ready: true, gpuCalls: 0 });
             }
             if (path === '/security/validation/identity') {
-                if (!scope) throw new Error('Keine begrenzte Prüfung.');
+                if (!scope) throw new Error('validation_scope_unavailable');
                 const member = validationMember(scope, data.accountId), credential = await this.hf.credential(data.connection, data.accountId);
                 if (credential.subject !== member.subject) throw new HfRequiredError();
-                const response = await fetch('https://manuel2607-slopurself-wan22-validated.hf.space/identity', {
-                    redirect: 'error', headers: { authorization: `Bearer ${credential.token}` }, signal: AbortSignal.timeout(20_000)
-                });
-                if (!response.ok) { await response.body?.cancel(); throw new Error('Persönlicher ZeroGPU-Proxy-Kontext nicht nachweisbar. Kein GPU-Auftrag gestartet.'); }
-                const result = await boundedJson(response, 8192) as { personalIdentityVerified?: unknown; proxySubjectMatches?: unknown; proxyClaimKeys?: unknown };
-                if (result.personalIdentityVerified !== true || typeof result.proxySubjectMatches !== 'boolean' || !Array.isArray(result.proxyClaimKeys)
-                    || result.proxyClaimKeys.some(k => typeof k !== 'string' || !/^[A-Za-z0-9_]{1,64}$/.test(k))) throw new Error('Ungültige persönliche Proxy-Prüfung.');
-                return json({ personalIdentityVerified: true, proxySubjectMatches: result.proxySubjectMatches, proxyClaimKeys: result.proxyClaimKeys, billingVerified: false, gpuCalls: 0 });
+                return json(await probePersonalProxy(credential.token));
             }
             if (path === '/security/validation/admit') {
                 if (!scope || !ledger || !data.admission || !data.participant || data.participant.accountId !== data.admission.accountId) throw new Error('Kein persönlicher Prüfauftrag.');

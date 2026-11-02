@@ -18,6 +18,19 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
 
 ## Tatsächlich erledigt
 
+- Transport-Fortsetzung:Native Quelle/runtime jetztc82855772dc0b82b22e8188ae59731bb262e9a49,
+  alle9 Dateien geprüft,20Gewichte extern verifiziert, initialization/RUNNING
+  bestätigt, weiterhin preparation-only. Die ursprüngliche CF-Probe bleibt503;
+  zugehörige native Diagnoseevents fehlen. Daher Ursache noch offen (Ablehnung
+  vor dem Handler möglich), kein sicher behaupteter Headerverlust.
+  CF verwendet nun denselben persönlichen Zugang getrennt für HF-Router und
+  ausschließlich die zwei kontrollierten App-Hosts; widersprüchliche App-Header
+  werden abgewiesen. Nur-Lese-Probe liefert begrenzte Fehlercodes statt Rohdaten,
+  akzeptiert ausschließlich0GPU/billingVerified=false und ersetzt keine Abrechnung.
+  247App-Tests/Build und Workerd-Fluss bestanden (Provider vollständig simuliert).
+  Diese CF-Korrektur samt exaktem neuen Producer-Pin wird jetzt veröffentlicht;
+  anschließend reale Probe fortsetzen, nicht erneut anmelden/GPU blind starten.
+
 - Neuer Live-Checkpoint nach Nutzerrückmeldung:beide bisherigen Testprofile sind
   tatsächlich owner-verifiziert und mit den richtigen unterschiedlichen HF-Konten
   verbunden; beide persönlichen Quotas300/300. Neuer RaumBEAD. Keine Anmeldung

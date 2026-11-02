@@ -11,6 +11,7 @@ import type { AiProgress } from '../shared/generation';
 import { buildVideoPrompt, VIDEO_NEGATIVE_PROMPT } from '../shared/video-prompt';
 import { officialPermit, requireOfficialRecipe } from './official-producer';
 import { validationScope, validationMember, validationInput } from '../security/live-validation';
+import { personalHfHeaders } from './personal-headers';
 export { buildVideoPrompt } from '../shared/video-prompt';
 import { Provider, ProviderConfig, DEFAULT_PROVIDER_CHAIN, parseProviderChain, videoDuration, providerName, providerSpace, providerEndpoint, providerSteps, providerGpuSeconds } from './providers';
 export { DEFAULT_PROVIDER_CHAIN, parseProviderChain } from './providers';
@@ -159,7 +160,7 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: AiPr
         if (config.AI_PROVIDER === 'mock') return;
         if (!job.providerIdentity) throw new ProviderTrustError();
         await verifyPinnedProvider(job.providerIdentity, job.root, async url => {
-            const response = await fetch(url, { redirect: 'manual', headers: config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {}, signal: AbortSignal.timeout(15_000) });
+            const response = await fetch(url, { redirect: 'manual', headers: personalHfHeaders(url, config.HF_TOKEN), signal: AbortSignal.timeout(15_000) });
             if (!response.ok) { await response.body?.cancel(); throw new ProviderTrustError(); }
             return boundedJson(response, 512 * 1024);
         });
@@ -172,7 +173,7 @@ export async function resumeAiVideo(job: AiJob, config: AiConfig, progress: AiPr
             : `${job.root}/gradio_api/call${job.endpoint}/${job.eventId}`;
         const response = await fetch(resultUrl, {
             redirect: 'manual',
-            headers: config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {},
+            headers: personalHfHeaders(resultUrl, config.HF_TOKEN),
             signal: AbortSignal.timeout(lifecycle.resultTimeoutMs || 180_000)
         });
         if (!response.ok) throw new AiHttpError(response.status);
@@ -244,9 +245,8 @@ export async function generateAiVideo(imageBase64: string, prompt: string, confi
             const quota = await fetchGpuQuota(config);
             if (quota.current < needed || quota.runs?.remaining === 0) throw new Error('Das kostenlose GPU-Kontingent ist aufgebraucht.');
             const space = providerSpace(provider, config);
-            const headers: Record<string, string> = config.HF_TOKEN ? { Authorization: `Bearer ${config.HF_TOKEN}` } : {};
             const get = async (url: string, init?: RequestInit) => {
-                const response = await fetch(url, { ...init, redirect: 'manual', signal: controller.signal, headers: { ...headers, ...init?.headers } });
+                const response = await fetch(url, { ...init, redirect: 'manual', signal: controller.signal, headers: { ...personalHfHeaders(url, config.HF_TOKEN), ...init?.headers } });
                 if (!response.ok) throw new AiHttpError(response.status);
                 return response;
             };
