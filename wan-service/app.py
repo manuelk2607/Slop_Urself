@@ -17,6 +17,20 @@ from official import manifest, parameters, load_pipeline, infer
 from producer import write_video
 from jobs import JobLedger, validate_permit, media_capability, validate_media_capability
 
+PUBLIC_VALIDATION_SPACE='Manuel2607/SlopUrself-Wan22-Validated'
+CONTROLLED_SPACES={'Manuel2607/SlopUrself-Wan22-GPU-Test',PUBLIC_VALIDATION_SPACE}
+
+
+def validation_subjects():
+    enabled=os.environ.get('WAN_VALIDATION_ONLY')=='yes'
+    if os.environ.get('SPACE_ID')==PUBLIC_VALIDATION_SPACE and not enabled:
+        raise ValueError('The public validation copy requires an explicit two-account restriction')
+    if not enabled:return frozenset()
+    subjects=os.environ.get('WAN_VALIDATION_SUBJECTS','').split(',')
+    if len(subjects)!=2 or len(set(subjects))!=2 or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',s) for s in subjects):
+        raise ValueError('Exactly two fixed validation subjects are required')
+    return frozenset(subjects)
+
 
 def hf_subject(authorization):
     if not isinstance(authorization,str) or not authorization.startswith('Bearer ') or len(authorization)>4096 or re.search(r'[\r\n]',authorization):
@@ -35,6 +49,8 @@ def hf_subject(authorization):
     subject=identity.get('id') if isinstance(identity,dict) else None
     if not isinstance(subject,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',subject):
         raise ValueError('Invalid personal identity')
+    allowed=validation_subjects()
+    if allowed and subject not in allowed:raise ValueError('This HF account is not part of the approved validation')
     return subject
 
 
@@ -69,7 +85,7 @@ def initialize_space_runtime(gr):
     # Gradio launch hook. Mounting FastAPI alone does not run that hook. A short
     # loopback-only, empty Gradio app performs SDK initialization, then closes;
     # it exposes no generation function and never requests GPU allocation.
-    if os.environ.get('SPACE_ID')!='Manuel2607/SlopUrself-Wan22-GPU-Test':return
+    if os.environ.get('SPACE_ID') not in CONTROLLED_SPACES:return
     import socket
     with socket.socket() as reservation:
         reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
@@ -93,6 +109,7 @@ def build_app():
     secret=os.environ.get('WAN_PRODUCER_SECRET','')
     if len(secret)<32:
         raise ValueError('A dedicated producer secret is required')
+    validation_subjects()
     lock=manifest()
     upload_root=Path(os.environ.get('GRADIO_TEMP_DIR','/tmp/slop-wan/uploads'))
     os.environ['GRADIO_TEMP_DIR']=str(upload_root)

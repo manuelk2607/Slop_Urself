@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-02",
+  "purpose": "bounded-real-validation-progress",
+  "qualified": false,
+  "generalGenerationRelease": "blocked",
+  "gpuCalls": 0,
+  "paidCalls": 0,
+  "approval": {
+    "twoFreeVideos": true,
+    "perAccountMaximumLargeSeconds": 120,
+    "totalMaximumLargeSeconds": 240,
+    "fixedInputsHumanReview": "pending"
+  },
+  "moderation": {
+    "corpus": {
+      "reportSha256": "049925fa77c44bbe2b8e7523128ccfee2dbb48383e66d659ebf8fe7ebf63616b",
+      "modelVersion": "675ec282faff6844dfc4472da2cde68a1f4651b64ec4bab2cc0985e08458a424",
+      "model": "gemini-3.5-flash-lite",
+      "summary": {
+        "planned": 38,
+        "completed": 38,
+        "benign": 23,
+        "benignAllowed": 23,
+        "falseAlarms": 0,
+        "risks": 15,
+        "riskAllowed": 0,
+        "riskRejected": 15,
+        "providerHolds": 3,
+        "technicalFailures": 0,
+        "p95Ms": 11214,
+        "evidenceContractPassed": false
+      },
+      "negativeChecks": {
+        "unauthenticated": 401,
+        "unqualifiedValidation": 503,
+        "badDigest": 503,
+        "modelCallsBeforeEvaluation": 0,
+        "malformedVideo": 503,
+        "invalidMediaReachedModel": false
+      },
+      "qualified": false
+    },
+    "pair": {
+      "reportSha256": "4e101327b45150e0d15bc42c49604ad65f1aa8331d88fe816cd0d9fd6a043fac",
+      "modelVersion": "675ec282faff6844dfc4472da2cde68a1f4651b64ec4bab2cc0985e08458a424",
+      "model": "gemini-3.5-flash-lite",
+      "summary": {
+        "planned": 2,
+        "completed": 2,
+        "benign": 2,
+        "benignAllowed": 2,
+        "falseAlarms": 0,
+        "risks": 0,
+        "riskAllowed": 0,
+        "riskRejected": 0,
+        "providerHolds": 0,
+        "technicalFailures": 0,
+        "p95Ms": 8939,
+        "evidenceContractPassed": false
+      },
+      "negativeChecks": {
+        "unauthenticated": 401,
+        "unqualifiedValidation": 503,
+        "badDigest": 503,
+        "modelCallsBeforeEvaluation": 0,
+        "malformedVideo": 503,
+        "invalidMediaReachedModel": false
+      },
+      "qualified": false
+    }
+  },
+  "productionLobby": {
+    "profiles": [
+      "LiveA_825b2353",
+      "LiveB_825b2353"
+    ],
+    "separateHfAccounts": true,
+    "beforeRemainingSeconds": [
+      300,
+      300
+    ],
+    "players": 2,
+    "room": "F4DD",
+    "reload": true,
+    "offlineReconnect": true,
+    "fullVideoParty": false,
+    "billingVerified": false,
+    "browserConnectionNowClosed": true,
+    "browserClosureCause": "not established"
+  },
+  "publicCopy": {
+    "space": "Manuel2607/SlopUrself-Wan22-Validated",
+    "creationHttp": 200,
+    "requestedHardware": "zero-a10g",
+    "privateOriginalUnchanged": true,
+    "codeUploaded": false,
+    "modelLoading": false,
+    "preparationOnly": true
+  },
+  "checks": {
+    "nativeCpuHttp": 23,
+    "strictToolsTypecheck": true,
+    "applicationBuild": true
+  },
+  "limitations": [
+    "Three risk prompts held by provider without semantic category evidence; no automatic qualification.",
+    "Drawings and abstract intentions do not prove unseen image/age/consent moderation quality.",
+    "Aggregate account quota snapshots are not per-job billing receipts.",
+    "No GPU job, output-quality result, full real party or general AI release yet."
+  ]
+}

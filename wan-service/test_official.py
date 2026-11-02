@@ -12,7 +12,7 @@ import uuid
 from unittest.mock import patch
 import official
 from jobs import JobLedger, validate_permit, media_capability, validate_media_capability
-from app import input_path, hf_subject
+from app import input_path, hf_subject, validation_subjects, PUBLIC_VALIDATION_SPACE
 
 SECRET='cpu-test-producer-key-not-for-production-1234'
 
@@ -26,6 +26,27 @@ def permit(**overrides):
 
 
 class OfficialTests(unittest.TestCase):
+    def test_public_validation_copy_fails_closed_without_exactly_two_subjects(self):
+        with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':''},clear=True):
+            with self.assertRaises(ValueError):validation_subjects()
+        for subjects in ['', 'account-a','account-a,account-a','account-a,account-b,account-c','account-a,https://bad']:
+            with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':subjects},clear=True):
+                with self.assertRaises(ValueError):validation_subjects()
+        with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':'account-a,account-b'},clear=True):
+            self.assertEqual(validation_subjects(),frozenset(['account-a','account-b']))
+
+    def test_public_validation_checks_verified_identity_not_supplied_account_name(self):
+        from unittest.mock import MagicMock
+        opener=MagicMock()
+        response=opener.open.return_value.__enter__.return_value
+        with patch.dict(os.environ,{'SPACE_ID':PUBLIC_VALIDATION_SPACE,'WAN_VALIDATION_ONLY':'yes','WAN_VALIDATION_SUBJECTS':'account-a,account-b'},clear=True),patch('urllib.request.build_opener',return_value=opener):
+            for subject in ['account-a','account-b']:
+                response.read.return_value=json.dumps({'id':subject}).encode()
+                self.assertEqual(hf_subject('Bearer personal-test-access'),subject)
+            response.read.return_value=json.dumps({'id':'foreign-account','name':'account-a'}).encode()
+            with self.assertRaises(ValueError):hf_subject('Bearer personal-test-access')
+            self.assertEqual(opener.open.call_args.args[0].full_url,'https://huggingface.co/api/whoami-v2')
+
     def test_official_manifest_has_license_exact_recipe_and_complete_artifacts(self):
         lock=official.manifest()
         self.assertEqual(sum(f['bytes'] for f in lock['files']),34201418400)

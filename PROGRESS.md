@@ -7,8 +7,10 @@ vollständige reale Multiplayer-Partie. Branch `codex/audit-remediation`;
 Commit/Push und sichere getestete Deployments autorisiert. Nur kostenlose
 synthetische Moderationstests erlaubt; bezahlte OpenAI-Kontexttests abgelehnt.
 Gemini laut Nutzer Free/ohne verknüpftes Abrechnungskonto, nicht per API verifiziert.
-Keine Freigabe echter Spielerbilder an neue Moderationsdienste. Keine echten
-GPU-Aufträge freigegeben/gestartet. Keine Produktivdaten löschen.
+Keine Freigabe echter Spielerbilder an neue Moderationsdienste. Begrenzte Live-Freigabe vorhanden: genau zwei harmlose Videos ab5s, eines je
+getrenntem HF-Konto, höchstens120 large-ZeroGPU-Sekunden je Konto/240 insgesamt,
+ausschließlich Gratiskontingent, keine Wiederholung oder bezahlte Hardware. Noch
+kein GPU-Auftrag gestartet; Inhaltsprüfung und konkrete Betreiberfreigabe fehlen. Keine Produktivdaten löschen.
 34,2GB Download/Initialisierung ausschließlich im bestehenden kostenlosen HF-
 ZeroGPU-Space ausdrücklich genehmigt; keine Gewichte auf dem Mac, kein bezahlter
 Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
@@ -75,25 +77,66 @@ Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
 - Dokumentationsabschluss ist ein eigener reiner Nachweis-Commit; kein weiterer
   Anwendungscode. Zusätzliche ungetrackte Workspace-Datei ist unverändert erhalten.
 
+## Live-Validierung 2.11. – aktueller Fortsetzungspunkt
+
+- Tatsächliche kostenlose Gemini-HTTP-Prüfung:38 Fälle,23/23 harmlose Bilder und
+  Videos erlaubt,15/15 Risikoabsichten zurückgehalten,0 beobachtete Fehlfreigaben/
+  Fehlalarme,0 verbleibende Transportfehler. Darunter3 echte synthetische5,06s-
+  H264-Clips mit jeweils81/81 nativen unterschiedlichen Frames. Drei Risiko-
+  Antworten sind nur provider_safety_hold, kein Kategoriennachweis. Daher keine
+  allgemeine Qualifikation/qualification.json. Fingerprint675ec282faff6844dfc4472da2cde68a1f4651b64ec4bab2cc0985e08458a424.
+  Ein durch künstliche Wartezeit im Test-Fetch ausgelöster Video-Timeout wurde
+  gezielt nach Entfernung dieser Wartezeit nur für den betroffenen Clip wiederholt
+  (2 Requests); die37 abgeschlossenen Fälle wurden nicht erneut abgefragt.
+- Tatsächliche Negativprüfungen:ohne Berechtigung401, ungeprüftes /validate503,
+  falscher Digest503, ungültiges Video503/kein Modellaufruf. Keine Schutzprüfung
+  gelockert, keine fachliche Prüfung durch Keyword-Listen ersetzt.
+- Zwei feste browser-/servernormalisierte synthetische Motive separat real
+  geprüft:gelber Ball hüpft, roter Würfel dreht sich; jeweils exakter wirksamer
+  Spielprompt, beide semantisch allow/clear. Diese Ergebnisse sind evaluationOnly,
+  keine allgemeine Produktionsfreigabe. Beide tatsächlich dargestellten Motive
+  warten jetzt auf die gesonderte manuelle Betreiberabnahme im Chat.
+- Zwei echte Produktionsprofile LiveA_825b2353/LiveB_825b2353 vom Nutzer mit
+  unterschiedlichen HF-Konten verbunden. Persönliche Restkontingente vor jedem
+  GPU-Auftrag bisher300/300; RaumF4DD mit beiden Spielern, Reload und tatsächliche
+  Offline-/Online-Wiederverbindung synchron erfolgreich. Keine Videorunde oder
+  Abrechnung geprüft. Isolierte Browserverbindung anschließend beendet/geschlossen;
+  Ursache nicht belegt. Keine Cookies/Tokens exportiert. Nicht erneut anmelden
+  lassen, solange Producer und eng begrenzter Prüfpfad nicht fertig sind.
+- Saubere öffentliche kostenlose Kopie Manuel2607/SlopUrself-Wan22-Validated vom
+  Nutzer genehmigt und per HF-API erstellt (HTTP200, zero-a10g angefordert).
+  Bestehender privater Space samt Historie bleibt unverändert privat. Kopie
+  zunächst nur README/.gitattributes, keine Generierung, Gewichte oder App geladen.
+- Native Ergänzung:öffentliche Kopie startet ausschließlich mit exakt zwei
+  festgelegten unveränderlichen HF-IDs; echte whoami-Identität, keine Namenfreigabe.
+  Fremdkonto sowie fehlende/ungültige Begrenzung scheitern geschlossen.23 CPU- und
+  echte Gradio-HTTP-Tests bestanden; beide neuen TS-Werkzeuge strikt typgeprüft.
+- Neue Werkzeuge:reproduzierbare reale Moderationsmessung samt begrenztem Retest
+  und exaktem Testpaar; separater Whitelist-/Hash-/Parent-Commit-geprüfter öffentlicher
+  Uploader. Alter privater Uploader und dessen Pausen-/Sichtbarkeitsregeln bleiben
+  unverändert. Öffentliche Kopie bleibt preparationOnly, keine Owner-Inferenztokens.
+  Remote-Vorbereitung/Upload noch nicht ausgeführt; keine neue CF-Veröffentlichung.
+
 ## Weiterhin offen / nächster konkreter Schritt
 
-1. Repräsentativen ausschließlich rechtmäßigen synthetischen Moderationskorpus
-   vervollständigen und Fehlklassifizierungen/Umgehungen fachlich bewerten.
-   Aktuelle Provider-Holds nicht zu Kategoriennachweisen umdeuten. Noch keine
-   qualification.json erzeugen. Gratis-Hosting/Dauerhaftigkeit des Moderators und
-   Datenschutzfreigabe für echte Spielerbilder fehlen weiterhin.
-2. Erst danach zweiten HF-Nutzerzugriff auf privaten Producer klären; keine
-   automatische Veröffentlichung. Persönliche Zwei-Konten-Anmeldung/Lobby ist
-   bereits vom30.10.geprüft, Grants anschließend verworfen. Nicht erneut um
-   Anmeldungen bitten, solange der tatsächliche genehmigte Test nicht bereitsteht.
-3. Nach ausreichenden Sicherheitsnachweisen separat begrenzten kostenlosen GPU-
-   Test je Konto genehmigen lassen, Quota vor/nach beobachten. Keine Freigabe
-   vorhanden. Aggregierte Quota-Differenz ist kein jobgenauer Abrechnungsbeleg.
-   Dann Qualität/Laufzeit/5s-Wiedergabe und vollständige reale Produktionspartie
-   mit Reload, gegenseitiger Bewertung, Endwertung/Archiv prüfen.
-4. Beide Sperren beibehalten:AI_GENERATION_RELEASE=blocked und HF-Vorbereitung.
-   Neues Modell ist noch nicht als spielbereiter Provider konfiguriert/qualifiziert.
-   HF-Basisimage/SDK-Dienste sind externe Vertrauensgrenzen, nicht voll attestiert.
+1. Die dargestellten zwei Motive manuell bestätigen lassen. Ohne diese Antwort
+   keine konkrete Betreiberfreigabe behaupten oder Testkampagne aktivieren.
+2. Geprüfte native Änderungen committen/pushen, sauberes Paket in die genehmigte
+   öffentliche Gratis-Kopie übertragen und ausschließlich extern vorbereiten.
+   Herkunft/source/runtime-Revision, Modellhashes und Kostenhardware abgleichen.
+   Keine Gewichte auf den Mac laden, keine private Historie veröffentlichen.
+3. Eng begrenzten, persistenten Zwei-Fälle-Testpfad implementieren/prüfen, der
+   genau genehmigte Bilder/Prompts/Konten und maximal einen Auftrag je Konto
+   zulässt, ohne die globale KI-Sperre oder fachliche Moderation zu umgehen.
+   Ausgabe vor Veröffentlichung vollständig moderieren; bei fehlender fachlicher
+   Qualifikation zusätzlich konkrete Betreiberprüfung, keine pauschale Freigabe.
+4. Erst wenn bereit, die beiden bestehenden Profile einmal neu verbinden und
+   exakt die zwei genehmigten GPU-Aufträge im echten Spiel durchführen. Beide
+   Kontingente unmittelbar vor/nach jedem Auftrag beobachten; aggregierte Quota
+   ist kein jobgenauer Abrechnungsbeleg. Qualität/5s-Wiedergabe, gegenseitige Votes,
+   Endwertung/Archiv prüfen. AI_GENERATION_RELEASE=blocked und allgemeine Upload-
+   Sperren bleiben bis tatsächlicher Abnahme erhalten. Vollständige Moderations-
+   Qualität/Gratis-Hosting/Datenschutz für beliebige Spielerbilder weiter offen.
 5. Übrige P1 ausdrücklich offen:M04 Altarchiv/Einspruch/Betreiberabnahme,
    M06 sichere manuelle Bestandskontozuordnung, M09/M11 echte Wan-/Safari-Ausgabe,
    M18 vollständige Betroffenen-/HF-/DO-Löschung, M19 externe Speicherabnahme,

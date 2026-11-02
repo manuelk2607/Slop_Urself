@@ -4,6 +4,23 @@ Arbeitsbranch `codex/audit-remediation`. Historische Ausgangsbefunde bleiben in
 den beiden Auditberichten erhalten. Diese Datei dokumentiert die Implementierung;
 sie ist keine produktive Freigabe und erklärt nicht alle 54 Maßnahmen für erledigt.
 
+### Live-Validierung 2.11. – konkrete Teilnachweise, keine KI-Gesamtfreigabe
+
+M02/M03/M17:echter Gratis-Gemini-Korpus mit38 Fällen abgeschlossen:23 harmlose
+Bilder/Videos erlaubt,15 Risikoabsichten zurückgehalten, davon3 generische
+Provider-Holds. Alle3 Clips81/81 native Frames; ein durch Test-Pacing ausgelöster
+Timeout gezielt behoben/nur diesen Clip nachgemessen. Keine qualification.json.
+Beide exakt normalisierten festen Live-Testbilder und Spielprompts separat
+semantisch erlaubt; konkrete manuelle Abnahme noch ausstehend. Kein GPU-Auftrag.
+M01/M03:öffentliche saubere ZeroGPU-Testkopie ausdrücklich genehmigt/erstellt,
+private Historie unverändert. Native öffentliche Kopie auf genau zwei echte
+HF-Subjekte begrenzt; fail-closed/Identitätsregressionen in23 CPU-/HTTP-Tests.
+Strikte Typprüfung der neuen Moderations-/öffentlichen Uploadwerkzeuge bestanden.
+Echte Produktionsanmeldung, Zwei-Spieler-Lobby, Reload/Wiederverbindung erneut
+positiv; Browserverbindung danach verloren, Ursache nicht belegt. Persönliche
+Abrechnung und vollständige reale Videopartie weiterhin offen. Aktuellen nächsten
+Schritt und Veröffentlichungsstand ausschließlich PROGRESS.md entnehmen.
+
 ### Umsetzungspaket 31.10.–1.11.: ausführbare Alternativen und echte Gratis-Tests
 
 M02/M03/M17/M31/M32 teilweise weiter umgesetzt: neuer verwalteter Moderator mit

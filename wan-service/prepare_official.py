@@ -50,7 +50,7 @@ def prepare(destination):
 
 
 def prepare_on_space(destination):
-    if (os.environ.get('SPACE_ID')!='Manuel2607/SlopUrself-Wan22-GPU-Test'
+    if (os.environ.get('SPACE_ID') not in {'Manuel2607/SlopUrself-Wan22-GPU-Test','Manuel2607/SlopUrself-Wan22-Validated'}
             or not re.fullmatch(r'[a-z0-9-]+\.hf\.space',os.environ.get('SPACE_HOST',''))
             or os.environ.get('WAN_ENABLE_MODEL_LOADING')!='yes'
             or os.environ.get('WAN_PREPARE_PUBLIC_WEIGHTS')!='yes'
