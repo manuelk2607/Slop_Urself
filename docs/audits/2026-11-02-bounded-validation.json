@@ -151,5 +151,6 @@
         "status": 503
       }
     ]
-  }
+  },
+  "latestCheckpoint": "docs/audits/2026-11-03-live-validation.json"
 }

@@ -1,207 +1,119 @@
-# Slop Urself – Fortsetzungspunkt, 2. November 2026
+# Slop Urself – Fortsetzungspunkt, 3. November 2026
 
-## Auftrag und verbindlicher Umfang
+## Auftrag und Freigaben
 
-Nur drei reale Abnahmen fortsetzen:Moderation, zwei persönliche HF-/Wan-Aufträge,
-vollständige veröffentlichte klassische Zwei-Spieler-Partie. Keine neuen Audits
-oder unabhängigen UX-/SEO-Arbeiten. Branch `codex/audit-remediation`.
-Commit/Push und sichere Deployments sind autorisiert. Keine bestehenden Daten,
-Profile, Spiele oder Videos löschen. Nutzerdatei Nebenprojekte.code-workspace
-unverändert ungetrackt lassen. Kein Token/Cookie/privater Rohlog im Repository.
+Nur die drei realen Abnahmen fortsetzen: Moderation, zwei persönliche HF-/Wan-
+Aufträge, vollständige veröffentlichte klassische Zwei-Spieler-Partie. Keine
+weiteren Gesamtaudits/UX-/SEO-Arbeiten. Repository ausschließlich
+/Users/manuelkienmoser/Documents/4 Studium/Sonstiges/SlopUrself, Branch
+codex/audit-remediation. Benutzerdatei Nebenprojekte.code-workspace ungetrackt
+bewahren. Keine bestehenden Benutzer, Spiele, Videos oder sonstigen Daten löschen.
 
-Genehmigt:genau zwei harmlose Videos ab5s, eines je HF-Konto, höchstens120large-
-ZeroGPU-Sekunden je Konto/240 insgesamt, ausschließlich Gratisressourcen, keine
-GPU-Wiederholung. Gelber Ball hüpft/roter Würfel dreht sich mit den exakt
-vorgelegten Bildern/Prompts wurden ausdrücklich manuell bestätigt (Antwort auf
-call_9a95454e394d46c78df5b6b7415d1687). Keine allgemeine Spielerbild-/KI-Freigabe.
+Genehmigt bleiben genau zwei Videos ab5s, eines je HF-Konto, höchstens120large-
+GPU-Sekunden pro Konto/240 insgesamt, nur Gratisressourcen, keine GPU-Wiederholung.
+Die beiden exakt vorgelegten Motive/Prompts (hüpfender gelber Ball, drehender roter
+Würfel) sind manuell bestätigt. Allgemeine Spielerbilder sind nicht freigegeben.
 Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
+Tokens/Cookies niemals ausgeben oder ins Repository schreiben, keine selbst
+signierten Ersatzsitzungen und keine Nutzung des Betreiberkontos für Spielerjobs.
 
-## Tatsächlich erledigt
+## Verifizierter Entwicklungs- und Produktionsstand
 
-- NACHGEWIESENE Ursache der bisherigen Producer-503:Cloudflare/workerd unterstützt
-  RequestInit.redirect='error' nicht. Bereits new Request wirft TypeError, bevor
-  irgendein HTTP-Aufruf erfolgt. Reales workerd-Konstruktionsexperiment bestätigt
-  dies ohne Netzwerk; offizielle Doku:https://developers.cloudflare.com/workers/runtime-apis/request/.
-  Alle4 entsprechenden src-Pfade aufmanual plus explizite Redirect-Ablehnung
-  umgestellt (Producer, Modell-/Moderator-Readiness, readOnlyHfFetch). Keine
-  Weiterleitung persönlicher Header freigegeben. Neuer CI-Integrationstest führt
-  tatsächliche Services-/Readiness-/Zwei-Konten-Fetches inworkerd aus, statt diese
-  Fetch-Konstruktion wegzumocken:positiver Pfad, fremder Proxy und302 bestanden.
-  Test-Transport serialisiert redirect am Node-Outboundhandler anders; deshalb
-  Sicherheitsverhalten über tatsächlich NICHT besuchten Redirect-Host geprüft.
-  248Units/Build bestanden. Headerverlust war nur Hypothese, nicht die Ursache.
-  Neue reale Probe nach Veröffentlichung dieses Fixes steht unmittelbar an.
+- Nachgewiesene Ursache der Producer-503 behoben: workerd unterstützt redirect:
+  error nicht und wirft schon vor HTTP einen TypeError. Alle4 betreffenden src-
+  Aufrufe verwenden manual und lehnen Weiterleitungen explizit ab. Reales
+  workerd-Experiment sowie Services-/Readiness-/Zwei-Konten-Regression ergänzen
+  die zuvor zu großzügigen Fetch-Mocks. Headerverlust war keine belegte Ursache.
+- Persönliche Header nur an zwei kontrollierte Producer-Hosts; gleicher Token
+  für Router/App, widersprüchliche Header abgewiesen. Sichere endliche Fehlercodes,
+  einzelne Nur-Lese-Fehlerphasen und optionale Services-Release-ID. Proxy user kann
+  nur exakt an die HF-ID oder über erneut verifiziertes whoami an deren kanonischen
+  Namen gebunden werden. Unbekannte Schemas bleiben gesperrt.
+- Bestehender begrenzter Spielpfad: zwei feste Profile/HF-Subjekte, exakte Pixel/
+  Prompts/Seeds,1Runde/2Aufträge, dauerhafte nicht zurücksetzbare GPU-Zulassungen,
+  Vorprüfung vor Reservierung, keine Verdrängung vorhandener Archivvideos.
+  Ausgabe benötigt vollständige Moderation plus tatsächliche Betreiber-Sichtprüfung.
+- Echte Moderation:38 sichere synthetische Fälle,23/23 harmlose erlaubt,15/15
+  Risikoabsichten gehalten (3 nur generische Provider-Holds),3 Clips mit81/81
+  nativen Frames. Zwei feste Eingaben separat erlaubt. Keine allgemeine
+  qualification.json und kein real erzeugtes Video qualifiziert.
+- Beide bestehenden Profile LiveA_825b2353/LiveB_825b2353 waren tatsächlich owner-
+  verifiziert und mit Manuel260702/Manuel2607 verbunden; persönliche Quotas300/300.
+  RaumBEAD mit beiden Spielern synchron, Reload und Offline-Reconnect bestanden.
+  Nach Redirect-Fix echte /api/hf/validation für beide HTTP200/Identität=true,
+  aber proxySubjectMatches=false. Claim-Schlüssel ip,user,uuid,error,exp; user ist
+  ein String, direkte ID-Zuordnung fehlt; kanonischer Namenspfad ebenfalls
+  unbestätigt. Das beweist KEINE fremde Abbuchung. Exakt0GPU-Aufträge gestartet.
+- Kontrollierter öffentlicher Gratis-Producer zuletzt Quelle/runtime
+  574ef59b42a6469fe241f5ec2e3079fa86e15c45;9 Quelldateien unabhängig geprüft,
+  20 offizielle Gewichtsdateien/34.201.418.400Bytes extern hashgeprüft, native
+  Initialisierung in Vorbereitung-only bestätigt. Keine Gewichte auf dem Mac,
+  kein gebuchter Speicher/keine bezahlte Hardware. Alter privater Space unverändert.
+- Code37f89f26350b5af6c47ab3e1bc2b905d47b967cd committed/gepusht. Neue lokale
+  Commits2884dc1,02948a8,8146b8b,eef628f,1352134,d6f77bd,37f89f2 enthalten alle
+  gezielten Fixes. Produktiv zunächstcc45ee32-812f-4720-b51b-206e4b778640,
+  nach Entfernen der temporären Testfreigabe aktuell5991962e-cb18-4f0d-b420-67761cf7dd4b.
+  URL https://slopurself.maki26.workers.dev; tatsächliche UUID aus API/Header
+  bestätigt. Startseite/robots/sitemap200, private APIs401, Producer-Claim503,
+  /api/config generationBlocked=true/mockAi=false/hfRequired=true/0.
 
-- Transport-Fortsetzung:Native Quelle/runtime jetztc82855772dc0b82b22e8188ae59731bb262e9a49,
-  alle9 Dateien geprüft,20Gewichte extern verifiziert, initialization/RUNNING
-  bestätigt, weiterhin preparation-only. Die ursprüngliche CF-Probe bleibt503;
-  zugehörige native Diagnoseevents fehlen. Daher Ursache noch offen (Ablehnung
-  vor dem Handler möglich), kein sicher behaupteter Headerverlust.
-  CF verwendet nun denselben persönlichen Zugang getrennt für HF-Router und
-  ausschließlich die zwei kontrollierten App-Hosts; widersprüchliche App-Header
-  werden abgewiesen. Nur-Lese-Probe liefert begrenzte Fehlercodes statt Rohdaten,
-  akzeptiert ausschließlich0GPU/billingVerified=false und ersetzt keine Abrechnung.
-  247App-Tests/Build und Workerd-Fluss bestanden (Provider vollständig simuliert).
-  Diese CF-Korrektur samt exaktem neuen Producer-Pin wird jetzt veröffentlicht;
-  anschließend reale Probe fortsetzen, nicht erneut anmelden/GPU blind starten.
+## Tests und Grenzen
 
-- Neuer Live-Checkpoint nach Nutzerrückmeldung:beide bisherigen Testprofile sind
-  tatsächlich owner-verifiziert und mit den richtigen unterschiedlichen HF-Konten
-  verbunden; beide persönlichen Quotas300/300. Neuer RaumBEAD. Keine Anmeldung
-  erneut anfordern. Controller80330 bleibt mit beiden Sitzungen im RAM offen.
-  GitHub41499602348 nach einmaligem Runner-Retry vollständig erfolgreich.
-- Einmalige Kampagne10d8afed-acf6-49ea-8c58-e70f906a94b2 konfiguriert; private
-  Arbeitsdatei.local/bounded-current-campaign.json zeigt auf campaign.json.
-  Moderator32246/Port3406 und Quick-Tunnel2726 laufen, scopedHealth bestätigt.
-  CF-Secrets für diesen Scope gesetzt; Worker5fb3153a-4ee2-4854-b21b-d301fd054c2d,
-  globale Sperre weiterhin bestätigt. WAN weiterhin preparation-only,0GPU-Aufträge.
-  Echte /api/hf/validation für BEIDE Konten503. Ursache noch NICHT abgeleitet!
-  Die vorhandene native Pauschalmeldung verhindert die Unterscheidung zwischen
-  verlorener App-Autorisierung, whoami-Fehler und Proxykontext. Deshalb gezielte
-  sichere Diagnostik/identischer persönlicher App-Header implementiert;29 native
-  CPU-/HTTP-Tests bestanden, kein Modell-/GPU-Aufruf. Native Veröffentlichung
-  dieses notwendigen Fixes steht an; nicht die alte Version blind erneut senden.
-  Nach Native-Deployment die ursprüngliche Nur-Lese-Probe mit unveränderten
-  CF-Headern wiederholen und ausschließlich gefilterte neue Diagnoseevents lesen.
-  Erst danach den belegten Transportfehler beheben/Modellpin aktualisieren.
-  Untenstehende ältere Wiederanmeldungs-/Deploymentanweisungen sind dadurch
-  überholt; keine neue Kampagne und keine neuen HF-Anmeldefenster erstellen.
+248 App-Units,30 native CPU-/HTTP-Tests, Build sowie beide tatsächlichen workerd-
+Integrationen bestanden. Alle externen Anbieter dort simuliert, kein GPU-Nachweis.
+Vollständige GitHub-Matrix02948a8/Lauf41520218201 erfolgreich; aktueller Code37f89f2,
+Lauf41543724347 läuft: safety-cpu grün, Chromium/WebKit noch in Arbeit. Den
+Ausgang separat prüfen, keinen grünen Gesamtlauf behaupten.
+Keine tatsächliche Zwei-Video-Partie, GPU-Abrechnung, Wiedergabe erzeugter Videos,
+Endwertung oder deren Archiv-/Statistikpersistenz erfolgreich geprüft.
 
-- Reale Gratis-Moderationsinferenz:38 Fälle,23/23 harmlose Bilder/Videos erlaubt,
-  15/15 Risikoabsichten zurückgehalten, darunter3 generische Provider-Holds ohne
-  Kategoriennachweis.3 Clips jeweils81/81 native unterschiedliche Frames.
-  Genau zwei normalisierte Live-Motive mit ihren effektiven Spielprompts separat
-  real allow/clear. Pipeline-Fingerprint:
-  675ec282faff6844dfc4472da2cde68a1f4651b64ec4bab2cc0985e08458a424.
-  Keine allgemeine qualification.json und keine Vollqualifikation behaupten.
-- Begrenzter Spielpfad implementiert:gebrandete serverseitige Raumkonfiguration,
-  zwei feste Profile/HF-Subjekte, exakte640²-Pixel/Prompts/Seeds,1Runde/2Aufträge,
-  120s je Konto/max6h. Dauerhafter Services-Zulassungs-/Verbrauchszaun vor GPU.
-  Neue Job-UUID, Permitablauf, Profilrotation oder Spaceverlust dürfen denselben
-  HF-Prüfplatz nicht erneut verwenden. Öffentliche /api/config bleibt blockiert/0.
-  Node erhält keine Kampagnen-Claim-Ausnahme. Zwei Videos müssen vor Start ohne
-  Verdrängung vorhandener Archivdateien passen. Reserve/Upload schützen sämtliche
-  vorhandenen Videos und überspringen Bestandsreconciliation während des Tests.
-- Room/Quota/Generator/Producer-Claim/Archiv integriert. Vor Spielstart zwingend
-  Producer-/Modellpin, privates Prüfgateway und beide persönlichen Proxy-Kontexte
-  read-only bestätigen; frühe Klicks verbrauchen keine GPU- oder Prüfbudgetplätze.
-- Separater zeitlich begrenzter Moderator-Gateway mit echten Gemini-Prüfungen,
-  verschlüsselten persistenten Tickets, zwei unveränderlichen Eingaben und
-  vollständiger121-Frame-Ausgabeprüfung. Ausgabe zusätzlich privat halten bis
-  konkreter Betreiberfreigabe ihres tatsächlichen Video-Hashes. Kein allgemeines
-  qualifiziert=true. Temporärer Moderator läuft nur für diese synthetische
-  Prüfung lokal hinter einem geheimnisgeschützten HTTPS-Quick-Tunnel.
-- Tatsächliches spaces0.51.3 aus gepinntem Wheel geprüft:LocalContext.request und
-  X-IP-Token steuern den Scheduler; fehlende/fehlerhafte Tokens können IP-Quota
-  nutzen. Producer verlangt denselben persönlichen Gradio-Kontext und explizite
-  Actorclaims passend zum HF-whoami-Subjekt. Owner-/Audience-/beliebige Werte
-  zählen nicht. Unbekannte Claim-Schemata bleiben gesperrt. /identity sowie
-  /api/hf/validation sind Nur-Lese-Proben, keine Signatur-/Abrechnungsatteste.
-- Native Aktivierung braucht eine kanonische Kampagnen-ID und Ablauf<=6h.
-  Kaltstart darf dann dieselben offiziellen Gewichte extern vorbereiten.
-  Ablauf verbirgt Bereitschaft/Modellbehauptung und blockiert vor GPU.
-- HF-Indexlag konkret gemessen:metadata.sha war alt, während Git main, /refs,
-  /commits/main und runtime.sha bereits neu waren. Authoritative eindeutige
-  Git-main-Referenz ersetzt nur den Indexwert; runtime-/Modell-Pin bleiben zwingend.
-  Uploader speichert Commit-Ack vor Nachprüfung, prüft den tatsächlichen Git-Baum
-  und kann unveränderte Vorbereitungsvariablen ohne erneute Mutationen verwenden.
+## Unterbrechung und sichere Rückstellung
 
-## Prüfungen und Veröffentlichungen
+Die ausschließlich im RAM gehaltenen Browser-/Controller-Prozesse haben die
+Unterbrechung nicht überstanden: Session80330 ungültig, kein passender eigener
+Controller/Moderator/Tunnelprozess mehr vorhanden. Alte .local/bounded-live-
+result.json und roster.json sind historische Belege, KEINE aktuellen Sitzungen!
+Keine Cookies exportiert, serverseitige HF-Verbindungen/Benutzerdaten nicht gelöscht.
+Nicht wieder behaupten, beide Testfenster seien offen, und keine Anmeldungsschleife
+mit automatisch erneuerten Fünf-Minuten-Codes erzeugen.
 
-- 244 App-Units im aktuellen Voll-Unitlauf; zusätzlich gezielte Kampagnen-/
-  Claim-/Pin-/Readiness-Prüfungen, alle bestanden. Moderator-Build/39Tests sowie
-  zusätzlicher aktueller Gateway-/Health-Test bestanden.27 native CPU-/HTTP-Tests.
-  Workerd-Generierungsfluss inkl.Indexlag/Drift/Evaluation/Replay bestanden, sämtliche
-  Anbieter dabei simuliert. Daraus keine realen GPU-/Abrechnungserfolge ableiten.
-- Alle Chromium-/WebKit-Ziele über Hauptlauf und gezielte Fortsetzung bestanden;
-  kein ununterbrochener grüner Gesamtlauf behaupten. Zusatzrundentest bestätigte
-  Vorschau implizit per Autoplay und wartete30s bei zulässigem45s-Previewfenster.
-  Jetzt explizite vorhandene UI-Bestätigung; WebKit/Chromium bestanden. Kein daraus
-  abgeleiteter Produkt-Synchronisationsfix. Typprüfungen/Builds/Diff-/Secretprüfung
-  bestanden; keine lokal bekannten Geheimniswerte in den32 geänderten Dateien.
-- GitHub-Lauf41499602348 für d3c58b1:Chromium inkl.PostgreSQL/Workerd/Browsern
-  und safety-cpu erfolgreich. macOS-WebKit bekam keinen Runner; kein Testschritt
-  wurde ausgeführt. GitHub nennt ausdrücklich fehlende Hosted-Runner-Kapazität,
-  nicht einen Produkt-/Testfehler. Nur den ausgefallenen Job einmal erneut
-  angefordert; seinen Ausgang separat prüfen, keinen grünen Gesamtlauf behaupten.
-  Zweiter Versuch tatsächlich einem macOS-Runner zugewiesen und test:ci läuft.
-  Diesen Dokumentationscheckpoint erst nach dessen Ende pushen, damit die
-  Workflow-Concurrency den laufenden Prüflauf nicht durch einen Docs-Push abbricht.
-- Gepusht:47b21eef9cb925ebbdfd85a6e37de310f029a921,
-  63b49aa8efc68651489c3c3213f6ad20870520d5 auf origin/codex/audit-remediation.
-  Finale Readiness-/Health-/Pin-/Archivschutzänderungen als d3c58b1 gepusht.
-- Öffentlicher kostenloser Producer Manuel2607/SlopUrself-Wan22-Validated:
-  Quelle/runtime856bdb63d561d59a29ab09e9a4d0be93ecb5d460, RUNNING/zero-a10g,
-  alle9 Quelldateien gegen63b49aa unabhängig geprüft. Erneut20Gewichtsdateien/
-  34.201.418.400Bytes extern hashgeprüft, Modell initialisiert. Vorbereitung-only,
-  keine GPU-Aufträge. Keine Gewichte auf dem Mac/kein gebuchter Speicher.
-  Alter privater Space samt Historie unverändert privat/Quelle3172be7.
-- Cloudflare-Anmeldung vom Nutzer erneuert und CLI bestätigt; erforderliche
-  Geheimnisnamen vorhanden, LIVE_VALIDATION_CAMPAIGN noch NICHT gesetzt.
-  Nicht erneut dieselbe Freigabe anfordern. Jetzt tatsächlich veröffentlicht:
-  Code d3c58b1, Worker01f40560-1dea-4522-97dd-6f6e3fa06455,
-  https://slopurself.maki26.workers.dev. UUID aus /api/release/Header bestätigt;
-  Startseite/robots/sitemap200, private Statistik/Proxyprobe401, Producer-Claim503,
-  /api/config weiterhin generationBlocked=true/mockAi=false/hfRequired=true/0.
-  LIVE_VALIDATION_CAMPAIGN wurde nicht aktiviert; bislang keine GPU-Anfrage.
-- Zuvor reale ProfileLiveA_825b2353/LiveB_825b2353 verbunden, Quotas300/300,
-  RaumF4DD/Lobby/Reload/Offline-Reconnect bestanden. Isolierte Browser geschlossen,
-  Ursache nicht belegt. Keine Cookies exportiert oder neue Sessions selbst signiert.
-  Bislang exakt0 tatsächliche GPU-Aufträge, keine echte Abrechnungs-/Videopartie.
+LIVE_VALIDATION_CAMPAIGN wurde nach bestätigten0GPU-Aufträgen aufCF entfernt.
+Öffentlicher Test-Space Manuel2607/SlopUrself-Wan22-Validated ausdrücklich PAUSED
+bestätigt, Gratis-Hardwarezero-a10g. Allgemeine Sperre bleibt unabhängig aktiv.
+Kampagnen-Arbeitsdatei.local/bounded-current-campaign.json zeigt auf die alte,
+inaktive/abgelaufene Kampagne; nicht einfach reaktivieren oder ihre Zäune zurücksetzen.
+.local/bounded-controller.mts/actions.mts/play.mts sind nur vorbereitete lokale
+Testwerkzeuge, nicht laufende Dienste. Upload-Intents werden vor Klick exklusiv
+persistiert; bei Unklarheit nie einen GPU-Auftrag wiederholen.
 
-## Unmittelbar weiter
+## Nächster konkreter Schritt
 
-1. Veröffentlichung/Smokes sind abgeschlossen. Producer NICHT nochmals neu
-   bauen/hochladen;856bdb6 ist korrekt. Native Vorbereitung bleibt gesperrt.
-2. Zwei stabile isolierte Browser für die BESTEHENDEN Profile sind jetzt offen;
-   frische offizielle HF-Bestätigung in separater Rückfrage angefordert.
-   Direkt gestarteter Browser/Controller-Prozess:exec-Session80330, keine CDP-
-   Schnittstelle/kein Cookieexport. .local/bounded-controller.mts hält RAM-Zustand,
-   .local/bounded-actions.mts kann setup-existing/status/room/snapshot.
-   Steuerung ausschließlich .local/bounded-live-command.json und Ergebnisdatei
-   .local/bounded-live-result.json; alte live-command.json nicht verwenden.
-   Keine Videoaktionen in diesem lokalen Controller implementiert, kein Upload.
-   Letzte tatsächliche Nur-Lese-Kontrolle18:35UTC:beide bestehenden Profile sind
-   noch NICHT HF-verbunden/identitätsbestätigt. Zwei Freigaben stehen aus; nicht
-   durch frühere Zustimmungen, andere Tokens oder selbst erzeugte Sessions ersetzen.
-   Die bereits gestellte Freigabe-Frage nicht erneut senden. Wenn der angezeigte
-   Gerätecode abgelaufen ist, kann der Nutzer im jeweiligen Fenster selbst erneut
-   „Hugging Face verbinden“ wählen; nicht automatisch neue Code-Runden starten.
-   Die offene Frage bittet um die zwei offiziellen Freigaben; keine neue Kosten-
-   oder Motivfreigabe nötig. Actual /api/hf und /api/session prüfen, nicht allein
-   die Rückantwort als erfolgreichen Kontozugang zählen.
-   KontoA=Manuel260702, KontoB=Manuel2607. Native Browserharness direkt in einem
-   Prozess halten, keine alten .local/live-command.json-Kanäle wiederverwenden.
-   Frische offizielle HF-Gerätefreigaben vom Nutzer bestätigen lassen. Keine
-   neuen Profile, Token im Chat, Cookieexportdateien oder selbstgeminteten JWTs.
-3. Tatsächliche eigene Profil-IDs, unveränderliche HF-IDs und neuen Raum ermitteln.
-   Einmalige Kampagne unter .local/live-validation/<UUID>/campaign.json anlegen.
-   tools/run-validation-moderator.mts --serve-approved-fixed-pair --campaign ...;
-   HTTPS-Quick-Tunnel auf127.0.0.1:3406. Keine fremden/beliebigen Bilder zulassen.
-4. Nur geprüfte Kampagne, dediziertes MODERATION_SECRET und WAN_PRODUCER_SECRET
-   privat aufCF konfigurieren. Allgemeine AI_GENERATION_RELEASE bleibt blocked.
-   /api/hf/validation für beide tatsächlich prüfen. Bei fehlendem/undokumentiertem
-   Proxy-Actorclaim keine GPU-Aufträge; datensparsame Diagnose statt Annahme.
-5. tools/activate-wan-validation.mts --activate-approved-two-video-window
-   --campaign ...; tatsächliche Source/Runtime/Modell-/Proxy-Bereitschaft prüfen.
-   Danach beide Quotas unmittelbar vor/nach JEDEM der exakt zwei Aufträge erfassen.
-   Bei falscher Debitierung/unklarem Job keine Wiederholung/kein weiteres GPU-Job.
-6. Quelle für UI-Uploads sind die ORIGINALEN synthetischen scene-0/1.png aus
-   .local/audit-tests/live-qualification-629bbb9f-fc35-443a-b764-5cfc2021d926,
-   nicht die schon JPEG-normalisierten Fixtures nochmals JPEG-kodieren. Vor Klick
-   den tatsächlichen Preview-Pixelhash mit VALIDATION_PAIR abgleichen.
-7. Echte Ausgabe vollständig moderieren, privaten Film zur Betreiberprüfung
-   vorlegen; output-approvals.json nur nach tatsächlicher Hash-/Sichtfreigabe.
-   Ticket/privater HF-Link sind kurzlebig (6/10min); zügig prüfen, nie GPU neu starten.
-   Dann tatsächliches Browserabspielen, Reload, gegenseitige Votes, Endwertung,
-   Archiv und DB-Statistik über die normalen Spiel-APIs prüfen.
-8. Scope anschließend deaktivieren/Producer sicher pausieren. Generelle Moderation,
-   kryptografische HF-Proxyattestation und jobgenaue Rechnungen bleiben getrennte
-   offene Grenzen. Quota-Deltas sind kontrollierte Verbrauchsbeobachtung, nicht
-   automatisch ein jobgenauer Rechnungsbeleg. Übrige P1–P3 nur aus Audits bearbeiten,
-   wenn dieser aktuelle Live-Auftrag abgeschlossen oder wirklich extern blockiert.
+1. GitHub-Lauf41543724347 für37f89f2 prüfen. Den lokalen Dokumentationscommit erst
+   danach pushen, damit keine Workflow-Concurrency den laufenden Code-Test abbricht.
+   Code37f89f2 ist bereits remote und produktiv. Bei Erfolg nur den Dokumentations-
+   checkpoint pushen, kein erneutes Deployment derselben App-Version.
+2. Vor erneuter Kontofreigabe Testfenster so betreiben, dass eine Codex-Unterbrechung
+   nicht wieder die einzigen Zugriffe vernichtet. Weiterhin keine Token-Dateien
+   im Repository. Frische offizielle HF-Freigaben erst anfordern, wenn der Nutzer
+   für die reale Prüfung bereit ist; die Kosten-/Motivfreigabe gilt bereits.
+3. Zuerst die tatsächliche Proxy-user-Darstellung über strukturelle Diagnostik
+   klären, ohne JWT/Claims-Werte auszugeben. ID-/Namensgleichheit ist weiterhin
+   NICHT nachgewiesen; keine unbekannten Actor-Schemata akzeptieren und nicht
+   vorsorglich OAuth-Rechte erweitern. Eventuelle HF-Schnittstellenlücken offen
+   benennen, keine eigene Abrechnung aus erfolgreichem whoami ableiten.
+4. Nur bei verifiziertem persönlichen Proxy und exakten Modellpins den Gratis-
+   Producer kontrolliert aufwecken/vorbereiten und ein endliches Scope konfigurieren.
+   Beide Quotas unmittelbar vor/nach JEDEM der exakt zwei Aufträge erfassen.
+5. Originale scene-0/1.png aus.local/audit-tests/live-qualification-629bbb9f-
+   fc35-443a-b764-5cfc2021d926 nutzen; tatsächlichen UI-Preview-Pixelhash prüfen.
+   Nicht die normalisierten Fixtures nochmals JPEG-kodieren. Ausgabe vollständig
+   prüfen und dem Nutzer zeitnah zur tatsächlichen Sichtfreigabe vorlegen.
+6. Dieselben Videos über normale Spiel-UI abspielen, Reload/Wiederverbindung,
+   gegenseitige4/3-Bewertungen, Endstand, Archiv und Statistik bestätigen.
+   Quota-Deltas bleiben kontrollierte Verbrauchsbeobachtungen, keine jobgenauen
+   HF-Rechnungsbelege. Danach Scope entfernen und Producer sicher zurückstellen.
 
-Nachweise:docs/audits/2026-11-02-live-validation.json,
-docs/audits/2026-11-02-bounded-validation.json; ignorierte gefilterte Einzelbelege
-unter.local/audit-tests. Vorherige Stände in docs/progress; ursprüngliche Audits
-24.10. und docs/IMPLEMENTATION-2026-10-25.md bleiben historische Referenz.
+Details/Nachweise:docs/audits/2026-11-03-live-validation.json. Ältere Berichte sind
+historische Stände, nicht erneut offene Grundlagenanalysen. Die Automation wurde
+auf diesen Fortsetzungspunkt eingeschränkt; unveränderte externe Blocker lösen
+keine neuen Codes, Deployments oder GPU-Aufträge aus.

@@ -1,0 +1,195 @@
+{
+  "date": "2026-11-03",
+  "status": "blocked-external-verification",
+  "actualGpuRequests": 0,
+  "generalGenerationRelease": "blocked",
+  "authorization": {
+    "approvedVideos": 2,
+    "minimumSeconds": 5,
+    "largeGpuCeilingPerAccount": 120,
+    "maximumCombinedSeconds": 240,
+    "paidJobs": false,
+    "automaticRetries": false,
+    "inputCasesApproved": true,
+    "arbitraryUploadsApproved": false
+  },
+  "implemented": {
+    "workerRedirectModeFixed": true,
+    "manualRedirectRejection": true,
+    "controlledPersonalApplicationHeaders": true,
+    "conflictingHeadersRejected": true,
+    "safeProxyFailureCodes": true,
+    "readOnlyFailurePhases": true,
+    "canonicalNameRequiresFreshSameHfIdentity": true,
+    "producerPin": "574ef59b42a6469fe241f5ec2e3079fa86e15c45",
+    "servicesReleaseCorrelation": true
+  },
+  "provenRootCause": {
+    "area": "Workers producer preflight HTTP503",
+    "cause": "Cloudflare/workerd rejects RequestInit.redirect=error with TypeError before sending any request.",
+    "proof": "Actual workerd Request construction; Services/proxy/readiness regression with outbound fixtures; production preflight subsequently HTTP200 for both profiles.",
+    "documentation": "https://developers.cloudflare.com/workers/runtime-apis/request/",
+    "fixedPaths": [
+      "src/ai/personal-proxy.ts",
+      "src/server/cloudflare/services.ts",
+      "src/auth/hf-preflight.ts"
+    ],
+    "notProvenCause": "Header stripping was a hypothesis, not the proven HTTP503 cause."
+  },
+  "moderation": {
+    "syntheticCases": 38,
+    "benignAllowed": 23,
+    "riskIntentsHeld": 15,
+    "genericProviderHolds": 3,
+    "realSyntheticClips": 3,
+    "framesPerClip": 81,
+    "approvedFixedInputCases": 2,
+    "generalQualification": false,
+    "actualGeneratedOutputQualification": false
+  },
+  "hfVerification": {
+    "realDistinctProfilesConnected": true,
+    "realIdentityVerified": [
+      true,
+      true
+    ],
+    "lastObservedQuotaSeconds": [
+      300,
+      300
+    ],
+    "lastPreflightHttp": [
+      200,
+      200
+    ],
+    "proxySubjectMatches": [
+      false,
+      false
+    ],
+    "proxyClaimKeys": [
+      "ip",
+      "user",
+      "uuid",
+      "error",
+      "exp"
+    ],
+    "proxyUserType": "string",
+    "proxyUserMatchesImmutableSubject": false,
+    "canonicalNameBinding": "unverified; reason not fully separated from secondary identity-lookup failure",
+    "individualBillingVerified": false,
+    "perJobBillingReceiptsAvailable": "not verified; only aggregate quota interface inspected",
+    "wrongAccountCharged": "not observed; no GPU request was started"
+  },
+  "multiplayer": {
+    "authenticatedLobby": true,
+    "reload": true,
+    "offlineReconnect": true,
+    "synchronousTwoPlayerLobby": true,
+    "fullAiParty": false,
+    "actualGeneratedVideoPlayback": false,
+    "realVotesFinalArchiveStatistics": false
+  },
+  "tests": {
+    "applicationUnits": 248,
+    "nativeCpuHttp": 30,
+    "build": true,
+    "workerdPersonalProxyReadiness": "passed with simulated outbound services",
+    "workerdBoundedGeneration": "passed with simulated providers",
+    "priorFullGithubMatrix": {
+      "commit": "02948a8aa02f4421bf79c92050d6cefcfd5e4b52",
+      "run": 41520218201,
+      "conclusion": "success"
+    },
+    "latestGithub": {
+      "commit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+      "run": 41543724347,
+      "lastObservedStatus": "in_progress; safety-cpu passed, Chromium/WebKit running",
+      "conclusion": "pending; no success claimed"
+    }
+  },
+  "production": {
+    "at": "2026-11-02T23:15:52.854Z",
+    "release": "5991962e-cb18-4f0d-b420-67761cf7dd4b",
+    "sourceCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+    "url": "https://slopurself.maki26.workers.dev",
+    "campaignRemoved": true,
+    "actualGpuRequests": 0,
+    "results": [
+      {
+        "path": "/",
+        "status": 200,
+        "type": "text/html"
+      },
+      {
+        "path": "/api/config",
+        "status": 200,
+        "type": "application/json",
+        "generationBlocked": true,
+        "aiRoundLimit": 0,
+        "mockAi": false,
+        "hfRequired": true
+      },
+      {
+        "path": "/api/stats",
+        "status": 401,
+        "type": "application/json"
+      },
+      {
+        "path": "/api/hf/validation",
+        "status": 401,
+        "type": "application/json"
+      },
+      {
+        "path": "/robots.txt",
+        "status": 200,
+        "type": "text/plain"
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200,
+        "type": "application/xml"
+      },
+      {
+        "path": "/api/producer/claim",
+        "status": 503
+      }
+    ],
+    "authenticatedPartyAfterFinalRelease": false,
+    "temporaryCampaignRemoved": true,
+    "producerPaused": true,
+    "lastRunningProducerSource": "574ef59b42a6469fe241f5ec2e3079fa86e15c45",
+    "producerModelReadyInPreparationWasVerified": true,
+    "producerInferenceActivationPerformed": false
+  },
+  "interruption": {
+    "controllerProcessAvailable": false,
+    "localModeratorAvailable": false,
+    "ephemeralBrowserSessionsAvailable": false,
+    "cookiesExported": false,
+    "tokensCommitted": false,
+    "serverSideHfConnectionsDeleted": false
+  },
+  "open": [
+    "Determine the actual personal proxy-user representation with structural diagnostics only; do not infer billing from authentication or accept unknown actor mappings.",
+    "Prepare interruption-resistant isolated test windows without writing credentials to repository; obtain fresh official HF confirmations only when the user is ready.",
+    "After successful proxy and model readiness, use the existing exact two-video free authorization; record both quotas before/after each job and require actual output review.",
+    "Complete real playback, reload, mutual voting, final score, archive and statistics; these remain untested with real generated videos.",
+    "General moderation qualification, HF proxy signature attestation and job-itemized billing remain separate unverified limits."
+  ],
+  "next": "Check GitHub run41543724347. Do not reopen auth-code loops or restart/deploy providers automatically while the same external blocker remains.",
+  "evidence": [
+    ".local/audit-tests/2026-11-03-production-smoke.json",
+    ".local/audit-tests/2026-11-03-validation-cleanup.json",
+    ".local/live-validation/10d8afed-acf6-49ea-8c58-e70f906a94b2/proxy-observation.json",
+    ".local/live-validation/10d8afed-acf6-49ea-8c58-e70f906a94b2/producer-canonical-actor-observation.json",
+    ".local/audit-tests/final-proxy-pin-units.log",
+    ".local/audit-tests/canonical-actor-native-tests.log",
+    ".local/audit-tests/final-personal-proxy-runtime.log",
+    ".local/audit-tests/final-proxy-generation-runtime.log"
+  ],
+  "git": {
+    "branch": "codex/audit-remediation",
+    "applicationCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+    "applicationPushVerified": true,
+    "documentationCheckpoint": "local commit; push after run41543724347 finishes, preserving ongoing CI"
+  }
+}
