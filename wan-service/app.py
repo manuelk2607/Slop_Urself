@@ -249,7 +249,11 @@ def build_app():
             try:validate_proxy_token(request.headers.get('x-ip-token'),subject=subject);bound=True
             except ValueError:bound=False
             keys=[k for k in payload if re.fullmatch(r'[A-Za-z0-9_]{1,64}',k)][:20]
-            print(json.dumps({'event':'identity_preflight','proxySubjectMatches':bound,'proxyClaimKeys':keys,**received,'gpuCalls':0}),flush=True)
+            user=payload.get('user')
+            print(json.dumps({'event':'identity_preflight','proxySubjectMatches':bound,'proxyClaimKeys':keys,
+                'proxyUserScalarMatchesSubject':isinstance(user,str) and user==subject,
+                'proxyUserType':'string' if isinstance(user,str) else 'object' if isinstance(user,dict) else 'other',
+                **received,'gpuCalls':0}),flush=True)
             return JSONResponse({'personalIdentityVerified':True,'proxySubjectMatches':bound,'proxyClaimKeys':keys,
                 'billingVerified':False,'gpuCalls':0},headers={'cache-control':'no-store'})
         except Exception:

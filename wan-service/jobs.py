@@ -33,6 +33,7 @@ def validate_proxy_token(token,now=None,subject=None):
         # for the caller. Unknown actor schemas stay unavailable for review.
         actors=[payload[k] for k in ('sub','userId','user_id') if k in payload]
         user=payload.get('user')
+        if isinstance(user,str):actors.append(user)
         if isinstance(user,dict):actors.extend(user[k] for k in ('id','_id') if k in user)
         if not isinstance(subject,str) or not actors or any(v!=subject for v in actors):
             raise ValueError('Proxy context does not identify the verified personal subject')
