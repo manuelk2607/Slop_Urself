@@ -8,7 +8,7 @@
   "fullRealPartyVerified": false,
   "boundedPath": {
     "implemented": true,
-    "deployed": false,
+    "deployed": true,
     "maximumAccounts": 2,
     "maximumRounds": 1,
     "maximumLargeSecondsPerAccount": 120,
@@ -26,7 +26,15 @@
     "builds": true,
     "toolsTypecheck": true,
     "workerdGenerationFlow": "passed with all providers simulated; no real GPU requests",
-    "browserTargets": "all targets passed across main run and targeted continuation; not a single uninterrupted successful runner invocation"
+    "browserTargets": "all targets passed across main run and targeted continuation; not a single uninterrupted successful runner invocation",
+    "github": {
+      "run": 41499602348,
+      "commit": "d3c58b1139e6312fd3ba7fcc01d853e3e8b5924b",
+      "chromium": "passed",
+      "safetyCpu": "passed",
+      "webkitFirstAttempt": "not run: hosted runner capacity unavailable",
+      "failedJobRerun": "requested once, now running actual macOS tests; outcome pending"
+    }
   },
   "observedFailures": [
     {
@@ -60,7 +68,19 @@
       "preparationOnly": true,
       "gpuCalls": 0
     },
-    "profileSessions": "must reuse the two existing profiles after fresh official HF proof; no session minting or token export"
+    "profileSessions": {
+      "isolatedExistingProfiles": 2,
+      "observedAt": "2026-11-02T18:35:51.214Z",
+      "connected": [
+        false,
+        false
+      ],
+      "identityVerified": [
+        false,
+        false
+      ],
+      "next": "Await the already requested official HF consents; do not substitute other credentials or silently restart code flow."
+    }
   },
   "readinessGate": {
     "implemented": true,
@@ -70,5 +90,66 @@
     "validReadOnlyScenarioPassed": true,
     "noReservationOrClaimDuringPreflight": true,
     "bothVideosFitWithoutDeletion": true
+  },
+  "production": {
+    "sourceCommit": "d3c58b1",
+    "workerVersion": "01f40560-1dea-4522-97dd-6f6e3fa06455",
+    "url": "https://slopurself.maki26.workers.dev",
+    "releaseConfirmed": true,
+    "campaignActivated": false,
+    "gpuCalls": 0,
+    "smoke": [
+      {
+        "path": "/",
+        "status": 200,
+        "type": "text/html",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455"
+      },
+      {
+        "path": "/api/release",
+        "status": 200,
+        "type": "application/json",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455",
+        "releaseConfirmed": true
+      },
+      {
+        "path": "/api/config",
+        "status": 200,
+        "type": "application/json",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455",
+        "generationBlocked": true,
+        "mockAi": false,
+        "hfRequired": true,
+        "aiRoundLimit": 0
+      },
+      {
+        "path": "/api/stats",
+        "status": 401,
+        "type": "application/json",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455"
+      },
+      {
+        "path": "/api/hf/validation",
+        "status": 401,
+        "type": "application/json",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455"
+      },
+      {
+        "path": "/robots.txt",
+        "status": 200,
+        "type": "text/plain",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455"
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200,
+        "type": "application/xml",
+        "release": "01f40560-1dea-4522-97dd-6f6e3fa06455"
+      },
+      {
+        "path": "/api/producer/claim",
+        "status": 503
+      }
+    ]
   }
 }

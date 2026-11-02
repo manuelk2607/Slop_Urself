@@ -70,9 +70,17 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
   Jetzt explizite vorhandene UI-Bestätigung; WebKit/Chromium bestanden. Kein daraus
   abgeleiteter Produkt-Synchronisationsfix. Typprüfungen/Builds/Diff-/Secretprüfung
   bestanden; keine lokal bekannten Geheimniswerte in den32 geänderten Dateien.
+- GitHub-Lauf41499602348 für d3c58b1:Chromium inkl.PostgreSQL/Workerd/Browsern
+  und safety-cpu erfolgreich. macOS-WebKit bekam keinen Runner; kein Testschritt
+  wurde ausgeführt. GitHub nennt ausdrücklich fehlende Hosted-Runner-Kapazität,
+  nicht einen Produkt-/Testfehler. Nur den ausgefallenen Job einmal erneut
+  angefordert; seinen Ausgang separat prüfen, keinen grünen Gesamtlauf behaupten.
+  Zweiter Versuch tatsächlich einem macOS-Runner zugewiesen und test:ci läuft.
+  Diesen Dokumentationscheckpoint erst nach dessen Ende pushen, damit die
+  Workflow-Concurrency den laufenden Prüflauf nicht durch einen Docs-Push abbricht.
 - Gepusht:47b21eef9cb925ebbdfd85a6e37de310f029a921,
   63b49aa8efc68651489c3c3213f6ad20870520d5 auf origin/codex/audit-remediation.
-  Finale Readiness-/Health-/Pin-/Archivschutzänderungen werden jetzt gesichert.
+  Finale Readiness-/Health-/Pin-/Archivschutzänderungen als d3c58b1 gepusht.
 - Öffentlicher kostenloser Producer Manuel2607/SlopUrself-Wan22-Validated:
   Quelle/runtime856bdb63d561d59a29ab09e9a4d0be93ecb5d460, RUNNING/zero-a10g,
   alle9 Quelldateien gegen63b49aa unabhängig geprüft. Erneut20Gewichtsdateien/
@@ -81,8 +89,12 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
   Alter privater Space samt Historie unverändert privat/Quelle3172be7.
 - Cloudflare-Anmeldung vom Nutzer erneuert und CLI bestätigt; erforderliche
   Geheimnisnamen vorhanden, LIVE_VALIDATION_CAMPAIGN noch NICHT gesetzt.
-  Nicht erneut dieselbe Freigabe anfordern. Öffentliche Anwendung noch Worker
-  9dd44862-e6cc-4117-af51-0fe330d9c616/Code6deff11; neues Deployment steht an.
+  Nicht erneut dieselbe Freigabe anfordern. Jetzt tatsächlich veröffentlicht:
+  Code d3c58b1, Worker01f40560-1dea-4522-97dd-6f6e3fa06455,
+  https://slopurself.maki26.workers.dev. UUID aus /api/release/Header bestätigt;
+  Startseite/robots/sitemap200, private Statistik/Proxyprobe401, Producer-Claim503,
+  /api/config weiterhin generationBlocked=true/mockAi=false/hfRequired=true/0.
+  LIVE_VALIDATION_CAMPAIGN wurde nicht aktiviert; bislang keine GPU-Anfrage.
 - Zuvor reale ProfileLiveA_825b2353/LiveB_825b2353 verbunden, Quotas300/300,
   RaumF4DD/Lobby/Reload/Offline-Reconnect bestanden. Isolierte Browser geschlossen,
   Ursache nicht belegt. Keine Cookies exportiert oder neue Sessions selbst signiert.
@@ -90,10 +102,25 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
 
 ## Unmittelbar weiter
 
-1. Finale lokalen Änderungen committen/pushen, inaktive CF-Version deployen und
-   Release-ID/öffentliche Sperre/private401/Producer-Claim503 produktiv prüfen.
-   Producer NICHT nochmals neu bauen/hochladen;856bdb6 ist bereits korrekt.
-2. Erst dann zwei stabile isolierte Browser für die BESTEHENDEN Profile öffnen;
+1. Veröffentlichung/Smokes sind abgeschlossen. Producer NICHT nochmals neu
+   bauen/hochladen;856bdb6 ist korrekt. Native Vorbereitung bleibt gesperrt.
+2. Zwei stabile isolierte Browser für die BESTEHENDEN Profile sind jetzt offen;
+   frische offizielle HF-Bestätigung in separater Rückfrage angefordert.
+   Direkt gestarteter Browser/Controller-Prozess:exec-Session80330, keine CDP-
+   Schnittstelle/kein Cookieexport. .local/bounded-controller.mts hält RAM-Zustand,
+   .local/bounded-actions.mts kann setup-existing/status/room/snapshot.
+   Steuerung ausschließlich .local/bounded-live-command.json und Ergebnisdatei
+   .local/bounded-live-result.json; alte live-command.json nicht verwenden.
+   Keine Videoaktionen in diesem lokalen Controller implementiert, kein Upload.
+   Letzte tatsächliche Nur-Lese-Kontrolle18:35UTC:beide bestehenden Profile sind
+   noch NICHT HF-verbunden/identitätsbestätigt. Zwei Freigaben stehen aus; nicht
+   durch frühere Zustimmungen, andere Tokens oder selbst erzeugte Sessions ersetzen.
+   Die bereits gestellte Freigabe-Frage nicht erneut senden. Wenn der angezeigte
+   Gerätecode abgelaufen ist, kann der Nutzer im jeweiligen Fenster selbst erneut
+   „Hugging Face verbinden“ wählen; nicht automatisch neue Code-Runden starten.
+   Die offene Frage bittet um die zwei offiziellen Freigaben; keine neue Kosten-
+   oder Motivfreigabe nötig. Actual /api/hf und /api/session prüfen, nicht allein
+   die Rückantwort als erfolgreichen Kontozugang zählen.
    KontoA=Manuel260702, KontoB=Manuel2607. Native Browserharness direkt in einem
    Prozess halten, keine alten .local/live-command.json-Kanäle wiederverwenden.
    Frische offizielle HF-Gerätefreigaben vom Nutzer bestätigen lassen. Keine
