@@ -111,6 +111,20 @@ test('readiness is read-only and refuses preparation, moderator mismatch and for
     }
     assert.ok(calls.every(url => !/queue|schedule|upload/.test(url)));
 });
+test('personal proxy preflight reports finite failure phases without unrelated budget work or private errors', async t => {
+    const c = campaign(), storage = store();
+    const service = new ServiceDurableObject({ storage } as never, env(c) as never);
+    let foreign = false;
+    t.mock.method(HfConnections.prototype, 'credential', async () => ({ subject: foreign ? 'foreign-subject' : c.members[0].subject, token: 'fixture-private-never-return' }));
+    t.mock.method(globalThis, 'fetch', async () => { throw new Error('private-provider-detail-never-return'); });
+    const request = () => new Request('https://internal/security/validation/identity', { method: 'POST', body: JSON.stringify({ code: c.room, accountId: c.members[0].accountId, quality: 'invalid-unrelated-setting' }) });
+    const failed = await (await service.fetch(request())).json() as Record<string, unknown>;
+    assert.deepEqual(failed, { probeFailed: true, phase: 'producer', errorKind: 'Error', code: 'producer_unreachable', gpuCalls: 0, billingVerified: false });
+    foreign = true;
+    assert.equal(((await (await service.fetch(request())).json()) as Record<string, unknown>).phase, 'ownership');
+    assert.equal(storage.data.size, 0);
+    assert.ok(!JSON.stringify(failed).includes('private-'));
+});
 test('bounded live tests never evict or reconcile existing videos even when storage is full', async t => {
     const c = campaign(), storage = store(), jobId = crypto.randomUUID();
     const config = validationConfig({ ...env(c), AWS_ACCESS_KEY_ID: 'isolated', AWS_SECRET_ACCESS_KEY: 'isolated', AWS_ENDPOINT_URL_S3: 'https://storage.test', VIDEO_ARCHIVE_MB: '20' }, c.room, { id: jobId, accountId: c.members[0].accountId });

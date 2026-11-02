@@ -20,7 +20,7 @@ import { ProducerClaims, verifyProducerPermit } from '../../security/producer-cl
 import { validationConfig, validationScope, validationMember, parseValidationCampaign, ValidationLedger, type ValidationAdmission } from '../../security/live-validation';
 import { boundedJson } from '../body';
 import { approvedProvider, verifyPinnedProvider } from '../../ai/provider-trust';
-import { probePersonalProxy } from '../../ai/personal-proxy';
+import { probePersonalProxy, personalProxyFailure } from '../../ai/personal-proxy';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -52,6 +52,20 @@ export class ServiceDurableObject {
             const data = await request.json() as { code: string; rounds: number; players?: number; quality?: unknown; generations: number; seconds: number; jobId?: string; url: string; name: string; id: string; key: string; rule: RateRule; time: number; command: HistoryDeletion;
                 participants?: BudgetPlayer[]; participant?: BudgetPlayer; playerId?: string; ownRemaining?: number; permit?: string; admission?: Omit<ValidationAdmission, 'claimed'>;
                 account: Account; accountId: string; connection?: string; state?: string; nonce?: string; origin: string; passwordHash?: string; ids?: unknown; reason: ReportReason; cost?: number; artifact?: ArchiveArtifact; urls: string[] };
+            if (path === '/security/validation/identity') {
+                let phase = 'scope';
+                try {
+                    const scope = validationScope(validationConfig(this.env, data.code || ''));
+                    if (!scope) throw new Error('validation_scope_unavailable');
+                    phase = 'membership'; const member = validationMember(scope, data.accountId);
+                    phase = 'credential'; const credential = await this.hf.credential(data.connection, data.accountId);
+                    phase = 'ownership'; if (credential.subject !== member.subject) throw new HfRequiredError();
+                    phase = 'producer'; return json(await probePersonalProxy(credential.token));
+                } catch (error) {
+                    const kind = error instanceof TypeError ? 'TypeError' : error instanceof HfRequiredError ? 'HfRequiredError' : 'Error';
+                    return json({ probeFailed: true, phase, errorKind: kind, code: personalProxyFailure(error), gpuCalls: 0, billingVerified: false });
+                }
+            }
             const quality = generationQuality(data.quality);
             const config = validationConfig(this.env, data.code || ''), scope = validationScope(config);
             const campaign = parseValidationCampaign(this.env.LIVE_VALIDATION_CAMPAIGN);
@@ -94,12 +108,6 @@ export class ServiceDurableObject {
                     if (identity.personalIdentityVerified !== true || identity.proxySubjectMatches !== true) throw new Error('Persönliche ZeroGPU-Zuordnung nicht bestätigt.');
                 }
                 return json({ ready: true, gpuCalls: 0 });
-            }
-            if (path === '/security/validation/identity') {
-                if (!scope) throw new Error('validation_scope_unavailable');
-                const member = validationMember(scope, data.accountId), credential = await this.hf.credential(data.connection, data.accountId);
-                if (credential.subject !== member.subject) throw new HfRequiredError();
-                return json(await probePersonalProxy(credential.token));
             }
             if (path === '/security/validation/admit') {
                 if (!scope || !ledger || !data.admission || !data.participant || data.participant.accountId !== data.admission.accountId) throw new Error('Kein persönlicher Prüfauftrag.');

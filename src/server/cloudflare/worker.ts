@@ -66,7 +66,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             try {
                 const campaign = parseValidationCampaign(env.LIVE_VALIDATION_CAMPAIGN);
                 if (!account || !campaign?.members.some(m => m.accountId === account.id)) return json({}, { status: 403 });
-                return json(await service(env, '/security/validation/identity', { code: campaign.room, accountId: account.id, connection: account.hfConnectionId }));
+                const probe = await service(env, '/security/validation/identity', { code: campaign.room, accountId: account.id, connection: account.hfConnectionId });
+                return json(probe, { status: probe.probeFailed === true ? 503 : 200 });
             } catch (error) { return json({ error: 'Persönliche Proxy-Prüfung nicht verfügbar. Kein GPU-Auftrag gestartet.', code: personalProxyFailure(error) }, { status: 503 }); }
         }
         if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
