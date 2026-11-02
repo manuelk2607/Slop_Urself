@@ -14,7 +14,11 @@ export function readOnlyHfFetch(base: typeof fetch): typeof fetch {
         const request = new Request(input, init), url = new URL(request.url);
         if (url.origin !== 'https://huggingface.co' || url.username || url.password || url.search || url.hash
             || paths.get(url.pathname) !== request.method) throw new Error('HF preflight forbids this network operation');
-        return base(request, { redirect: 'error' });
+        const response = await base(request, { redirect: 'manual' });
+        if (response.status >= 300 && response.status < 400) {
+            await response.body?.cancel(); throw new Error('HF preflight forbids redirects');
+        }
+        return response;
     };
 }
 

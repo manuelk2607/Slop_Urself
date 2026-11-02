@@ -7,7 +7,7 @@ test('read-only proxy probes keep caller transport and never equate identity wit
     let bound = true;
     t.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
         assert.equal(url, 'https://manuel2607-slopurself-wan22-validated.hf.space/identity');
-        assert.equal(options.redirect, 'error'); assert.equal(options.method, undefined);
+        assert.equal(options.redirect, 'manual'); assert.equal(options.method, undefined);
         const headers = new Headers(options.headers);
         for (const name of ['authorization', 'x-hf-authorization', 'x-slop-hf-authorization']) assert.equal(headers.get(name), 'Bearer fixture-personal');
         return Response.json({ ...identity, proxySubjectMatches: bound, unrelatedSecret: 'never-return-this' });
@@ -25,6 +25,8 @@ test('proxy failures expose only finite safe codes, not provider bodies or crede
     await assert.rejects(probePersonalProxy('fixture'), error => personalProxyFailure(error) === 'personal_authorization_unavailable');
     reply = new Response('not JSON', { status: 502 });
     await assert.rejects(probePersonalProxy('fixture'), error => personalProxyFailure(error) === 'producer_http_502');
+    reply = new Response(null, { status: 302, headers: { location: 'https://untrusted.test/collect' } });
+    await assert.rejects(probePersonalProxy('fixture'), error => personalProxyFailure(error) === 'producer_redirect');
     for (const malformed of [{ ...identity, gpuCalls: 1 }, { ...identity, billingVerified: true },
         { ...identity, proxyClaimKeys: ['sub=private-value'] }, { ...identity, proxySubjectMatches: 'true' }, null]) {
         reply = Response.json(malformed);

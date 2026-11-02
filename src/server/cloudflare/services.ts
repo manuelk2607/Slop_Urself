@@ -91,12 +91,12 @@ export class ServiceDurableObject {
                 if (archiveBytes + await this.archiveReservations.pendingBytes() + 2 * MAX_VIDEO_BYTES > archiveLimit(config)) throw new Error('Für die zwei Prüfvideos fehlt freier Archivplatz; vorhandene Videos werden nicht gelöscht.');
                 const host = 'https://manuel2607-slopurself-wan22-validated.hf.space';
                 await verifyPinnedProvider(approvedProvider(config), host, async url => {
-                    const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
+                    const r = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(15_000) });
                     if (!r.ok) { await r.body?.cancel(); throw new Error('Producer noch nicht bereit.'); }
                     return boundedJson(r, 512 * 1024);
                 });
                 const health = new URL(scope.campaign.moderatorUrl); health.pathname = '/health';
-                const response = await fetch(health, { redirect: 'error', headers: { authorization: `Bearer ${config.MODERATION_SECRET}`, 'x-live-validation': scope.campaign.id }, signal: AbortSignal.timeout(10_000) });
+                const response = await fetch(health, { redirect: 'manual', headers: { authorization: `Bearer ${config.MODERATION_SECRET}`, 'x-live-validation': scope.campaign.id }, signal: AbortSignal.timeout(10_000) });
                 if (!response.ok) { await response.body?.cancel(); throw new Error('Prüfgateway nicht bereit.'); }
                 const readiness = await boundedJson(response, 8192) as Record<string, unknown>;
                 if (readiness.scopedReady !== true || readiness.validationScope !== scope.campaign.id || readiness.modelVersion !== config.MODERATION_MODEL_VERSION

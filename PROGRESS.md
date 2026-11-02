@@ -18,6 +18,20 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
 
 ## Tatsächlich erledigt
 
+- NACHGEWIESENE Ursache der bisherigen Producer-503:Cloudflare/workerd unterstützt
+  RequestInit.redirect='error' nicht. Bereits new Request wirft TypeError, bevor
+  irgendein HTTP-Aufruf erfolgt. Reales workerd-Konstruktionsexperiment bestätigt
+  dies ohne Netzwerk; offizielle Doku:https://developers.cloudflare.com/workers/runtime-apis/request/.
+  Alle4 entsprechenden src-Pfade aufmanual plus explizite Redirect-Ablehnung
+  umgestellt (Producer, Modell-/Moderator-Readiness, readOnlyHfFetch). Keine
+  Weiterleitung persönlicher Header freigegeben. Neuer CI-Integrationstest führt
+  tatsächliche Services-/Readiness-/Zwei-Konten-Fetches inworkerd aus, statt diese
+  Fetch-Konstruktion wegzumocken:positiver Pfad, fremder Proxy und302 bestanden.
+  Test-Transport serialisiert redirect am Node-Outboundhandler anders; deshalb
+  Sicherheitsverhalten über tatsächlich NICHT besuchten Redirect-Host geprüft.
+  248Units/Build bestanden. Headerverlust war nur Hypothese, nicht die Ursache.
+  Neue reale Probe nach Veröffentlichung dieses Fixes steht unmittelbar an.
+
 - Transport-Fortsetzung:Native Quelle/runtime jetztc82855772dc0b82b22e8188ae59731bb262e9a49,
   alle9 Dateien geprüft,20Gewichte extern verifiziert, initialization/RUNNING
   bestätigt, weiterhin preparation-only. Die ursprüngliche CF-Probe bleibt503;

@@ -4,7 +4,7 @@ import { HfPreflight, readOnlyHfFetch } from '../../src/auth/hf-preflight';
 
 test('HF preflight blocks inference, redirects, other hosts and unexpected methods before sending credentials', async () => {
     let calls = 0;
-    const safe = readOnlyHfFetch(async (_request, options) => { calls++; assert.equal(options?.redirect, 'error'); return Response.json({}); });
+    const safe = readOnlyHfFetch(async (_request, options) => { calls++; assert.equal(options?.redirect, 'manual'); return Response.json({}); });
     for (const url of ['https://huggingface.co/api/jobs', 'https://hf.co/api/whoami-v2', 'https://evil.test/oauth/token',
         'https://huggingface.co/api/whoami-v2?token=private', 'https://huggingface.co/api/whoami-v2#fragment', 'https://user:secret@huggingface.co/oauth/token']) {
         await assert.rejects(safe(url));

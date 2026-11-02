@@ -1,7 +1,7 @@
 import { boundedJson } from '../server/body';
 import { personalHfHeaders } from './personal-headers';
 
-const codes = new Set(['validation_scope_unavailable', 'producer_unreachable', 'proxy_response_invalid',
+const codes = new Set(['validation_scope_unavailable', 'producer_unreachable', 'producer_redirect', 'proxy_response_invalid',
     'personal_authorization_unavailable', 'personal_identity_unavailable', 'personal_proxy_context_unavailable',
     ...[401, 403, 404, 429, 500, 502, 503, 504].map(status => `producer_http_${status}`), 'producer_http_rejected']);
 export function personalProxyFailure(error: unknown) {
@@ -10,8 +10,11 @@ export function personalProxyFailure(error: unknown) {
 export async function probePersonalProxy(token: string) {
     const url = 'https://manuel2607-slopurself-wan22-validated.hf.space/identity';
     let response: Response;
-    try { response = await fetch(url, { redirect: 'error', headers: personalHfHeaders(url, token), signal: AbortSignal.timeout(20_000) }); }
+    // Workers rejects redirect:'error' before sending anything. Manual mode plus
+    // explicit rejection preserves the no-credential-forwarding boundary.
+    try { response = await fetch(url, { redirect: 'manual', headers: personalHfHeaders(url, token), signal: AbortSignal.timeout(20_000) }); }
     catch { throw new Error('producer_unreachable'); }
+    if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); throw new Error('producer_redirect'); }
     let result: Record<string, unknown>;
     try { result = await boundedJson(response, 8192) as Record<string, unknown>; }
     catch { throw new Error(response.ok ? 'proxy_response_invalid' : codes.has(`producer_http_${response.status}`) ? `producer_http_${response.status}` : 'producer_http_rejected'); }

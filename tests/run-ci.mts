@@ -51,6 +51,7 @@ try {
     await run(['tests/integration/cloudflare-runtime.mts']);
     await run(['tests/integration/hf-boundaries-runtime.mts']);
     await run(['tests/integration/live-validation-runtime.mts']);
+    await run(['tests/integration/personal-proxy-runtime.mts']);
     await run(['tests/integration/hf-runtime.mts']);
     await run(['tests/integration/password-runtime.mts']);
     cloudflare = await cloudflareRuntime({ port: 3311 });
