@@ -1,4 +1,5 @@
 # HTTP/encoder test environment only; no torch, model files or GPU allocation.
-gradio==6.31.0
+gradio[oauth,mcp]==6.31.0
+pydantic==2.12.5
 pillow==12.0.0
 imageio-ffmpeg==0.6.0

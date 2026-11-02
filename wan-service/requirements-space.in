@@ -9,5 +9,11 @@ sentencepiece==0.2.1
 ftfy==6.3.1
 pillow==12.0.0
 imageio-ffmpeg==0.6.0
-gradio==6.31.0
+# Match the extras and bootstrap requirements injected by the HF Gradio builder.
+# Their full transitive closure is hash-installed in pre-requirements.txt.
+gradio[oauth,mcp]==6.31.0
+# Gradio's MCP extra requires <=2.12.5; the former base-only lock chose 2.14.2.
+pydantic==2.12.5
+uvicorn==0.54.0
+websockets>=10.4
 spaces==0.51.3

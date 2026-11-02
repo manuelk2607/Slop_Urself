@@ -2,6 +2,7 @@
 import hashlib
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import types
@@ -11,6 +12,22 @@ import prepare_official as preparation
 
 
 class PreparationTests(unittest.TestCase):
+    def test_hf_bootstrap_exactly_matches_hash_preinstalled_pins_and_platform_extras(self):
+        root=Path(__file__).resolve().parent
+        lock=(root/'requirements-space.txt').read_text()
+        locked=[re.sub(r'\s*\\$','',line).replace(', ',',') for line in lock.splitlines()
+            if re.match(r'^[a-z][a-z0-9_.-]*(?:\[[a-z, ]+\])?==[^\s]+',line)]
+        bootstrap=[line for line in (root/'requirements-space-bootstrap.txt').read_text().splitlines() if line and not line.startswith('#')]
+        self.assertEqual(locked,bootstrap)
+        self.assertIn('gradio[mcp,oauth]==6.31.0',bootstrap)
+        self.assertIn('pydantic==2.12.5',bootstrap)
+        for name in ['spaces','torch','uvicorn','websockets']:
+            self.assertTrue(any(line.startswith(name+'==') for line in bootstrap))
+        self.assertNotIn('--hash', '\n'.join(bootstrap))
+        self.assertNotIn('git+',lock)
+        for block in re.split(r'\n(?=[a-z])',lock.strip()):
+            self.assertRegex(block,r'--hash=sha256:[a-f0-9]{64}')
+
     def test_startup_download_never_runs_on_local_machine_or_without_all_remote_flags(self):
         flags={'SPACE_ID':'Manuel2607/SlopUrself-Wan22-GPU-Test','SPACE_HOST':'fixture.hf.space',
             'WAN_ENABLE_MODEL_LOADING':'yes','WAN_PREPARE_PUBLIC_WEIGHTS':'yes','WAN_PREPARATION_ONLY':'yes'}

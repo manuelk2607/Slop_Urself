@@ -39,7 +39,7 @@ node --import tsx tools/deploy-wan-producer.mts --upload-paused-space --package 
 ```
 
 Der Uploader ist auf den bestehenden privaten pausierten Test-Space beschränkt,
-aktiviert kein Modell/GPU/Hardware und kopiert ausschließlich acht geprüfte
+aktiviert kein Modell/GPU/Hardware und kopiert ausschließlich neun geprüfte
 Dateien. Keine .env/Tokens/Gewichte gelangen in das Paket. HF_DEPLOY_TOKEN dient
 nur der Bereitstellung und wird niemals für persönliche Generierung verwendet.
 Vier alte reine Prototype-Helfer bleiben erhalten. Der neue Endpunkt importiert
@@ -72,6 +72,22 @@ WAN_SPACE_REVISION sowie gesonderte GPU-Freigabe. Private-Space-Zugriff des zwei
 Kontos muss geklärt sein; kein automatischer Wechsel zur öffentlichen Sichtbarkeit.
 `WAN_ENABLE_MODEL_LOADING` bleibt standardmäßig deaktiviert, `/config` behauptet
 dann keine geladene Modellidentität. Vorhandene Produktion bleibt blockiert.
+
+### Gemessener HF-Buildvertrag, 2.11.
+
+Der erste Remote-Build auf c865a604 scheiterte vor dem Modellstart: HF ergänzt
+`gradio[oauth,mcp]`, Torch, Uvicorn, Websockets und Spaces als Installationsargumente.
+Diese kollidierten mit dem Hashmodus der alten requirements.txt. Die zusätzlichen
+Gradio-Extras verlangen außerdem Pydantic<=2.12.5; die ursprüngliche Auflösung
+ohne Extras hatte2.14.2 gewählt. Jetzt enthält der vollständige Lock auch die
+Plattform-Extras, mit Pydantic2.12.5/Core2.41.5; sonstige bestehende Versionen
+blieben erhalten. HF installiert ihn als `pre-requirements.txt` mit Hashprüfung.
+Die anschließende `requirements.txt` enthält exakt dieselben Versionen ohne
+Hashes, damit die von HF angehängten Argumente bereits erfüllte Anforderungen
+vorfinden. Paketbau und Regression prüfen die Gleichheit beider Listen.
+Kein Runtime-pip, keine Modellalternative und keine Lockerung der Spiel-Sperre.
+HF-Basisimage/Builder bleiben eine externe Vertrauensgrenze; eine erfolgreiche
+Auflösung oder Installation attestiert nicht deren gesamte Lieferkette.
 
 ## Historischer Merge-Kern (nicht das offizielle Endpoint-Profil)
 

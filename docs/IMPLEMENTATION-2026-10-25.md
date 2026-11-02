@@ -856,3 +856,16 @@ Freispeicherprüfung mit Hashprüfung wiederverwendeter Dateien/Reserve, kein zw
 Blob-Cache. Vorbereitung registriert keine GPU-Funktion, auch nach Modellladen.
 19CPU-/HTTP-Tests und Tools-Typprüfung bestanden. Native Modell-/Hostprüfung noch
 ausstehend; dies ist keine fachliche Moderations-/Abrechnungsfreigabe.
+
+
+## 2.11.2026 – Tatsächlichen HF-Buildfehler korrigieren
+
+Space c865a604 blieb vor Modellstart im BUILD_ERROR: HF ergänzt Installationsargumente,
+die den strikten Hashmodus verletzen; ursprünglicher Gradio-Basislock enthielt
+außerdem nicht die vom Builder aktivierten oauth/mcp-Extras. Hash-Lock inklusive
+Extras/kompatiblem Pydantic als pre-requirements und exakt entsprechende Pins als
+requirements vorbereitet.20CPU-/HTTP- und38Moderationstests, Builds/Typprüfung
+bestanden; native Remote-Abnahme noch offen. Vier gezielte kostenlose synthetische
+Gemini-Aufrufe:benigner Kontrollfall erlaubt, drei Risiken zurückgehalten, davon
+zwei nur Provider-Hold ohne Kategoriennachweis. Keine fachliche Freigabe.
+Details:docs/audits/2026-11-02-preparation.json. Produktive KI-Sperre unverändert.

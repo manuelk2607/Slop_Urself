@@ -16,9 +16,16 @@ export function geminiVerdict(body: unknown, expectedVersion=GEMINI_MODEL): Asse
     if (!body || typeof body!=='object') throw new Error('gemini_schema');
     const r=body as {modelVersion?:unknown;promptFeedback?:unknown;candidates?:{finishReason?:unknown;content?:{role?:unknown;parts?:{text?:unknown;thought?:unknown}[]}}[]};
     if(r.modelVersion!==expectedVersion) throw new Error('gemini_model_drift');
+    // The documented prompt-level block has no candidates. Preserve the
+    // provider hold without inventing an age/consent/risk-category verdict.
+    const feedback=r.promptFeedback;
+    if(feedback&&typeof feedback==='object'&&!Array.isArray(feedback)
+        &&'blockReason' in feedback&&['SAFETY','BLOCKLIST','PROHIBITED_CONTENT','IMAGE_SAFETY'].includes(String(feedback.blockReason))
+        &&(r.candidates===undefined||(Array.isArray(r.candidates)&&r.candidates.length===0)))
+        return {decision:'review',reason:'provider_safety_hold'};
     // An explicit provider safety stop is a HOLD, never a fabricated schema
     // success or an assertion that a specific risk category was identified.
-    if(r.candidates?.length===1&&r.candidates[0].finishReason==='SAFETY') return {decision:'review',reason:'provider_safety_hold'};
+    if(r.candidates?.length===1&&['SAFETY','BLOCKLIST','PROHIBITED_CONTENT','SPII','IMAGE_SAFETY','IMAGE_PROHIBITED_CONTENT'].includes(String(r.candidates[0].finishReason))) return {decision:'review',reason:'provider_safety_hold'};
     if(r.promptFeedback || r.candidates?.length!==1 || r.candidates[0].finishReason!=='STOP'
         || r.candidates[0].content?.role!=='model' || r.candidates[0].content.parts?.length!==1
         || r.candidates[0].content.parts[0].thought || typeof r.candidates[0].content.parts[0].text!=='string') throw new Error('gemini_incomplete');

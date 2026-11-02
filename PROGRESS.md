@@ -1,4 +1,4 @@
-# Slop Urself – Fortsetzungspunkt, 1. November 2026
+# Slop Urself – Fortsetzungspunkt, 2. November 2026
 
 ## Auftrag / feste Grenzen
 
@@ -14,6 +14,28 @@ Space herunterladen und nativ initialisieren, keine Gewichte auf dem Mac,
 kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
 
 ## Aktuelles Paket – implementiert und lokal geprüft
+
+### Fortsetzung2.11.: konkreter Buildfehler / Moderationslücke
+
+- af70dba ist committed/gepusht. Vorbereitungs-Space c865a604 wurde tatsächlich
+  gestartet, scheiterte aber im HF-Builder vor Download/Modellinitialisierung:
+  zusätzlich injizierte Paketargumente ohne Hashes kollidierten mit dem Hashmodus.
+  Die Gradio-mcp-Extras benötigen außerdem Pydantic<=2.12.5. Kein GPU-Aufruf.
+  Fehler gezielt gelesen, anschließend fehlgeschlagenen Space wieder PAUSED.
+- Korrektur implementiert: Hash-Lock einschließlich oauth/mcp/Websockets,
+  Pydantic2.12.5/Core2.41.5; andere bestehende Pins unverändert. Voller Hash-Lock
+  als pre-requirements, exakte entsprechende Pins als requirements für den HF-
+  Bootstrap. Paketbau/Regression sichern Gleichheit; jetzt9Dateien im Paket.
+  Hashgeprüfte CPU-Abhängigkeiten tatsächlich installiert;20CPU-/HTTP-Tests,
+ 38Moderationstests, Builds und Tool-Typprüfung bestanden. Remote-Neubuild offen.
+- Gemini dokumentierte Prompt-/Candidate-Safety-Holds explizit behandelt,
+  niemals als semantischer Kategoriennachweis. Gezielt4Gratis-Aufrufe mit
+  synthetischem Bild:harmloser Kontrollfall erlaubt, Grafikmissbrauch blockiert,
+  Minderjährigen-/Override-Intent vom Provider zurückgehalten. Keine technische
+  Fehlantwort, aber2Holds ohne Kategorienbewertung; weiterhin nicht qualifiziert.
+  Privater Nachweis managed-free-515d2e72-5e24-4d53-bf42-2d7ca02bfcee.json.
+- Neu vorhandene ungetrackte Nebenprojekte.code-workspace ist fremde lokale
+  Nutzerarbeit; unverändert erhalten, nicht in dieses Paket aufnehmen.
 
 - Verwalteter Moderationsdienst: explizite Backends, feste Endpunkte/Modelle,
   striktes Antwortformat/Modellversionsprüfung, Bilddekodierung vor Übertragung,
@@ -87,7 +109,7 @@ kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
 
 ## Nächste Schritte (nicht neu auditieren)
 
-1. Neues Vorbereitungs-Paket nach bestandenem Build/Typprüfung committen/pushen,
+1. Korrigiertes Bootstrap-/Moderationspaket nach bestandenem Build/Typprüfung committen/pushen,
    privaten PAUSED-Space aktualisieren. Remote-SHA/hashgeprüft explizit mit
    `tools/prepare-wan-space.mts --prepare-free-remote-only --revision <HF-SHA>`
    starten. Nur unverändertes zero-a10g, keine Storage-/Hardware-/Sichtbarkeitsänderung.

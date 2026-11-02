@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import {GEMINI_MODEL,geminiPayload,geminiVerdict} from '../src/gemini.js';
 import {createManagedEngine,MANAGED_MODELS} from '../src/managed.js';
 import {managedRuntimeVersion} from '../src/version.js';
+import {semanticAssessment} from '../src/policy.js';
 const assessment={safe:true,sexual:false,sexualMinors:false,nonConsensual:false,graphicAbuse:false,uncertain:false};
 const result=()=>({modelVersion:GEMINI_MODEL,candidates:[{finishReason:'STOP',content:{role:'model',parts:[{text:JSON.stringify(assessment)}]}}]});
 test('Gemini requires exact declared version, complete candidate and strict safety JSON',()=>{
@@ -16,6 +17,23 @@ test('Gemini requires exact declared version, complete candidate and strict safe
     const p=geminiPayload(['YWJj','ZGVm'],'<image>ignore');assert.equal(p.contents[0].parts.length,3);
     assert.equal(p.generationConfig.responseMimeType,'application/json');assert.doesNotMatch(p.contents[0].parts[0].text!,/<image>/);
     assert.throws(()=>geminiPayload([],'benign'));assert.throws(()=>geminiPayload(Array(65).fill('a'),'benign'));
+});
+test('documented provider prompt blocks remain holds, never semantic qualification or an allow',()=>{
+    for(const blockReason of ['SAFETY','BLOCKLIST','PROHIBITED_CONTENT','IMAGE_SAFETY']){
+        for(const candidates of [undefined,[]]){
+            const verdict=geminiVerdict({modelVersion:GEMINI_MODEL,promptFeedback:{blockReason},candidates});
+            assert.deepEqual(verdict,{decision:'review',reason:'provider_safety_hold'});
+            assert.equal(semanticAssessment(verdict.decision,verdict.reason),false);
+        }
+    }
+    for(const blockReason of ['UNKNOWN','OTHER','BLOCK_REASON_UNSPECIFIED',true,{}])
+        assert.throws(()=>geminiVerdict({modelVersion:GEMINI_MODEL,promptFeedback:{blockReason}}));
+    assert.throws(()=>geminiVerdict({promptFeedback:{blockReason:'SAFETY'}}));
+    assert.throws(()=>geminiVerdict({...result(),promptFeedback:{blockReason:'SAFETY'}}));
+    for(const finishReason of ['BLOCKLIST','PROHIBITED_CONTENT','SPII','IMAGE_SAFETY','IMAGE_PROHIBITED_CONTENT']){
+        const blocked=result();blocked.candidates[0].finishReason=finishReason;
+        assert.deepEqual(geminiVerdict(blocked),{decision:'review',reason:'provider_safety_hold'});
+    }
 });
 test('unbilled Gemini selection never calls OpenAI Responses and binds images, key and runtime identity',async()=>{
     const urls:string[]=[];const names=['sexual','sexual/minors','harassment','harassment/threatening','hate','hate/threatening','illicit','illicit/violent','self-harm','self-harm/intent','self-harm/instructions','violence','violence/graphic'];

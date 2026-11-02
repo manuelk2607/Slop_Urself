@@ -8,7 +8,7 @@ const index=process.argv.indexOf('--package');if(index<0||!process.argv[index+1]
 const directory=resolve(process.argv[index+1]);if(!directory.startsWith(resolve('.local')+'/wan-producer-package-'))throw new Error('Expected a local deployment package');
 const env=dotenv.parse(await readFile('.env.local'));const token=env.HF_DEPLOY_TOKEN;
 if(!token)throw new Error('Set a fine-grained HF_DEPLOY_TOKEN scoped only to the designated Space in ignored .env.local. Never post it in chat.');
-const permitted=['app.py','official.py','jobs.py','producer.py','prepare_official.py','official-model-lock.json','requirements.txt','README.md'];
+const permitted=['app.py','official.py','jobs.py','producer.py','prepare_official.py','official-model-lock.json','requirements.txt','pre-requirements.txt','README.md'];
 // Reviewed original prototype helpers are preserved, never imported by the new
 // endpoint. In particular aoti.py's download helper must remain unreachable.
 // Any change to them or any other executable/build input requires fresh review.
@@ -29,7 +29,7 @@ async function api(path:string,init:RequestInit={}){
 const metadata=await(await api('')).json() as {sha:string;private?:boolean;runtime?:{stage?:string;hardware?:{current?:string|null;requested?:string|null}};siblings?:{rfilename:string}[]};
 if(metadata.runtime?.stage!=='PAUSED'||!/^[a-f0-9]{40}$/.test(metadata.sha))throw new Error('The designated Space must be paused; never resume or select hardware automatically.');
 if(metadata.private!==true||[metadata.runtime.hardware?.current,metadata.runtime.hardware?.requested].some(v=>v!=null&&!['cpu-basic','zero-a10g'].includes(v)))throw new Error('Only the existing private free/ZeroGPU Space may be updated.');
-if(metadata.siblings?.some(f=>(f.rfilename.endsWith('.py')&&!permitted.includes(f.rfilename)&&!Object.hasOwn(inactiveLegacy,f.rfilename))||f.rfilename==='pre-requirements.txt'||f.rfilename.startsWith('.env')))throw new Error('Review unlisted runtime/build inputs before uploading; nothing is deleted automatically.');
+if(metadata.siblings?.some(f=>(f.rfilename.endsWith('.py')&&!permitted.includes(f.rfilename)&&!Object.hasOwn(inactiveLegacy,f.rfilename))||f.rfilename.startsWith('.env')))throw new Error('Review unlisted runtime/build inputs before uploading; nothing is deleted automatically.');
 for(const file of metadata.siblings||[]){
     if(!Object.hasOwn(inactiveLegacy,file.rfilename))continue;
     const r=await fetch(`https://huggingface.co/spaces/${repo}/resolve/${metadata.sha}/${file.rfilename}`,{redirect:'error',headers:{authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000)});
