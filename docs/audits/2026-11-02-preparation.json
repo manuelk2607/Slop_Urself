@@ -49,18 +49,23 @@
     ],
     "startupError": "No @spaces.GPU function detected during startup",
     "registrationFix": "Register private native GPU function for platform startup; preparation explicitly rejects before all invocations and has no routed GPU reference",
-    "registrationFixPublished": false,
-    "preflightLimit": "statvfs free bytes describe the underlying filesystem, not a separately allocated paid volume; no storage API was called"
+    "registrationFixPublished": true,
+    "preflightLimit": "statvfs free bytes describe the underlying filesystem, not a separately allocated paid volume; no storage API was called",
+    "registrationFixSource": "a0f83281abd95b517cbd49d1b8bb38c7ebe6dd6b",
+    "nextActualStartupFailure": "Gradio Space-default SSR Node process occupies7860 before protected ASGI bind",
+    "sdkContractFix": "Pinned spaces0.51.3 public Gradio launch hook performs startup packing/report; empty loopback-only handshake with no GPU endpoint then close, protected mounted ASGI with SSR/MCP/history false",
+    "sdkContractFixPublished": false
   },
   "technical": {
-    "wanCpuHttpTests": 20,
+    "wanCpuHttpTests": 21,
     "moderationTests": 38,
     "buildsPassed": true,
     "toolsTypesPassed": true,
     "rootUnitTests": 237,
     "wanTestsLogSha256": "206cc43ea346fc2f28b929f43b052b987885e246b7a73218ed16439d8e9a9c2d",
     "moderationTestsLogSha256": "3d0f395def372c6db6ae82598372e72853306483b963f55eede84c2b8152cd67",
-    "rootUnitLogSha256": "9be2611057c737c5efcadaeaddb122effde65daf1d3ef22e985421336f89ebcf"
+    "rootUnitLogSha256": "9be2611057c737c5efcadaeaddb122effde65daf1d3ef22e985421336f89ebcf",
+    "realEmptyLocalGradioHandshakePassed": true
   },
   "freeContextDiagnostic": {
     "reportSha256": "e6809a65e99cffb8bec484aa6458d9a7e6166f51aac7818966d51d2289fb31da",
@@ -217,6 +222,15 @@
       "workerd/chromium",
       "workerd/webkit"
     ],
-    "newRemoteResultVerified": false
+    "newRemoteResultVerified": false,
+    "run41411256316": {
+      "safety-cpu": "success",
+      "chromium": "success",
+      "webkitLinux": "failure - native media fixture not intercepted"
+    },
+    "nextFix": "Full WebKit matrix on standard macos-15; strict HTTP200 fixture assertion retained, forbidden-host CSP control remains",
+    "repositoryVisibilityVerified": "PUBLIC",
+    "freeStandardRunnerDocumentation": "https://docs.github.com/en/billing/concepts/product-billing/github-actions",
+    "webkitPlatformDocumentation": "https://playwright.dev/docs/browsers"
   }
 }

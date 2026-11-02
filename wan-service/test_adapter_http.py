@@ -16,6 +16,19 @@ AVAILABLE=importlib.util.find_spec('gradio') is not None
 
 @unittest.skipUnless(AVAILABLE,'Install the pinned adapter CPU test dependencies; no models are required')
 class AdapterTests(unittest.TestCase):
+    def test_space_startup_uses_public_loopback_sdk_hook_without_a_generation_endpoint(self):
+        import app
+        import gradio as gr
+        with patch.dict(os.environ,{'SPACE_ID':'Manuel2607/SlopUrself-Wan22-GPU-Test'}),patch.object(gr.Blocks,'launch') as launch,patch.object(gr.Blocks,'close') as close:
+            app.initialize_space_runtime(gr)
+            launch.assert_called_once();close.assert_called_once()
+            settings=launch.call_args.kwargs
+            self.assertEqual(settings['server_name'],'127.0.0.1');self.assertGreater(settings['server_port'],0)
+            self.assertFalse(settings['share']);self.assertFalse(settings['ssr_mode'])
+            self.assertTrue(settings['prevent_thread_lock'])
+        with patch.dict(os.environ,{'SPACE_ID':''}),patch.object(gr.Blocks,'launch') as launch:
+            app.initialize_space_runtime(gr);launch.assert_not_called()
+
     def test_preparation_registers_for_zerogpu_startup_but_never_routes_or_calls_gpu(self):
         import app
         import prepare_official
@@ -45,6 +58,8 @@ class AdapterTests(unittest.TestCase):
             api,ready=app.build_app()
             with TestClient(api) as client:
                 self.assertFalse(ready);self.assertNotIn('slop_model',client.get('/config').json())
+                mounted=next(route.app for route in api.routes if hasattr(route,'app') and hasattr(route.app,'get_blocks'))
+                self.assertFalse(mounted.get_blocks().ssr_mode)
                 info=client.get('/gradio_api/info').json()['named_endpoints']['/generate_video']['parameters']
                 self.assertEqual([p['parameter_name'] for p in info],['input_image','prompt','seed','steps','duration_seconds','permit'])
                 self.assertEqual(client.get('/gradio_api/file=/etc/passwd').status_code,404)

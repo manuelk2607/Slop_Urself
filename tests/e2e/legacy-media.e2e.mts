@@ -23,10 +23,10 @@ try {
     await page.evaluate(src => {
         const video = document.createElement('video'); video.preload = 'metadata'; video.src = src; document.body.append(video);
     }, source);
-    await response;
-    // Native WebKit media responses can report status 0 for intercepted files.
-    // CSP is proved by the actual permitted request plus a blocked-host control,
-    // not by accepting status 0 as successful playback (tested separately).
+    assert.equal((await response).status(),200,'Allowed archive fixture must return actual HTTP200.');
+    // WebKit media tests run on macOS, as recommended by Playwright. Native
+    // Linux/GStreamer media requests did not honor this fixture interception;
+    // status0 or an unhandled request must never be accepted as playback.
     assert.ok(allowedRequests > 0, 'CSP must allow the HF media request to reach the fixture.');
     const allowedViolations = await page.evaluate(() => Reflect.get(window, '__mediaPolicyViolations') as { blockedURI: string; directive: string }[]);
     assert.equal(allowedViolations.filter(v => v.directive === 'media-src').length, 0);

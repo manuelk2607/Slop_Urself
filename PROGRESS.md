@@ -17,6 +17,19 @@ kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
 
 ### Fortsetzung2.11.: konkreter Buildfehler / Moderationslücke
 
+- Update:45a167a/0fd8fbb gepusht. Native Quellea0f83281 bestätigte erneut
+  alle20Gewichtshashes und Modellinitialisierung. Danach konkreter Portfehler:
+  Gradio-Space-SSR belegt7860. Pin-SDK0.51.3 zusätzlich geprüft:GPU-Startup-
+  Report/CUDA-Packing laufen über den öffentlichen Gradio-launch-Hook, nicht
+  über FastAPI-Mount allein. Korrektur:leerer Loopback-Handshake ohne GPU-
+  Endpoint, schließen, geschütztes ASGI mit SSR/MCP/Verlauf explizit aus.
+ 21CPU-/HTTP-Tests und echter leerer lokaler Handshake bestanden. Neuer Remote-
+  Start nach Commit erforderlich; kein unveränderter Wiederholungsversuch.
+- GitHub41411256316:safety-cpu und Chromium komplett bestanden, WebKit/Linux
+  missachtet native Medienabfanglogik. Strikte HTTP200-Prüfung bleibt erhalten.
+  Safari-nahe Tests auf Standard-macos-15 verlegt, Datenbanktests weiter Ubuntu.
+  Repository tatsächlich PUBLIC; Standardrunner laut GitHub kostenlos.
+
 - af70dba ist committed/gepusht. Vorbereitungs-Space c865a604 wurde tatsächlich
   gestartet, scheiterte aber im HF-Builder vor Download/Modellinitialisierung:
   zusätzlich injizierte Paketargumente ohne Hashes kollidierten mit dem Hashmodus.
@@ -118,8 +131,8 @@ kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
 
 ## Nächste Schritte (nicht neu auditieren)
 
-1. Geprüfte ZeroGPU-Registrierungskorrektur plus CI-FFmpeg-/CSP-Testkorrektur
-   committen/pushen. Fehlgeschlagene83fd8297 pausieren, neues Paket bereitstellen
+1. Geprüfte SDK-Start-/SSR-Korrektur und macOS-WebKit-CI committen/pushen.
+   Fehlgeschlagenea0f83281 pausieren, neues Paket bereitstellen
    und genehmigte externe Gratis-Vorbereitung genau einmal starten.
    Nur unverändertes zero-a10g, keine Storage-/Hardware-/Sichtbarkeitsänderung.
    Modellgewichte ausschließlich extern, bei Platzmangel abbrechen. Gefilterte

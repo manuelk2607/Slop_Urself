@@ -64,6 +64,25 @@ def claim_on_game(permit):
             raise ValueError('Durable producer claim was not acknowledged')
 
 
+def initialize_space_runtime(gr):
+    # The pinned spaces SDK runs CUDA packing/startup_report through its public
+    # Gradio launch hook. Mounting FastAPI alone does not run that hook. A short
+    # loopback-only, empty Gradio app performs SDK initialization, then closes;
+    # it exposes no generation function and never requests GPU allocation.
+    if os.environ.get('SPACE_ID')!='Manuel2607/SlopUrself-Wan22-GPU-Test':return
+    import socket
+    with socket.socket() as reservation:
+        reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
+    with gr.Blocks(analytics_enabled=False) as handshake:
+        gr.Markdown('Controlled runtime initialization; no generation endpoint.')
+    try:
+        handshake.launch(server_name='127.0.0.1',server_port=port,share=False,
+            prevent_thread_lock=True,ssr_mode=False,quiet=True,show_error=False)
+    finally:
+        handshake.close()
+    print(json.dumps({'event':'native_runtime_registered','gpuCalls':0}),flush=True)
+
+
 def build_app():
     import gradio as gr
     from fastapi import FastAPI, Request as HttpRequest, HTTPException
@@ -211,7 +230,12 @@ def build_app():
         if path is None or path.is_symlink() or path.parent.resolve()!=output_root.resolve() or not path.is_file():
             raise HTTPException(status_code=404)
         return FileResponse(path,media_type='video/mp4',headers={'cache-control':'no-store','x-content-type-options':'nosniff'})
-    return gr.mount_gradio_app(app,demo,path='/',max_file_size='10mb',blocked_paths=[str(output_root)]),gpu is not None
+    if model_loaded:initialize_space_runtime(gr)
+    app.state._controlled_gradio=demo
+    # Gradio's Space-default SSR Node server otherwise takes port7860 before
+    # our protected ASGI server. This is an API producer, not the public site.
+    return gr.mount_gradio_app(app,demo,path='/',max_file_size='10mb',blocked_paths=[str(output_root)],
+        ssr_mode=False,mcp_server=False,run_history=False),gpu is not None
 
 
 if __name__=='__main__':
@@ -219,4 +243,8 @@ if __name__=='__main__':
     app,ready=build_app()
     print(json.dumps({'event':'producer_start','modelReady':ready,'gpuCalls':0}))
     # Signed download URLs and request credentials must never enter access logs.
-    uvicorn.run(app,host='0.0.0.0',port=int(os.environ.get('PORT','7860')),access_log=False)
+    server=uvicorn.Server(uvicorn.Config(app,host='0.0.0.0',port=int(os.environ.get('PORT','7860')),access_log=False))
+    # The pinned spaces SDK reads blocks.server.config.port when isolating the
+    # queue's HTTP descriptors. Preserve that contract for the mounted app.
+    app.state._controlled_gradio.server=server
+    server.run()

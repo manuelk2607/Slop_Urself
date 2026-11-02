@@ -152,3 +152,16 @@ python3 producer.py
 There is no silently substituted cheaper model. A smaller official checkpoint
 would need an explicit different recipe, parameters, budget calibration and quality
 qualification. Existing production remains on its verified blocked release.
+
+
+### Zweiter nativer Startvertrag2.11.
+
+Registrierung allein genügt nicht:Das gepinnte spaces0.51.3 führt CUDA-Packing
+und Startup-Report über den öffentlichen Gradio-launch-Hook aus. Der Adapter
+startet dafür kurz eine leere Gradio-App ausschließlich auf Loopback, ohne
+Generierungs-Endpoint oder GPU-Aufruf, und schließt sie wieder. Die eigentliche
+geschützte FastAPI-App verwendet ausdrücklich kein Gradio-SSR (dies belegte im
+Space zuvor7860), keinen MCP-Server und keinen Browser-Run-Verlauf. Der Queue-
+Server verweist für die SDK-Dateideskriptor-Isolation auf den echten ASGI-Server.
+Lokaler leerer Handshake und21CPU-/HTTP-Tests bestanden; echtes ZeroGPU-Inferieren
+und persönliche Abrechnung sind damit weiterhin nicht nachgewiesen.
