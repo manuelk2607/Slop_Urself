@@ -14,7 +14,7 @@ import threading
 from official import MODEL_ID, MODEL_REVISION
 
 
-def validate_proxy_token(token,now=None,subject=None):
+def validate_proxy_token(token,now=None,subject=None,verified_username=None):
     """Reject SDK's explicit missing/error/IP-fallback cases, not a billing proof.
 
     HF verifies this opaque proxy token when scheduling. We cannot locally
@@ -33,7 +33,11 @@ def validate_proxy_token(token,now=None,subject=None):
         # for the caller. Unknown actor schemas stay unavailable for review.
         actors=[payload[k] for k in ('sub','userId','user_id') if k in payload]
         user=payload.get('user')
-        if isinstance(user,str):actors.append(user)
+        if isinstance(user,str):
+            # Only the caller name freshly returned by HF whoami may map a
+            # named user to its verified immutable ID. No supplied game name,
+            # owner/audience field or fuzzy match can establish this binding.
+            actors.append(subject if isinstance(verified_username,str) and user==verified_username else user)
         if isinstance(user,dict):actors.extend(user[k] for k in ('id','_id') if k in user)
         if not isinstance(subject,str) or not actors or any(v!=subject for v in actors):
             raise ValueError('Proxy context does not identify the verified personal subject')

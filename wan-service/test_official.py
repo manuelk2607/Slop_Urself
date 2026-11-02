@@ -43,6 +43,9 @@ class OfficialTests(unittest.TestCase):
         validate_proxy_token(token({'exp':int(time.time())+600}))
         validate_proxy_token(token({'user':{'id':'account-a'}}),subject='account-a')
         validate_proxy_token(token({'user':'account-a'}),subject='account-a')
+        validate_proxy_token(token({'user':'canonical-a'}),subject='account-a',verified_username='canonical-a')
+        for payload in [{'user':'canonical-b'},{'sub':'account-b','user':'canonical-a'},{'userId':'account-b','user':'canonical-a'}]:
+            with self.assertRaises(ValueError):validate_proxy_token(token(payload),subject='account-a',verified_username='canonical-a')
         for payload in [{},{'sub':'account-b'},{'exp':int(time.time())+600},{'spaceOwnerId':'account-a'},
             {'context':['account-a']},{'user':'account-b'},{'user':'unverified-username'},
             {'sub':'account-b','user':'account-a'},{'sub':'account-b','user':{'id':'account-a'}},{'exp':float('nan'),'sub':'account-a'}]:

@@ -44,7 +44,7 @@ def validation_subjects():
     return frozenset(subjects)
 
 
-def hf_subject(authorization):
+def hf_subject(authorization,*,include_username=False):
     if not isinstance(authorization,str) or not authorization.startswith('Bearer ') or len(authorization)>4096 or re.search(r'[\r\n]',authorization):
         raise ValueError('Personal HF authorization required')
     # No redirect can receive a personal credential. Never fall back to HF_TOKEN.
@@ -65,6 +65,11 @@ def hf_subject(authorization):
     if allowed and subject not in allowed:raise ValueError('This HF account is not part of the approved validation')
     if os.environ.get('SPACE_ID')==PUBLIC_VALIDATION_SPACE and os.environ.get('WAN_PREPARATION_ONLY')!='yes' and not validation_window():
         raise ValueError('The bounded validation window is not active')
+    if include_username:
+        name=identity.get('name')
+        if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',name):
+            raise ValueError('Canonical personal HF name unavailable')
+        return {'id':subject,'name':name}
     return subject
 
 
@@ -80,6 +85,21 @@ def input_path(value, upload_root):
     return path
 
 
+def verified_proxy_payload(request,subject):
+    token=request.headers.get('x-ip-token')
+    payload=validate_proxy_token(token)
+    try:
+        validate_proxy_token(token,subject=subject)
+        return payload,'subject-id'
+    except ValueError:
+        if not isinstance(payload.get('user'),str):raise
+        identity=hf_subject(personal_authorization(request),include_username=True)
+        if not isinstance(identity,dict) or identity.get('id')!=subject:
+            raise ValueError('Personal HF identity changed during proxy verification')
+        validate_proxy_token(token,subject=subject,verified_username=identity['name'])
+        return payload,'canonical-name'
+
+
 def require_personal_gpu_context(request,subject):
     # The pinned spaces SDK reads LocalContext.request, including when the GPU
     # function is nested. An injected request alone must not hide a lost context.
@@ -87,7 +107,7 @@ def require_personal_gpu_context(request,subject):
     actual=LocalContext.request.get(None)
     if actual is None or personal_authorization(actual)!=personal_authorization(request) or actual.headers.get('x-ip-token')!=request.headers.get('x-ip-token'):
         raise ValueError('Personal Gradio context missing or changed; no GPU request')
-    validate_proxy_token(actual.headers.get('x-ip-token'),subject=subject)
+    verified_proxy_payload(actual,subject)
 
 
 def claim_on_game(permit):
@@ -246,13 +266,14 @@ def build_app():
             subject=hf_subject(authorization)
             stage='personal_proxy_context_unavailable'
             payload=validate_proxy_token(request.headers.get('x-ip-token'))
-            try:validate_proxy_token(request.headers.get('x-ip-token'),subject=subject);bound=True
-            except ValueError:bound=False
+            try:_,binding=verified_proxy_payload(request,subject);bound=True
+            except Exception:bound=False;binding='unverified'
             keys=[k for k in payload if re.fullmatch(r'[A-Za-z0-9_]{1,64}',k)][:20]
             user=payload.get('user')
             print(json.dumps({'event':'identity_preflight','proxySubjectMatches':bound,'proxyClaimKeys':keys,
                 'proxyUserScalarMatchesSubject':isinstance(user,str) and user==subject,
                 'proxyUserType':'string' if isinstance(user,str) else 'object' if isinstance(user,dict) else 'other',
+                'proxyBinding':binding,
                 **received,'gpuCalls':0}),flush=True)
             return JSONResponse({'personalIdentityVerified':True,'proxySubjectMatches':bound,'proxyClaimKeys':keys,
                 'billingVerified':False,'gpuCalls':0},headers={'cache-control':'no-store'})

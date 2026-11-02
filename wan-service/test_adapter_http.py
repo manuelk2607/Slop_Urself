@@ -16,6 +16,20 @@ AVAILABLE=importlib.util.find_spec('gradio') is not None
 
 @unittest.skipUnless(AVAILABLE,'Install the pinned adapter CPU test dependencies; no models are required')
 class AdapterTests(unittest.TestCase):
+    def test_canonical_proxy_user_must_resolve_to_the_same_fresh_hf_identity(self):
+        import app,base64,json
+        import gradio as gr
+        def proxy(user):return 'e30.'+base64.urlsafe_b64encode(json.dumps({'exp':int(time.time())+600,'user':user}).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
+        request=gr.Request(headers={'x-slop-hf-authorization':'Bearer fixture-only','x-ip-token':proxy('canonical-a')})
+        with patch.object(app,'hf_subject',return_value={'id':'account-a','name':'canonical-a'}) as identity:
+            self.assertEqual(app.verified_proxy_payload(request,'account-a')[1],'canonical-name')
+            identity.assert_called_with('Bearer fixture-only',include_username=True)
+            with self.assertRaises(ValueError):app.verified_proxy_payload(gr.Request(headers={**request.headers,'x-ip-token':proxy('canonical-b')}),'account-a')
+        with patch.object(app,'hf_subject',return_value={'id':'foreign-account','name':'canonical-a'}):
+            with self.assertRaises(ValueError):app.verified_proxy_payload(request,'account-a')
+        with patch.object(app,'hf_subject',side_effect=ValueError('HF unavailable')):
+            with self.assertRaises(ValueError):app.verified_proxy_payload(request,'account-a')
+
     def test_read_only_identity_diagnostics_and_application_header_do_not_weaken_proxy_binding(self):
         import app,base64,json,io
         from contextlib import redirect_stdout
