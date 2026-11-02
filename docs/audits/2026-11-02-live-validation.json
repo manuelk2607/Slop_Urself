@@ -183,6 +183,12 @@
     "pushedBranch": "origin/codex/audit-remediation",
     "remoteHeadVerified": true,
     "ciRun": 41456053185,
-    "ciStatusAtCheckpoint": "in_progress"
+    "ciStatusAtCheckpoint": "success",
+    "ciJobs": [
+      "safety-cpu",
+      "test (chromium)",
+      "webkit-macos"
+    ],
+    "uploadGateAndEvidenceCommit": "3131acf"
   }
 }

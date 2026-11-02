@@ -129,9 +129,10 @@ Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
   Native Initialisierung trotzdem erfolgreich; kein Beleg für funktionierende
   Inferenz. Kein kostenpflichtiger Speicher, keine Gewichte auf dem Mac.
 - Anwendung auf Cloudflare unverändert; /api/config erneut200, KI blockiert,
-  HF-Pflicht aktiv, kein Mock,0 KI-Runden. GitHub41456053185 zum neuen Commit
-  beim letzten Abruf in_progress; vorherige vollständige Erfolgsmatrix bleibt
-  historische Referenz, nicht als neue CI-Abnahme ausgeben.
+  HF-Pflicht aktiv, kein Mock,0 KI-Runden. GitHub41456053185 zu e0f5ccf ist jetzt
+  vollständig SUCCESS:safety-cpu, Chromium und natives WebKit/macOS. Zusätzliche
+  Produktions-Gate-Vorprüfung im Uploader strikt typgeprüft; Nachweis-/Werkzeug-
+  Commit3131acf ebenfalls gepusht. Keine neue CF-Anwendung veröffentlicht.
 
 ## Weiterhin offen / nächster konkreter Schritt
 
