@@ -28,6 +28,10 @@ if(evidence.qualified!==false||evidence.defaultModelLoading!==false||!/^[a-f0-9]
     ||Object.keys(evidence.files).sort().join()!==[...files].sort().join())throw Error('Invalid package scope');
 const content:Record<string,Buffer>={};
 for(const file of files){const data=await readFile(resolve(directory,file));if(data.length>512*1024||createHash('sha256').update(data).digest('hex')!==evidence.files[file])throw Error('Package changed');content[file]=data;}
+const game=await fetch('https://slopurself.maki26.workers.dev/api/config',{redirect:'error',signal:AbortSignal.timeout(15_000)});
+if(!game.ok)throw Error('Production safety gate unavailable');
+const gameConfig=await game.json() as {generationBlocked?:boolean;mockAi?:boolean;hfRequired?:boolean};
+if(gameConfig.generationBlocked!==true||gameConfig.mockAi!==false||gameConfig.hfRequired!==true)throw Error('Global release must remain blocked with personal HF identities required');
 // Actual immutable public HF subject IDs; names alone never authorize inference.
 // The production caller must still prove the same ID with its own HF token.
 const subjects:string[]=[];

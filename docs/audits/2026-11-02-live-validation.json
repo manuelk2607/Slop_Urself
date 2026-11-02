@@ -93,9 +93,69 @@
     "creationHttp": 200,
     "requestedHardware": "zero-a10g",
     "privateOriginalUnchanged": true,
-    "codeUploaded": false,
-    "modelLoading": false,
-    "preparationOnly": true
+    "codeUploaded": true,
+    "modelLoading": true,
+    "preparationOnly": true,
+    "sourceCommit": "e0f5ccf9d5398599a6607aa454447f8bcd367b35",
+    "sourceRevision": "5f2ee9d8e2aeea6a5f9b3dc1344159c6d8291763",
+    "runtimeSourceRevision": "5f2ee9d8e2aeea6a5f9b3dc1344159c6d8291763",
+    "stage": "RUNNING",
+    "verifiedFiles": 9,
+    "modelInitialized": true,
+    "localWeightDownloads": 0,
+    "nativeEvents": [
+      {
+        "event": "public_snapshot_preflight",
+        "requiredBytes": 34201418400,
+        "verifiedExistingBytes": 0,
+        "freeBytes": 2452325519360,
+        "reserveBytes": 2147483648,
+        "gpuCalls": 0
+      },
+      {
+        "event": "public_snapshot_verified",
+        "files": 20,
+        "bytes": 34201418400,
+        "revision": "b8fff7315c768468a5333511427288870b2e9635",
+        "gpuCalls": 0
+      },
+      {
+        "event": "native_model_initializing",
+        "revision": "b8fff7315c768468a5333511427288870b2e9635",
+        "gpuCalls": 0
+      },
+      {
+        "event": "native_model_initialized",
+        "revision": "b8fff7315c768468a5333511427288870b2e9635",
+        "preparationOnly": true,
+        "gpuCalls": 0
+      },
+      {
+        "event": "native_runtime_registered",
+        "gpuCalls": 0
+      },
+      {
+        "event": "producer_start",
+        "modelReady": false,
+        "gpuCalls": 0
+      }
+    ],
+    "health": {
+      "httpStatus": 200,
+      "modelLoaded": true,
+      "preparationOnly": true,
+      "generationAvailable": false
+    },
+    "configAdvertisesReadyModel": false,
+    "genericFileRouteStatus": 404,
+    "invalidPrivateVideoStatus": 404,
+    "hardware": {
+      "current": "zero-a10g",
+      "requested": "zero-a10g"
+    },
+    "warnings": [
+      "Base image includes unused datasets5.0.0 with incompatible fsspec/huggingface-hub constraints. Native hash verification and initialization passed; actual inference remains untested."
+    ]
   },
   "checks": {
     "nativeCpuHttp": 23,
@@ -107,5 +167,22 @@
     "Drawings and abstract intentions do not prove unseen image/age/consent moderation quality.",
     "Aggregate account quota snapshots are not per-job billing receipts.",
     "No GPU job, output-quality result, full real party or general AI release yet."
-  ]
+  ],
+  "publicApplication": {
+    "deploymentChanged": false,
+    "workerVersion": "9dd44862-e6cc-4117-af51-0fe330d9c616",
+    "lastVerifiedSource": "6deff11c5cf7f25bb8f15e2a1eed02aa80171b2a",
+    "configHttpStatus": 200,
+    "generationBlocked": true,
+    "mockAi": false,
+    "hfRequired": true,
+    "aiRoundLimit": 0
+  },
+  "git": {
+    "implementationCommit": "e0f5ccf9d5398599a6607aa454447f8bcd367b35",
+    "pushedBranch": "origin/codex/audit-remediation",
+    "remoteHeadVerified": true,
+    "ciRun": 41456053185,
+    "ciStatusAtCheckpoint": "in_progress"
+  }
 }

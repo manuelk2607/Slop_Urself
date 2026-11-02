@@ -16,6 +16,12 @@ M01/M03:öffentliche saubere ZeroGPU-Testkopie ausdrücklich genehmigt/erstellt,
 private Historie unverändert. Native öffentliche Kopie auf genau zwei echte
 HF-Subjekte begrenzt; fail-closed/Identitätsregressionen in23 CPU-/HTTP-Tests.
 Strikte Typprüfung der neuen Moderations-/öffentlichen Uploadwerkzeuge bestanden.
+Commit e0f5ccf gepusht; öffentliche Quelle/runtime5f2ee9d tatsächlich RUNNING auf
+kostenlosem zero-a10g, alle9 Quelldateien und20 Modellartefakte geprüft, native
+Initialisierung erfolgreich. /healthz200 bestätigt preparationOnly/keine
+Generierung; generische/private ungültige Dateizugriffe404. Private Originalkopie
+unverändert authentifiziert nachgeprüft. Keine neuen CF-Anwendungsänderungen,
+öffentliche KI-Sperre200 erneut bestätigt. Keine tatsächliche Inferenz/Abrechnung.
 Echte Produktionsanmeldung, Zwei-Spieler-Lobby, Reload/Wiederverbindung erneut
 positiv; Browserverbindung danach verloren, Ursache nicht belegt. Persönliche
 Abrechnung und vollständige reale Videopartie weiterhin offen. Aktuellen nächsten

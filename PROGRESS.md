@@ -115,16 +115,32 @@ Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
   und exaktem Testpaar; separater Whitelist-/Hash-/Parent-Commit-geprüfter öffentlicher
   Uploader. Alter privater Uploader und dessen Pausen-/Sichtbarkeitsregeln bleiben
   unverändert. Öffentliche Kopie bleibt preparationOnly, keine Owner-Inferenztokens.
-  Remote-Vorbereitung/Upload noch nicht ausgeführt; keine neue CF-Veröffentlichung.
+  Commit e0f5ccf9d5398599a6607aa454447f8bcd367b35 auf
+  origin/codex/audit-remediation gepusht, Remote-Hash unabhängig bestätigt.
+- Öffentliche Kopie jetzt tatsächlich veröffentlicht:HF-Quelle/runtime beide
+  5f2ee9d8e2aeea6a5f9b3dc1344159c6d8291763, RUNNING, current/requested zero-a10g.
+  Alle9 öffentlichen Paketdateien unabhängig gehasht. Native Remote-Protokolle:
+  20Dateien/34.201.418.400Bytes hashgeprüft, Modellinitialisierung/SDK-Startup
+  bestanden, jeweils gpuCalls=0. Tatsächliches /healthz200:modelLoaded=true,
+  preparationOnly=true,generationAvailable=false. /config meldet kein bereites
+  slop_model, generische Dateiroute/ungültiges Privatvideo404. Bestehende private
+  Kopie authentifiziert geprüft:weiterhin privat,Quelle3172be7 unverändert.
+- Basisimage warnt über das ungenutzte datasets5.0.0 versus fsspec/HF-Hub-Pins.
+  Native Initialisierung trotzdem erfolgreich; kein Beleg für funktionierende
+  Inferenz. Kein kostenpflichtiger Speicher, keine Gewichte auf dem Mac.
+- Anwendung auf Cloudflare unverändert; /api/config erneut200, KI blockiert,
+  HF-Pflicht aktiv, kein Mock,0 KI-Runden. GitHub41456053185 zum neuen Commit
+  beim letzten Abruf in_progress; vorherige vollständige Erfolgsmatrix bleibt
+  historische Referenz, nicht als neue CI-Abnahme ausgeben.
 
 ## Weiterhin offen / nächster konkreter Schritt
 
 1. Die dargestellten zwei Motive manuell bestätigen lassen. Ohne diese Antwort
    keine konkrete Betreiberfreigabe behaupten oder Testkampagne aktivieren.
-2. Geprüfte native Änderungen committen/pushen, sauberes Paket in die genehmigte
-   öffentliche Gratis-Kopie übertragen und ausschließlich extern vorbereiten.
-   Herkunft/source/runtime-Revision, Modellhashes und Kostenhardware abgleichen.
-   Keine Gewichte auf den Mac laden, keine private Historie veröffentlichen.
+2. Native Veröffentlichung/Vorbereitung ist abgeschlossen (oben). Nicht erneut
+   hochladen, Gewichte laden oder neue Anmeldungen anfordern. Nächster technischer
+   Schritt ist der folgende streng begrenzte Spiel-/Moderations-Prüfpfad; der
+   vorbereitete Producer bleibt bis zu dessen Abnahme in preparationOnly.
 3. Eng begrenzten, persistenten Zwei-Fälle-Testpfad implementieren/prüfen, der
    genau genehmigte Bilder/Prompts/Konten und maximal einen Auftrag je Konto
    zulässt, ohne die globale KI-Sperre oder fachliche Moderation zu umgehen.
@@ -151,7 +167,8 @@ Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
 
 ## Nachweise / Fortsetzung
 
-docs/audits/2026-11-02-preparation.json enthält den aktuellen gefilterten Nachweis;
+docs/audits/2026-11-02-live-validation.json enthält die neuesten Live-Teilnachweise;
+docs/audits/2026-11-02-preparation.json dokumentiert den vorherigen Vorbereitungsstand;
 docs/audits/2026-11-01-managed-official.json und2026-11-01-release.json sind
 historische Messstände. Private ignorierte Einzelberichte und Logs liegen in
 .local/audit-tests (keine Tokens/Originalantworten). PROGRESS-Vorgänger:
