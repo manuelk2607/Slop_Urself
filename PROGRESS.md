@@ -11,7 +11,7 @@ Abrechnungskonto. Keine Freigabe echter Spielerbilder an neue Moderationsdienste
 Keine echten GPU-Aufträge freigegeben oder gestartet. Keine Produktivdaten löschen.
 Neu freigegeben:34,2GB ausschließlich im bestehenden kostenlosen HF-ZeroGPU-
 Space herunterladen und nativ initialisieren, keine Gewichte auf dem Mac,
-kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
+kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren. Registrierung allein ist keine Zuteilung.
 
 ## Aktuelles Paket – implementiert und lokal geprüft
 
@@ -22,12 +22,15 @@ kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
   zusätzlich injizierte Paketargumente ohne Hashes kollidierten mit dem Hashmodus.
   Die Gradio-mcp-Extras benötigen außerdem Pydantic<=2.12.5. Kein GPU-Aufruf.
   Fehler gezielt gelesen, anschließend fehlgeschlagenen Space wieder PAUSED.
+  Korrektur45a167a committed/gepusht; HF-Quelle83fd829720a06dc91e5395248ac8c1090df6b94c
+  veröffentlicht und genehmigte Gratis-Vorbereitung neu gestartet:BUILDING.
 - Korrektur implementiert: Hash-Lock einschließlich oauth/mcp/Websockets,
   Pydantic2.12.5/Core2.41.5; andere bestehende Pins unverändert. Voller Hash-Lock
   als pre-requirements, exakte entsprechende Pins als requirements für den HF-
   Bootstrap. Paketbau/Regression sichern Gleichheit; jetzt9Dateien im Paket.
   Hashgeprüfte CPU-Abhängigkeiten tatsächlich installiert;20CPU-/HTTP-Tests,
- 38Moderationstests, Builds und Tool-Typprüfung bestanden. Remote-Neubuild offen.
+ 38Moderationstests,237App-Units, Builds und Tool-Typprüfung bestanden.
+  Remote-Neubuild läuft; Speicher-/Modellinitialisierung noch nicht bestätigt.
 - Gemini dokumentierte Prompt-/Candidate-Safety-Holds explizit behandelt,
   niemals als semantischer Kategoriennachweis. Gezielt4Gratis-Aufrufe mit
   synthetischem Bild:harmloser Kontrollfall erlaubt, Grafikmissbrauch blockiert,
@@ -76,9 +79,9 @@ kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
 
 ## Verifikation / Veröffentlichungsstand
 
-- Moderationsdienst: Build/37 technische Tests bestanden, einschließlich präziser
+- Moderationsdienst: Build/38 technische Tests bestanden, einschließlich präziser
   Trennung von Provider-Safety-Hold und semantischer Risikoeinstufung.
-- Wan:15 CPU-/HTTP-/Krypto-/Replay-/Range-/Dateischutztests bestanden; Cross-Runtime-
+- Wan:20 CPU-/HTTP-/Krypto-/Replay-/Range-/Dateischutztests bestanden; Cross-Runtime-
   HMAC Node→Python und sechs neue App-/Worker-/DO-Regressionen bestanden.
 - Gesamtmatrix vollständig bestanden (Exit0):237 Units/98 PASS-Prüfschritte,
   Chromium/WebKit, Node/workerd, klassische Mehrspielerpartien inklusive
@@ -94,29 +97,36 @@ kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren.
   robots/sitemap200, Metadaten/CSP, private APIs401, fremde Herkunft403,
   Producer-Claim503 und offengelegte KI-Sperre. Keine Schreib-/Inferenzaufrufe.
   Kein aktueller angemeldeter positiver Produktionstest; lokale Matrix ist simuliert.
-- Privater pausierter HF-Space veröffentlicht und acht Quelldateien unabhängig
-  gehasht:4cd4df2894e8c1c8ad6c50080fd38097a8856647. ZeroGPU unverändert,
-  Modellladen=no bestätigt, kein Gewichts-/GPU-Aufruf. Scoped Deploy-Zugang nur
-  lokal/HF, nie im Repository. Neue Vorbereitungsversion folgt gesondert.
+- Privater HF-Space aktuell83fd829720a06dc91e5395248ac8c1090df6b94c,
+  neun Quelldateien unabhängig gehasht, kostenloses zero-a10g unverändert.
+  34.201.418.400Bytes vollständig extern geladen,20SHA256 geprüft,
+  native Initialisierung tatsächlich bestätigt. Danach RUNTIME_ERROR:
+  HF verlangt eine registrierte @spaces.GPU-Funktion beim Start. Health503,
+  noch kein betriebsbereiter Producer. Korrektur hält registrierte private
+  Funktion von allen Vorbereitungspfaden getrennt und weist Eingaben vor Aufruf ab.
+  Scoped Deploy-Zugang nur lokal/HF, nie im Repository. Historische CPU/unready-
+  Quelle4cd4df2 wurde vor Aktivierung getrennt geprüft.
 - Externer Vorbereitungsmodus implementiert und19CPU-/HTTP-Tests bestanden:
   lokaler/ohne Flags erfolgender Download verweigert; echte freie Bytes vor
   Download, Hashprüfung bestehender Dateien, keine doppelte Blob-/Xet-Ablage;
-  preparation-only registriert auch nach Modellinitialisierung keine GPU-Funktion.
-  Native Installation/Speicher/Modell noch nicht nachgewiesen. Kein Freigabeersatz.
+  preparation-only ruft auch nach Modellinitialisierung keine GPU-Funktion auf.
+  Native Installation/Download/Hashes/Modellinitialisierung inzwischen bestätigt;
+  vollständiger HTTP-Start nach ZeroGPU-Registrierungskorrektur noch offen. Kein Freigabeersatz.
 - Persönliche Zwei-HF-Konten und Produktionslobby am30.10. bereits bestanden,
   je300/300 unverändert, Verbindungen danach getrennt. Nicht erneut anmelden,
   solange kein tatsächlich ausführbarer freigegebener GPU-Test ansteht.
 
 ## Nächste Schritte (nicht neu auditieren)
 
-1. Korrigiertes Bootstrap-/Moderationspaket nach bestandenem Build/Typprüfung committen/pushen,
-   privaten PAUSED-Space aktualisieren. Remote-SHA/hashgeprüft explizit mit
-   `tools/prepare-wan-space.mts --prepare-free-remote-only --revision <HF-SHA>`
-   starten. Nur unverändertes zero-a10g, keine Storage-/Hardware-/Sichtbarkeitsänderung.
+1. Geprüfte ZeroGPU-Registrierungskorrektur plus CI-FFmpeg-/CSP-Testkorrektur
+   committen/pushen. Fehlgeschlagene83fd8297 pausieren, neues Paket bereitstellen
+   und genehmigte externe Gratis-Vorbereitung genau einmal starten.
+   Nur unverändertes zero-a10g, keine Storage-/Hardware-/Sichtbarkeitsänderung.
    Modellgewichte ausschließlich extern, bei Platzmangel abbrechen. Gefilterte
    Build-/Prüfereignisse und /healthz lesen; nicht blind neu starten.
 2. Native Ergebnisse dokumentieren und erforderlichenfalls gezielt reparieren.
-   Cloudflare-Code unverändert; kein erneutes App-Deployment für reine Space-/Docs-
+   Cloudflare-Code unverändert; Produktions-Smoke2.11. wieder bestanden,
+   Release6c6d1e83 unverändert. Kein erneutes App-Deployment für reine Space-/Docs-
    Änderungen erforderlich. Aktuelle Produktionssperre beibehalten.
 3. Verbleibende Moderationsrisikogruppen/kuratierten sicheren Korpus und fachliche
    Betreiberabnahme vervollständigen; aktuellen Bericht nicht als qualifiziert
@@ -139,4 +149,5 @@ moderation-service/README.md, wan-service/README.md. Älterer vollständiger Sta
 docs/progress/2026-11-01-before-managed-official.md. Noch offene P1/P2/P3 aus
 vorigem Stand bleiben erhalten; dieses Paket behauptet nicht deren Gesamtabnahme.
 
-Gefilterter aktueller Nachweis: docs/audits/2026-11-01-managed-official.json.
+Gefilterte Nachweise: docs/audits/2026-11-01-managed-official.json und
+docs/audits/2026-11-02-preparation.json.

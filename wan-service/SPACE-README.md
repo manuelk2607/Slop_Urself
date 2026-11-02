@@ -22,7 +22,10 @@ An explicitly approved remote-only preparation uses WAN_PREPARATION_ONLY=yes,
 WAN_PREPARE_PUBLIC_WEIGHTS=yes and WAN_ENABLE_MODEL_LOADING=yes. It checks the
 designated SPACE_ID and free disk (34.2GB plus reserve), downloads only the fixed
 public snapshot into this Space's ephemeral filesystem, verifies every hash and
-initializes the native pipeline. It never decorates/registers a GPU function.
+initializes the native pipeline. ZeroGPU requires a registered GPU function at
+startup; preparation keeps that private function disconnected from every API
+and queue path and rejects generation before any invocation. Registration alone
+does not request GPU allocation.
 No model weights are downloaded onto the operator's computer. No storage bucket
 or paid hardware is requested. Insufficient disk fails before the download.
 GET /healthz reports initialization separately from generation availability.

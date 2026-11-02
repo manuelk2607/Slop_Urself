@@ -8,13 +8,59 @@
     "failure": "HF-injected CLI requirements are incompatible with per-requirement hash mode; base-only Gradio lock also omitted MCP/OAuth extras",
     "weightDownloadReached": false,
     "fix": "Full hash lock as pre-requirements; exact matching bootstrap pins, Gradio MCP/OAuth included, compatible Pydantic2.12.5",
-    "remoteFixVerified": false
+    "remoteFixVerified": true,
+    "stagedSource": {
+      "sourceRevision": "83fd829720a06dc91e5395248ac8c1090df6b94c",
+      "applicationCommit": "45a167a0f74e1641419bf6dc729770b5f382ea81",
+      "sourceFilesVerified": 9,
+      "qualified": false,
+      "inferenceCalls": 0
+    },
+    "preparationOnly": true,
+    "currentStage": "RUNTIME_ERROR",
+    "remoteInstallationProgress": "Full pinned snapshot downloaded, all 20 hashes verified, native model initialized; HTTP startup blocked by ZeroGPU requiring a registered GPU function",
+    "nativeEvents": [
+      {
+        "event": "public_snapshot_preflight",
+        "requiredBytes": 34201418400,
+        "verifiedExistingBytes": 0,
+        "freeBytes": 2556400431104,
+        "reserveBytes": 2147483648,
+        "gpuCalls": 0
+      },
+      {
+        "event": "public_snapshot_verified",
+        "files": 20,
+        "bytes": 34201418400,
+        "revision": "b8fff7315c768468a5333511427288870b2e9635",
+        "gpuCalls": 0
+      },
+      {
+        "event": "native_model_initializing",
+        "revision": "b8fff7315c768468a5333511427288870b2e9635",
+        "gpuCalls": 0
+      },
+      {
+        "event": "native_model_initialized",
+        "revision": "b8fff7315c768468a5333511427288870b2e9635",
+        "preparationOnly": true,
+        "gpuCalls": 0
+      }
+    ],
+    "startupError": "No @spaces.GPU function detected during startup",
+    "registrationFix": "Register private native GPU function for platform startup; preparation explicitly rejects before all invocations and has no routed GPU reference",
+    "registrationFixPublished": false,
+    "preflightLimit": "statvfs free bytes describe the underlying filesystem, not a separately allocated paid volume; no storage API was called"
   },
   "technical": {
     "wanCpuHttpTests": 20,
     "moderationTests": 38,
     "buildsPassed": true,
-    "toolsTypesPassed": true
+    "toolsTypesPassed": true,
+    "rootUnitTests": 237,
+    "wanTestsLogSha256": "206cc43ea346fc2f28b929f43b052b987885e246b7a73218ed16439d8e9a9c2d",
+    "moderationTestsLogSha256": "3d0f395def372c6db6ae82598372e72853306483b963f55eede84c2b8152cd67",
+    "rootUnitLogSha256": "9be2611057c737c5efcadaeaddb122effde65daf1d3ef22e985421336f89ebcf"
   },
   "freeContextDiagnostic": {
     "reportSha256": "e6809a65e99cffb8bec484aa6458d9a7e6166f51aac7818966d51d2289fb31da",
@@ -75,9 +121,102 @@
     "limits": "Synthetic calibration image and abstract intent only. Provider holds do not demonstrate semantic recognition, visual age or consent understanding."
   },
   "externalLimits": [
-    "Native Wan installation/download/initialization not yet verified",
+    "HTTP startup after registration fix not yet verified; native weights/hash/initialization were observed",
     "ZeroGPU debit not tested; no GPU consent",
     "Moderation not qualified for player media",
     "HF builder/base image supply chain not independently attested"
-  ]
+  ],
+  "sourceCommit": "45a167a0f74e1641419bf6dc729770b5f382ea81",
+  "branch": "codex/audit-remediation",
+  "sourcePushed": true,
+  "productionSmoke": {
+    "release": "6c6d1e83-10cf-41a5-b876-306245af4f52",
+    "origin": "https://slopurself.maki26.workers.dev",
+    "probes": [
+      {
+        "path": "/api/release",
+        "status": 200
+      },
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/robots.txt",
+        "status": 200
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200
+      },
+      {
+        "path": "/robots.txt",
+        "status": 200
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200
+      },
+      {
+        "path": "/api/config",
+        "status": 200
+      },
+      {
+        "path": "/api/session",
+        "status": 401
+      },
+      {
+        "path": "/api/stats",
+        "status": 401
+      },
+      {
+        "path": "/api/stats/videos",
+        "status": 401
+      },
+      {
+        "path": "/api/stats/rooms",
+        "status": 401
+      },
+      {
+        "path": "/api/rooms/0000/image",
+        "status": 401
+      },
+      {
+        "path": "/ws/0000",
+        "status": 401
+      },
+      {
+        "path": "/api/producer/claim",
+        "status": 503
+      }
+    ],
+    "foreignOriginRejected": true,
+    "producerGpuClaimRejected": true,
+    "generationHoldExposed": true,
+    "inferenceCalls": 0,
+    "databaseWrites": 0,
+    "limitations": [
+      "No authenticated positive multiplayer or real GPU/billing test.",
+      "Googlebot user-agent is not evidence of a real Google crawl."
+    ]
+  },
+  "githubCi": {
+    "priorRun": 41351433702,
+    "latestRunBeforeFix": 41409792184,
+    "verifiedFailures": [
+      "safety-cpu: ffmpeg ENOENT, before native CPU tests",
+      "WebKit/Linux: intercepted native media response status 0 used as a CSP oracle"
+    ],
+    "fixes": [
+      "Explicit FFmpeg/FFprobe setup in safety-cpu",
+      "Browser CSP allowed-request plus forbidden-host violation control, not accepting status0 as playable media"
+    ],
+    "localCspTargetsPassed": [
+      "node/chromium",
+      "node/webkit",
+      "workerd/chromium",
+      "workerd/webkit"
+    ],
+    "newRemoteResultVerified": false
+  }
 }

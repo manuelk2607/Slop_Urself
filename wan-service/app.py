@@ -80,7 +80,7 @@ def build_app():
     output_root=Path(os.environ.get('WAN_OUTPUT_DIR','/tmp/slop-wan/private'))
     output_root.mkdir(parents=True,exist_ok=True,mode=0o700)
     ledger=JobLedger(os.environ.get('WAN_JOB_DB','/tmp/slop-wan/jobs.sqlite'))
-    gpu=None;model_loaded=False
+    gpu=None;registered_gpu=None;model_loaded=False
     preparation_only=os.environ.get('WAN_PREPARATION_ONLY')=='yes'
     if os.environ.get('WAN_ENABLE_MODEL_LOADING')=='yes':
         if not re.fullmatch(r'[a-z0-9-]+\.hf\.space',os.environ.get('SPACE_HOST','')):
@@ -94,14 +94,16 @@ def build_app():
         pipe=load_pipeline(directory);model_loaded=True
         print(json.dumps({'event':'native_model_initialized','revision':lock['revision'],
             'preparationOnly':preparation_only,'gpuCalls':0}),flush=True)
-        if not preparation_only:
-            @spaces.GPU(duration=120,size='large')
-            def allocate(image,prompt,seed,steps,duration_seconds):
-                return infer(pipe,image,prompt,seed,steps,duration_seconds)
-            gpu=allocate
+        # ZeroGPU rejects startup without a registered GPU function. Definition
+        # alone allocates nothing. Preparation never routes a request to it.
+        @spaces.GPU(duration=120,size='large')
+        def allocate(image,prompt,seed,steps,duration_seconds):
+            return infer(pipe,image,prompt,seed,steps,duration_seconds)
+        registered_gpu=allocate
+        if not preparation_only:gpu=allocate
     # Typed request must be injected by Gradio rather than becoming an API input.
     def generate_video(input_image: dict, prompt: str, seed: int, steps: int, duration_seconds: float, permit: str, request: gr.Request):
-        if gpu is None:
+        if preparation_only or gpu is None:
             raise gr.Error('Producer not ready; no GPU request started')
         path=None;consumed=False
         try:
@@ -156,6 +158,9 @@ def build_app():
         finally:
             ledger.close()
     app=FastAPI(lifespan=lifespan)
+    # Retain initialized tensors on the controlled host even while the private
+    # function is disconnected from every preparation-mode API/queue path.
+    app.state._controlled_gpu_function=registered_gpu
     @app.get('/healthz')
     def health():
         return JSONResponse({'modelLoaded':model_loaded,'preparationOnly':preparation_only,

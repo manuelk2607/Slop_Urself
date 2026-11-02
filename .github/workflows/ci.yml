@@ -25,6 +25,12 @@ jobs:
       - name: Install moderation test dependencies
         working-directory: moderation-service
         run: npm ci
+      - name: Install video decoding tools used by moderation tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
       - name: Moderation technical regressions (no model downloads or inference)
         working-directory: moderation-service
         run: |

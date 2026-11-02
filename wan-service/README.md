@@ -59,7 +59,10 @@ erst das geprüfte Paket im pausierten Space bereitstellen, dann
 Der Helfer prüft den privaten pausierten Space, unveränderte kostenlose ZeroGPU-
 Hardware, übereinstimmenden Vorbereitungscode und die produktive Generierungssperre.
 Er setzt ausdrücklich `WAN_PREPARATION_ONLY=yes` und startet nur diesen Space.
-In diesem Modus wird **keine GPU-Funktion registriert**. Gewichte landen nur im
+ZeroGPU verlangt eine registrierte GPU-Funktion beim Start. Im Vorbereitungsmodus
+bleibt diese privat und von sämtlichen Anfragepfaden getrennt; die Generierungsroute
+weist außerdem ausdrücklich vor einem Funktionsaufruf ab. Es wird **kein GPU-Auftrag
+gestartet**. Gewichte landen nur im
 temporären HF-Dateisystem, nicht auf dem Mac; kein Bucket/Bezahlspeicher wird gebucht.
 Der lokale Download bleibt ein separater, nicht ausgeführter manueller Befehl.
 Ein Neustart ist noch kein Beleg für ausreichenden Speicher oder native Kompatibilität:

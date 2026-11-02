@@ -869,3 +869,20 @@ bestanden; native Remote-Abnahme noch offen. Vier gezielte kostenlose synthetisc
 Gemini-Aufrufe:benigner Kontrollfall erlaubt, drei Risiken zurückgehalten, davon
 zwei nur Provider-Hold ohne Kategoriennachweis. Keine fachliche Freigabe.
 Details:docs/audits/2026-11-02-preparation.json. Produktive KI-Sperre unverändert.
+
+
+### Native Freiprüfung und tatsächliche CI-Fehler2.11.
+
+HF83fd8297:Build bestanden,34.201.418.400Bytes ausschließlich extern geladen,
+20SHA256 tatsächlich geprüft, native Modellinitialisierung bestätigt. Danach
+HTTP503/RUNTIME_ERROR:„No @spaces.GPU function detected during startup“. Der
+Vorbereitungsmodus registriert nun die private native Funktion für den Plattform-
+vertrag, hält sie aber getrennt von allen API-/Queuepfaden; zusätzliche explizite
+Abweisung vor Aufruf. Keine GPU-Zuteilung/Videoaufträge. Neuer Remote-Start offen.
+
+GitHub-Läufe41351433702/41409792184 tatsächlich gelesen:FFmpeg fehlt im
+safety-cpu-Job; WebKit/Linux meldet bei abgefangenen Medien Status0. FFmpeg
+wird ausdrücklich installiert, CSP-Test prüft erlaubten Fixture-Request und
+verbotenen Host mit echter Browser-Policy-Verletzung/keinem Request. Keine
+Akzeptanz von Status0 als Wiedergabe. Beide Browser auf Node/workerd lokal
+bestanden. Remoter neuer Gesamt-CI-Nachweis steht noch aus.
