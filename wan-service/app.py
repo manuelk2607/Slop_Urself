@@ -21,6 +21,18 @@ PUBLIC_VALIDATION_SPACE='Manuel2607/SlopUrself-Wan22-Validated'
 CONTROLLED_SPACES={'Manuel2607/SlopUrself-Wan22-GPU-Test',PUBLIC_VALIDATION_SPACE}
 
 
+def personal_authorization(request):
+    # HF's edge authenticates the normal header. A separate, explicitly named
+    # application header lets the controlled app verify the same credential if
+    # the edge consumes Authorization. Neither identity nor quota is inferred
+    # from this header: whoami and the proxy-subject check remain mandatory.
+    values=[request.headers.get(key) for key in ('authorization','x-slop-hf-authorization')]
+    present=[value for value in values if value is not None]
+    if not present or len(set(present))!=1 or not present[0].startswith('Bearer ') or len(present[0])>4096 or re.search(r'[\r\n]',present[0]):
+        raise ValueError('Missing or conflicting personal authorization')
+    return present[0]
+
+
 def validation_subjects():
     enabled=os.environ.get('WAN_VALIDATION_ONLY')=='yes'
     if os.environ.get('SPACE_ID')==PUBLIC_VALIDATION_SPACE and not enabled:
@@ -73,7 +85,7 @@ def require_personal_gpu_context(request,subject):
     # function is nested. An injected request alone must not hide a lost context.
     from gradio.context import LocalContext
     actual=LocalContext.request.get(None)
-    if actual is None or actual.headers.get('authorization')!=request.headers.get('authorization') or actual.headers.get('x-ip-token')!=request.headers.get('x-ip-token'):
+    if actual is None or personal_authorization(actual)!=personal_authorization(request) or actual.headers.get('x-ip-token')!=request.headers.get('x-ip-token'):
         raise ValueError('Personal Gradio context missing or changed; no GPU request')
     validate_proxy_token(actual.headers.get('x-ip-token'),subject=subject)
 
@@ -159,7 +171,7 @@ def build_app():
             raise gr.Error('Producer not ready; no GPU request started')
         path=None;consumed=False
         try:
-            subject=hf_subject(request.headers.get('authorization'))
+            subject=hf_subject(personal_authorization(request))
             require_personal_gpu_context(request,subject)
             path=input_path(input_image,upload_root)
             data=path.read_bytes()
@@ -224,16 +236,25 @@ def build_app():
     def identity_probe(request: HttpRequest):
         # Free, read-only preflight. No proxy JWT, claims or credentials leave
         # this host. Presence/binding is not an external billing receipt.
+        received={'authorizationReceived':bool(request.headers.get('authorization')),
+            'applicationAuthorizationReceived':bool(request.headers.get('x-slop-hf-authorization')),
+            'proxyTokenReceived':bool(request.headers.get('x-ip-token'))}
+        stage='personal_authorization_unavailable'
         try:
-            subject=hf_subject(request.headers.get('authorization'))
+            authorization=personal_authorization(request)
+            stage='personal_identity_unavailable'
+            subject=hf_subject(authorization)
+            stage='personal_proxy_context_unavailable'
             payload=validate_proxy_token(request.headers.get('x-ip-token'))
             try:validate_proxy_token(request.headers.get('x-ip-token'),subject=subject);bound=True
             except ValueError:bound=False
             keys=[k for k in payload if re.fullmatch(r'[A-Za-z0-9_]{1,64}',k)][:20]
+            print(json.dumps({'event':'identity_preflight','proxySubjectMatches':bound,'proxyClaimKeys':keys,**received,'gpuCalls':0}),flush=True)
             return JSONResponse({'personalIdentityVerified':True,'proxySubjectMatches':bound,'proxyClaimKeys':keys,
                 'billingVerified':False,'gpuCalls':0},headers={'cache-control':'no-store'})
         except Exception:
-            return JSONResponse({'error':'personal_proxy_context_unavailable','gpuCalls':0},status_code=403,headers={'cache-control':'no-store'})
+            print(json.dumps({'event':'identity_preflight_rejected','code':stage,**received,'gpuCalls':0}),flush=True)
+            return JSONResponse({'error':stage,'gpuCalls':0},status_code=403,headers={'cache-control':'no-store'})
     @app.get('/config')
     def pinned_config():
         # Gradio rebuilds its config during queue/mount setup. Inject the
@@ -251,7 +272,7 @@ def build_app():
             return JSONResponse({'error':'not_found'},status_code=404)
         if path.endswith('/upload') or path.endswith('/queue/join'):
             try:
-                await run_in_threadpool(hf_subject,request.headers.get('authorization'))
+                await run_in_threadpool(hf_subject,personal_authorization(request))
                 if request.headers.get('content-length') and int(request.headers['content-length'])>11*1024*1024:
                     raise ValueError('Oversized upload')
                 if path.endswith('/queue/join'):

@@ -16,6 +16,35 @@ AVAILABLE=importlib.util.find_spec('gradio') is not None
 
 @unittest.skipUnless(AVAILABLE,'Install the pinned adapter CPU test dependencies; no models are required')
 class AdapterTests(unittest.TestCase):
+    def test_read_only_identity_diagnostics_and_application_header_do_not_weaken_proxy_binding(self):
+        import app,base64,json,io
+        from contextlib import redirect_stdout
+        from fastapi.testclient import TestClient
+        import gradio as gr
+        from gradio.context import LocalContext
+        def proxy(subject):return 'e30.'+base64.urlsafe_b64encode(json.dumps({'exp':int(time.time())+600,'sub':subject}).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
+        with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{'WAN_PRODUCER_SECRET':SECRET,'WAN_OUTPUT_DIR':root+'/private','WAN_JOB_DB':root+'/jobs.sqlite','GRADIO_TEMP_DIR':root+'/uploads','WAN_ENABLE_MODEL_LOADING':'no','GRADIO_ANALYTICS_ENABLED':'False'}),patch.object(app,'hf_subject',return_value='account-a') as identity,patch.object(app,'infer') as infer:
+            api,_=app.build_app();logs=io.StringIO()
+            with TestClient(api) as client,redirect_stdout(logs):
+                self.assertEqual(client.get('/identity').json()['error'],'personal_authorization_unavailable')
+                identity.assert_not_called()
+                headers={'x-slop-hf-authorization':'Bearer private-fixture-never-log','x-ip-token':proxy('account-a')}
+                result=client.get('/identity',headers=headers)
+                self.assertEqual(result.status_code,200);self.assertTrue(result.json()['proxySubjectMatches'])
+                self.assertFalse(result.json()['billingVerified']);self.assertEqual(result.json()['gpuCalls'],0)
+                identity.assert_called_with('Bearer private-fixture-never-log')
+                self.assertEqual(client.get('/identity',headers={**headers,'authorization':'Bearer other-fixture'}).status_code,403)
+                self.assertEqual(client.get('/identity',headers={'x-slop-hf-authorization':headers['x-slop-hf-authorization']}).json()['error'],'personal_proxy_context_unavailable')
+                self.assertFalse(client.get('/identity',headers={**headers,'x-ip-token':proxy('account-b')}).json()['proxySubjectMatches'])
+                infer.assert_not_called()
+            self.assertNotIn('private-fixture-never-log',logs.getvalue());self.assertNotIn(headers['x-ip-token'],logs.getvalue())
+            request=gr.Request(headers=headers);context=LocalContext.request.set(request)
+            try:
+                app.require_personal_gpu_context(request,'account-a')
+                with self.assertRaises(ValueError):app.require_personal_gpu_context(request,'account-b')
+                with self.assertRaises(ValueError):app.require_personal_gpu_context(gr.Request(headers={**headers,'x-slop-hf-authorization':'Bearer other-fixture'}),'account-a')
+            finally:LocalContext.request.reset(context)
+
     def test_space_startup_uses_public_loopback_sdk_hook_without_a_generation_endpoint(self):
         import app
         import gradio as gr

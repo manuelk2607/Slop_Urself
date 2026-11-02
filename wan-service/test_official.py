@@ -14,7 +14,7 @@ import official
 from jobs import JobLedger, validate_permit, media_capability, validate_media_capability
 from jobs import validation_window
 from jobs import validate_proxy_token
-from app import input_path, hf_subject, validation_subjects, PUBLIC_VALIDATION_SPACE
+from app import input_path, hf_subject, validation_subjects, PUBLIC_VALIDATION_SPACE, personal_authorization
 
 SECRET='cpu-test-producer-key-not-for-production-1234'
 
@@ -28,6 +28,16 @@ def permit(**overrides):
 
 
 class OfficialTests(unittest.TestCase):
+    def test_personal_application_transport_never_accepts_conflicting_or_missing_credentials(self):
+        from types import SimpleNamespace
+        for headers in [{'authorization':'Bearer personal-a'}, {'x-slop-hf-authorization':'Bearer personal-a'},
+            {'authorization':'Bearer personal-a','x-slop-hf-authorization':'Bearer personal-a'}]:
+            self.assertEqual(personal_authorization(SimpleNamespace(headers=headers)),'Bearer personal-a')
+        for headers in [{},{'authorization':'Bearer personal-a','x-slop-hf-authorization':'Bearer personal-b'},
+            {'x-slop-hf-authorization':'Basic invalid'}, {'x-slop-hf-authorization':'Bearer bad\r\nheader'},
+            {'authorization':'Bearer personal-a','x-slop-hf-authorization':''}]:
+            with self.assertRaises(ValueError):personal_authorization(SimpleNamespace(headers=headers))
+
     def test_proxy_context_rejects_sdk_missing_invalid_error_and_expired_fallback_paths(self):
         def token(payload):return 'e30.'+base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
         validate_proxy_token(token({'exp':int(time.time())+600}))

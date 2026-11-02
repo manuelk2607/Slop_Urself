@@ -18,6 +18,28 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
 
 ## Tatsächlich erledigt
 
+- Neuer Live-Checkpoint nach Nutzerrückmeldung:beide bisherigen Testprofile sind
+  tatsächlich owner-verifiziert und mit den richtigen unterschiedlichen HF-Konten
+  verbunden; beide persönlichen Quotas300/300. Neuer RaumBEAD. Keine Anmeldung
+  erneut anfordern. Controller80330 bleibt mit beiden Sitzungen im RAM offen.
+  GitHub41499602348 nach einmaligem Runner-Retry vollständig erfolgreich.
+- Einmalige Kampagne10d8afed-acf6-49ea-8c58-e70f906a94b2 konfiguriert; private
+  Arbeitsdatei.local/bounded-current-campaign.json zeigt auf campaign.json.
+  Moderator32246/Port3406 und Quick-Tunnel2726 laufen, scopedHealth bestätigt.
+  CF-Secrets für diesen Scope gesetzt; Worker5fb3153a-4ee2-4854-b21b-d301fd054c2d,
+  globale Sperre weiterhin bestätigt. WAN weiterhin preparation-only,0GPU-Aufträge.
+  Echte /api/hf/validation für BEIDE Konten503. Ursache noch NICHT abgeleitet!
+  Die vorhandene native Pauschalmeldung verhindert die Unterscheidung zwischen
+  verlorener App-Autorisierung, whoami-Fehler und Proxykontext. Deshalb gezielte
+  sichere Diagnostik/identischer persönlicher App-Header implementiert;29 native
+  CPU-/HTTP-Tests bestanden, kein Modell-/GPU-Aufruf. Native Veröffentlichung
+  dieses notwendigen Fixes steht an; nicht die alte Version blind erneut senden.
+  Nach Native-Deployment die ursprüngliche Nur-Lese-Probe mit unveränderten
+  CF-Headern wiederholen und ausschließlich gefilterte neue Diagnoseevents lesen.
+  Erst danach den belegten Transportfehler beheben/Modellpin aktualisieren.
+  Untenstehende ältere Wiederanmeldungs-/Deploymentanweisungen sind dadurch
+  überholt; keine neue Kampagne und keine neuen HF-Anmeldefenster erstellen.
+
 - Reale Gratis-Moderationsinferenz:38 Fälle,23/23 harmlose Bilder/Videos erlaubt,
   15/15 Risikoabsichten zurückgehalten, darunter3 generische Provider-Holds ohne
   Kategoriennachweis.3 Clips jeweils81/81 native unterschiedliche Frames.
