@@ -337,6 +337,7 @@ export class RoomDurableObject {
         const validation = validationScope(validationConfig(this.env, room.code)), options = gameOptions(room.options);
         if (validation && (room.players.length !== 2 || room.players.some(p => !validation.campaign.members.some(m => m.accountId === p.accountId)) || options.mode !== 'classic' || options.sharedImage || options.secretTasks || options.guessPrompt || options.phaseSeconds)) throw new Error('Nur die bestätigte klassische Zwei-Spieler-Prüfrunde ist freigegeben.');
         await service(this.env, '/hf/roster', { participants: room.players });
+        if (validation) await service(this.env, '/security/validation/ready', { code: room.code, participants: room.players });
         if (gameOptions(room.options).sharedImage) await readSharedImage(this.state.storage, room.sharedImage);
         await this.refreshLobbyQuota();
         if (!room.maxRounds) throw new Error('Das KI-Kontingent reicht derzeit nicht für eine vollständige Runde mit allen Spielern.');

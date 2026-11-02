@@ -1,5 +1,6 @@
 import { archivedVideoPath } from '../security/reports';
 import { archiveEnabled, archiveLimit, evictionPlan, listArchive, MAX_VIDEO_BYTES, type ArchiveConfig } from './archive';
+import { validationScope } from '../security/live-validation';
 interface Storage { get<T>(key: string): Promise<T | undefined>; put<T>(key: string, value: T): Promise<void> }
 interface Lease { url: string; expiresAt: number }
 interface Pending { code: string; bytes: number; expiresAt: number }
@@ -40,7 +41,9 @@ export class ArchiveReservations {
         const protectedKeys = new Set([...protectedUrls, ...await this.activeUrls(now)].map(url => url.slice('/api/videos/'.length)));
         const otherBytes = Object.entries(pending).reduce((sum, [id, entry]) => sum + (id === jobId ? 0 : entry.bytes), 0);
         // Plan only: do not delete old clips for a generation that might fail.
-        evictionPlan(await listArchive(config), MAX_VIDEO_BYTES + otherBytes, archiveLimit(config), protectedKeys);
+        const objects = await listArchive(config);
+        if (validationScope(config)) for (const object of objects) protectedKeys.add(object.key);
+        evictionPlan(objects, MAX_VIDEO_BYTES + otherBytes, archiveLimit(config), protectedKeys);
         pending[jobId] = { code, bytes: MAX_VIDEO_BYTES, expiresAt: now + ARCHIVE_JOB_HOLD_MS };
         await this.storage.put('archive-pending', pending);
     }

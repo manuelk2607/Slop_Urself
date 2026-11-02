@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { VALIDATION_PAIR, parseValidationCampaign, validationConfig, validationScope, validationInput, ValidationLedger, digest, type ValidationCampaign } from '../../src/security/live-validation';
+import { VALIDATION_PRODUCER_REVISION } from '../../src/security/live-validation';
+import { HfConnections } from '../../src/auth/huggingface';
+import { ArchiveReservations } from '../../src/storage/reservations';
+import { archiveVideo } from '../../src/storage/archive';
 import { generationSafetyReady, blockedGenerationCapacity } from '../../src/security/moderation';
 import { officialPermit } from '../../src/ai/official-producer';
 import { verifyProducerPermit, producerClaimResponse } from '../../src/security/producer-claims';
@@ -48,6 +52,8 @@ test('the permanent two-slot fence survives recreation, permit expiry and a new 
     await assert.rejects(ledger.admit({ ...value, jobId: crypto.randomUUID() }));
     await assert.rejects(ledger.admit({ ...value, subject: c.members[1].subject }));
     await assert.rejects(ledger.admit({ ...value, pixelSha256: 'f'.repeat(64) }));
+    const rotated: ValidationCampaign = { ...c, members: [{ ...c.members[0], accountId: crypto.randomUUID() }, c.members[1]] };
+    await assert.rejects(new ValidationLedger(storage, rotated).admit({ ...value, accountId: rotated.members[0].accountId, jobId: crypto.randomUUID() }));
     const claim = { id: value.jobId, subject: value.subject, imageSha256: value.imageSha256, promptSha256: value.promptSha256, seed: value.seed };
     await assert.rejects(ledger.claim({ ...claim, imageSha256: 'c'.repeat(64) }));
     await ledger.claim(claim);
@@ -78,4 +84,42 @@ test('real HTTP/Services claims require durable admission and personal scope; pu
     assert.equal((await worker.fetch(new Request('https://game.test/api/hf/validation'), { ...base, SERVICES: {
         idFromName: () => ({}), get: () => ({ fetch: async () => Response.json({ retryAfter: 0 }) })
     } } as never)).status, 401);
+});
+test('readiness is read-only and refuses preparation, moderator mismatch and foreign HF ownership before reserving any slot', async t => {
+    const c = campaign(), storage = store(), calls: string[] = [];
+    const service = new ServiceDurableObject({ storage } as never, { ...env(c), AWS_ACCESS_KEY_ID: 'isolated', AWS_SECRET_ACCESS_KEY: 'isolated', AWS_ENDPOINT_URL_S3: 'https://storage.test' } as never);
+    let mode: 'preparation' | 'foreign' | 'moderator' | 'ready' = 'preparation';
+    t.mock.method(HfConnections.prototype, 'credential', async (_connection: string, accountId: string) => ({ accountId, subject: mode === 'foreign' ? 'someone-else' : c.members.find(m => m.accountId === accountId)!.subject, token: 'isolated-' + accountId }));
+    t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, options?: RequestInit) => {
+        assert.equal(options?.method || 'GET', 'GET'); const url = input instanceof Request ? input.url : String(input); calls.push(url);
+        if (url.startsWith('https://storage.test')) return new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>');
+        if (url.endsWith('/refs')) return Response.json({ branches: [{ name: 'main', ref: 'refs/heads/main', targetCommit: VALIDATION_PRODUCER_REVISION }] });
+        if (url.includes('huggingface.co/api/spaces/')) return Response.json({ host: 'https://manuel2607-slopurself-wan22-validated.hf.space', sha: 'b'.repeat(40), runtime: { sha: VALIDATION_PRODUCER_REVISION } });
+        if (url.endsWith('/config')) return Response.json(mode === 'preparation' ? {} : { slop_model: { id: 'Wan-AI/Wan2.2-TI2V-5B-Diffusers', revision: 'b8fff7315c768468a5333511427288870b2e9635' } });
+        if (url.endsWith('/health')) return Response.json({ scopedReady: true, validationScope: c.id, modelVersion: mode === 'moderator' ? 'b'.repeat(64) : c.moderatorVersion, qualifiedForGeneralUse: false });
+        assert.ok(url.endsWith('/identity')); return Response.json({ personalIdentityVerified: true, proxySubjectMatches: true });
+    });
+    const request = () => new Request('https://internal/security/validation/ready', { method: 'POST', body: JSON.stringify({ code: c.room, participants: c.members.map((m, i) => ({ id: 'player-' + i, accountId: m.accountId, hfConnectionId: 'connection-' + i })) }) });
+    for (const state of ['preparation', 'foreign', 'moderator', 'ready'] as const) {
+        mode = state; assert.equal((await service.fetch(request())).status, state === 'ready' ? 200 : state === 'foreign' ? 403 : 503);
+        assert.equal(storage.data.size, 0, 'Preflight cannot consume a GPU slot, quota reservation or producer claim');
+    }
+    assert.ok(calls.every(url => !/queue|schedule|upload/.test(url)));
+});
+test('bounded live tests never evict or reconcile existing videos even when storage is full', async t => {
+    const c = campaign(), storage = store(), jobId = crypto.randomUUID();
+    const config = validationConfig({ ...env(c), AWS_ACCESS_KEY_ID: 'isolated', AWS_SECRET_ACCESS_KEY: 'isolated', AWS_ENDPOINT_URL_S3: 'https://storage.test', VIDEO_ARCHIVE_MB: '20' }, c.room, { id: jobId, accountId: c.members[0].accountId });
+    const calls: string[] = []; let reconciled = false;
+    t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, options?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input), method = options?.method || (input instanceof Request ? input.method : 'GET'); calls.push(method);
+        assert.notEqual(method, 'DELETE'); assert.notEqual(method, 'PUT');
+        if (url.startsWith('https://storage.test')) return new Response('<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>videos/1760000000000-existing.mp4</Key><Size>20971520</Size><LastModified>2026-01-01T00:00:00Z</LastModified></Contents></ListBucketResult>');
+        if (url.includes('.hf.space/')) return new Response(Uint8Array.from([0,0,0,16,102,116,121,112,0,0,0,0,0,0,0,0]));
+        const body = String(options?.body); return Response.json({ decision: 'allow', digest: await digest(body), policyVersion: config.MODERATION_POLICY_VERSION, modelVersion: config.MODERATION_MODEL_VERSION,
+            validationScope: c.id, decodeComplete: true, frameCount: 121, framesChecked: 121, durationSeconds: 5.04, codec: 'h264', pixelFormat: 'yuv420p' });
+    });
+    await assert.rejects(new ArchiveReservations(storage).reserve(jobId, c.room, config));
+    assert.equal(storage.data.size, 0);
+    await assert.rejects(archiveVideo('https://fixture.hf.space/video.mp4', config, [], async () => { reconciled = true; }, c.room));
+    assert.equal(reconciled, false); assert.ok(!calls.includes('DELETE') && !calls.includes('PUT'));
 });

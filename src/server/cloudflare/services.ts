@@ -5,7 +5,7 @@ import { PlayerQuotaBudget, type BudgetPlayer } from '../../ai/player-quota';
 import { HfConnections, HfOAuthError, HfRequiredError, requirePlayerHf } from '../../auth/huggingface';
 import { profileAuthConfig, type Account } from '../../auth/session';
 import { generationQuality } from '../../ai/providers';
-import { archiveVideo, deleteArchivedVideo, type ArchiveArtifact } from '../../storage/archive';
+import { archiveVideo, deleteArchivedVideo, listArchive, archiveLimit, archiveEnabled, MAX_VIDEO_BYTES, type ArchiveArtifact } from '../../storage/archive';
 import { ArchiveStatusCache } from '../archive';
 import { takeRateLimit, type RateBuckets, type RateRule } from '../../security/rate-limit';
 import { json } from './runtime';
@@ -19,6 +19,7 @@ import { StoredModerationJournal } from '../../security/moderation-journal';
 import { ProducerClaims, verifyProducerPermit } from '../../security/producer-claims';
 import { validationConfig, validationScope, validationMember, parseValidationCampaign, ValidationLedger, type ValidationAdmission } from '../../security/live-validation';
 import { boundedJson } from '../body';
+import { approvedProvider, verifyPinnedProvider } from '../../ai/provider-trust';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -66,6 +67,34 @@ export class ServiceDurableObject {
             if (path === '/security/validation/context') {
                 if (!scope || !ledger || !data.jobId) throw new Error('Keine aktive begrenzte Prüfung.');
                 return json({ accountId: (await ledger.context(data.jobId)).accountId });
+            }
+            if (path === '/security/validation/ready') {
+                if (!scope || data.participants?.length !== 2 || new Set(data.participants.map(p => p.accountId)).size !== 2) throw new Error('Keine vollständige Prüfrunde.');
+                generationSafetyReady(config);
+                if (!archiveEnabled(config)) throw new Error('Prüfarchiv nicht eingerichtet.');
+                const archiveBytes = (await listArchive(config)).reduce((sum, object) => sum + object.size, 0);
+                if (archiveBytes + await this.archiveReservations.pendingBytes() + 2 * MAX_VIDEO_BYTES > archiveLimit(config)) throw new Error('Für die zwei Prüfvideos fehlt freier Archivplatz; vorhandene Videos werden nicht gelöscht.');
+                const host = 'https://manuel2607-slopurself-wan22-validated.hf.space';
+                await verifyPinnedProvider(approvedProvider(config), host, async url => {
+                    const r = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
+                    if (!r.ok) { await r.body?.cancel(); throw new Error('Producer noch nicht bereit.'); }
+                    return boundedJson(r, 512 * 1024);
+                });
+                const health = new URL(scope.campaign.moderatorUrl); health.pathname = '/health';
+                const response = await fetch(health, { redirect: 'error', headers: { authorization: `Bearer ${config.MODERATION_SECRET}`, 'x-live-validation': scope.campaign.id }, signal: AbortSignal.timeout(10_000) });
+                if (!response.ok) { await response.body?.cancel(); throw new Error('Prüfgateway nicht bereit.'); }
+                const readiness = await boundedJson(response, 8192) as Record<string, unknown>;
+                if (readiness.scopedReady !== true || readiness.validationScope !== scope.campaign.id || readiness.modelVersion !== config.MODERATION_MODEL_VERSION
+                    || readiness.qualifiedForGeneralUse !== false) throw new Error('Prüfgateway nicht bestätigt.');
+                for (const player of data.participants) {
+                    const member = validationMember(scope, player.accountId), credential = await this.hf.credential(player.hfConnectionId, player.accountId);
+                    if (credential.subject !== member.subject) throw new HfRequiredError();
+                    const r = await fetch(host + '/identity', { redirect: 'error', headers: { authorization: `Bearer ${credential.token}` }, signal: AbortSignal.timeout(20_000) });
+                    if (!r.ok) { await r.body?.cancel(); throw new Error('Persönlicher Proxy-Kontext nicht bereit.'); }
+                    const identity = await boundedJson(r, 8192) as Record<string, unknown>;
+                    if (identity.personalIdentityVerified !== true || identity.proxySubjectMatches !== true) throw new Error('Persönliche ZeroGPU-Zuordnung nicht bestätigt.');
+                }
+                return json({ ready: true, gpuCalls: 0 });
             }
             if (path === '/security/validation/identity') {
                 if (!scope) throw new Error('Keine begrenzte Prüfung.');
@@ -151,12 +180,12 @@ export class ServiceDurableObject {
                 await this.scheduleCleanup(Date.now() + 360_000);
                 this.archiveInventory.invalidate();
                 const url = await archiveVideo(data.url, { ...archiveConfig, moderationJournal: this.moderationJournal }, [...await database?.protectedVideoUrls() || [], ...await this.archiveReservations.activeUrls()],
-                    database ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact, await this.archiveReservations.pendingBytes(data.artifact?.generationId));
+                    database && !scope ? urls => database.reconcileArchive(urls) : undefined, data.code, data.artifact, await this.archiveReservations.pendingBytes(data.artifact?.generationId));
                 if (url.startsWith('/api/videos/') && data.code) await this.archiveReservations.protect(data.code, url);
                 return json({ url });
             }
             else if (path === '/archive/preflight') {
-                if (this.env.AI_PROVIDER !== 'mock') await this.archiveReservations.reserve(data.jobId!, data.code, this.env, await getDatabase(this.env.DATABASE_URL)?.protectedVideoUrls() || []);
+                if (this.env.AI_PROVIDER !== 'mock') await this.archiveReservations.reserve(data.jobId!, data.code, config, await getDatabase(this.env.DATABASE_URL)?.protectedVideoUrls() || []);
             }
             else if (path === '/archive/release') await this.archiveReservations.release(data.jobId!);
             else if (path === '/archive/protect') await this.archiveReservations.protect(data.code, data.url);
@@ -170,7 +199,7 @@ export class ServiceDurableObject {
             return json({ ok: true });
         };
         // Mutations recheck capacity in their queue; HF I/O and quota views must not hold that queue.
-        const independent = path.startsWith('/hf/') || ['/quota/display', '/quota/capacity', '/quota/token'].includes(path);
+        const independent = path.startsWith('/hf/') || ['/quota/display', '/quota/capacity', '/quota/token', '/security/validation/ready', '/security/validation/identity'].includes(path);
         const result = (independent ? Promise.resolve() : path.startsWith('/security/') ? this.securityOperations : path.startsWith('/quota/') ? this.quotaOperations : path.startsWith('/profiles/') ? this.profileOperations : this.archiveOperations).then(action).catch(error => {
             if (error instanceof HfOAuthError) console.info('[HF] OAuth callback failed', error.code);
             return json({ error: error instanceof Error ? error.message : 'Dienst nicht erreichbar.', ...(error instanceof HfRequiredError ? { code: 'hf_required' } : error instanceof ModerationError || error instanceof HfOAuthError ? { code: error.code } : {}) }, { status: error instanceof HistoryError ? error.status : error instanceof HfRequiredError ? 403 : 503 });

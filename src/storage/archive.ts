@@ -2,6 +2,7 @@ import { AwsClient } from 'aws4fetch';
 import { XMLParser } from 'fast-xml-parser';
 import { moderateOutput, ModerationError, type ModerationConfig } from '../security/moderation';
 import { logAiEvent, type AiTelemetry } from '../ai/telemetry';
+import { validationScope } from '../security/live-validation';
 
 export interface ArchiveConfig extends ModerationConfig {
     AWS_ACCESS_KEY_ID?: string; AWS_SECRET_ACCESS_KEY?: string; AWS_ENDPOINT_URL_S3?: string; AWS_REGION?: string;
@@ -86,7 +87,7 @@ export async function archiveVideo(url: string, config: ArchiveConfig, protected
         stage = 'inventory';
         const objects = await listArchive(config);
         const remaining = new Set(objects.map(object => `/api/videos/${object.key}`));
-        await reconcile?.([...remaining]);
+        if (!validationScope(config)) await reconcile?.([...remaining]);
         const existing = objects.find(object => object.key === key);
         if (existing) {
             if (existing.size !== bytes.length) throw new Error('Widersprüchlicher Speicherauftrag.');
@@ -94,6 +95,8 @@ export async function archiveVideo(url: string, config: ArchiveConfig, protected
             return `/api/videos/${key}`;
         }
         const protectedKeys = new Set(protectedUrls.filter(url => url.startsWith('/api/videos/')).map(url => url.slice('/api/videos/'.length)));
+        // The approved live test must never delete an existing player video.
+        if (validationScope(config)) for (const object of objects) protectedKeys.add(object.key);
         if (!Number.isSafeInteger(reservedBytes) || reservedBytes < 0) throw new Error('Ungültige Archivreservierung.');
         stage = 'archive';
         for (const old of evictionPlan(objects, bytes.length, archiveLimit(config) - reservedBytes, protectedKeys)) {

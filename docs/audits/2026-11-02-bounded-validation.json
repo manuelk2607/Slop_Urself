@@ -15,11 +15,12 @@
     "maximumCampaignHours": 6,
     "pixelAndPromptBinding": true,
     "persistentNonResettingSlots": true,
-    "outputOperatorDigestApprovalRequired": true
+    "outputOperatorDigestApprovalRequired": true,
+    "noExistingVideoEviction": true
   },
   "checks": {
-    "applicationUnits": 241,
-    "focusedCampaignAndClaims": 7,
+    "applicationUnits": 244,
+    "focusedCampaignAndClaims": 12,
     "moderationServiceTests": 39,
     "nativeCpuHttpTests": 27,
     "builds": true,
@@ -50,8 +51,24 @@
     "notVerified": "HF proxy token signature, real caller attribution, per-job billing"
   },
   "externalDependencies": {
-    "cloudflareAuthentication": "being checked with existing authorization; no new Cloudflare deployment yet",
-    "producerPublication": "new finite-window and proxy-context guards not yet uploaded",
+    "cloudflareAuthentication": "renewed by user, successful CLI login and required secret names verified",
+    "producerPublication": {
+      "revision": "856bdb63d561d59a29ab09e9a4d0be93ecb5d460",
+      "sourceAndRuntimeMatch": true,
+      "verifiedFiles": 9,
+      "modelArtifactsVerified": 20,
+      "preparationOnly": true,
+      "gpuCalls": 0
+    },
     "profileSessions": "must reuse the two existing profiles after fresh official HF proof; no session minting or token export"
+  },
+  "readinessGate": {
+    "implemented": true,
+    "preparationModeRejected": true,
+    "moderatorMismatchRejected": true,
+    "foreignHfSubjectRejected": true,
+    "validReadOnlyScenarioPassed": true,
+    "noReservationOrClaimDuringPreflight": true,
+    "bothVideosFitWithoutDeletion": true
   }
 }

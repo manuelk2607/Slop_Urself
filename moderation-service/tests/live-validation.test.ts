@@ -30,6 +30,8 @@ test('finite moderator rejects unknown inputs and keeps complete output private 
         return { post, digest, headers };
     };
     const input = { stage: 'input', image, prompt: 'Exact reviewed fixture.' };
+    const health = await fetch(root + '/health', { headers: { authorization: `Bearer ${secret}`, 'x-live-validation': id } });
+    assert.equal(health.status, 200); assert.equal((await health.json() as { qualifiedForGeneralUse: boolean }).qualifiedForGeneralUse, false);
     assert.equal((await request(input, 'wrong')).post.status, 401);
     assert.equal((await request(input, secret, false)).post.status, 503);
     assert.equal((await request({ ...input, prompt: 'Unknown action' })).post.status, 503);

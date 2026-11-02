@@ -26,9 +26,9 @@ if (!config.ok || (await config.json() as { generationBlocked?: boolean }).gener
 // A local exclusive receipt also stops an interrupted command being blindly
 // repeated. Inspect HF flags/runtime and this receipt after an uncertain result.
 const receipt = resolve(dirname(file), 'activation.json');
-await writeFile(receipt, JSON.stringify({ campaign: campaign.id, revision: meta.sha, requestedAt: Date.now(), acknowledged: false, gpuRequests: 0 }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+await writeFile(receipt, JSON.stringify({ campaign: campaign.id, revision: main, requestedAt: Date.now(), acknowledged: false, gpuRequests: 0 }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
 for (const [key, value] of Object.entries({ WAN_VALIDATION_CAMPAIGN_ID: campaign.id, WAN_VALIDATION_EXPIRES_AT: String(Math.floor(campaign.expiresAt / 1000)), WAN_PREPARATION_ONLY: 'no' })) {
     await (await api('/variables', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, value }) })).body?.cancel();
 }
-await writeFile(receipt, JSON.stringify({ campaign: campaign.id, revision: meta.sha, acknowledged: true, expiresAt: campaign.expiresAt, gpuRequests: 0, next: 'Verify exact runtime readiness and both live quotas before one actual game upload per account.' }, null, 2) + '\n', { mode: 0o600 });
+await writeFile(receipt, JSON.stringify({ campaign: campaign.id, revision: main, acknowledged: true, expiresAt: campaign.expiresAt, gpuRequests: 0, next: 'Verify exact runtime readiness and both live quotas before one actual game upload per account.' }, null, 2) + '\n', { mode: 0o600 });
 console.info(JSON.stringify({ acknowledged: true, campaign: campaign.id, freeHardware: 'zero-a10g', maximumVideos: 2, maximumSecondsPerAccount: 120, gpuRequests: 0 }));

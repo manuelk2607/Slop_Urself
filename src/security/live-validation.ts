@@ -8,7 +8,7 @@ export const VALIDATION_PAIR = [
     { pixelSha256: 'f6860b738a396c974dd4bf5dcb102d5bc1bab769c532e5afc4b74749226efa03', prompt: 'The yellow ball bounces gently in place. Static camera.', seed: 1 },
     { pixelSha256: '9ac5fd4a9da300556a44726fbf719441ca212627be9640965e2276951256c3d3', prompt: 'The red cube slowly rotates in place. Static camera.', seed: 2 }
 ] as const;
-export const VALIDATION_PRODUCER_REVISION = 'c61035015b73cc17e742d178b675db4b6516cfab';
+export const VALIDATION_PRODUCER_REVISION = '856bdb63d561d59a29ab09e9a4d0be93ecb5d460';
 export interface ValidationMember { accountId: string; subject: string }
 export interface ValidationCampaign {
     id: string; room: string; approvedAt: number; expiresAt: number;
@@ -80,7 +80,7 @@ export class ValidationLedger {
         const scope = { campaign: this.campaign }, member = validationMember(scope, value.accountId);
         if (this.campaign.expiresAt <= Date.now() || !uuid(value.jobId) || value.subject !== member.subject || value.seed !== member.seed
             || value.pixelSha256 !== member.pixelSha256 || !/^[a-f0-9]{64}$/.test(value.imageSha256) || value.promptSha256 !== await digest(buildVideoPrompt(member.prompt))) throw new Error('Ungültiger Prüfauftrag.');
-        const entries = await this.entries(), previous = entries.find(e => e.accountId === value.accountId || e.jobId === value.jobId);
+        const entries = await this.entries(), previous = entries.find(e => e.accountId === value.accountId || e.subject === value.subject || e.jobId === value.jobId);
         if (previous) {
             if (Object.keys(value).some(k => previous[k as keyof ValidationAdmission] !== value[k as keyof typeof value])) throw new Error('Dieser Prüfplatz ist bereits vergeben.');
             return;

@@ -86,6 +86,9 @@ export async function validationModerator(options: Options) {
         const token = createHash('sha256').update(request.headers.authorization || '').digest(), expected = createHash('sha256').update(`Bearer ${options.secret}`).digest();
         if (!timingSafeEqual(token, expected)) { request.resume(); send(401, {}); return; }
         if (!active() || request.headers['x-live-validation'] !== options.id) { request.resume(); send(503, { error: 'validation_scope_required' }); return; }
+        if (request.method === 'GET' && request.url === '/health') {
+            send(200, { scopedReady: true, validationScope: options.id, modelVersion: options.version, qualifiedForGeneralUse: false }); return;
+        }
         const digest = String(request.headers['x-content-sha256'] || '');
         if (!/^[a-f0-9]{64}$/.test(digest)) { request.resume(); send(503, {}); return; }
         const deliver = async (job: StoredJob | undefined) => {
