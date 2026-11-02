@@ -1,15 +1,23 @@
-# Controlled Wan – current checkpoint, 1 November 2026
+# Controlled Wan – current checkpoint, 2 November 2026
 
 - Official 5B endpoint, pinned 20-file/34.2GB manifest and frozen native dependencies implemented.
-- Existing private paused Space updated to 4cd4df2894e8c1c8ad6c50080fd38097a8856647;
-  eight source files remotely hashed, loading disabled, zero-a10g unchanged.
-- Remote-only preparation approved by user, conditional on no Mac weight downloads
-  and no paid storage/hardware. New preparation-only implementation passes 19 CPU
-  and real HTTP tests; native install/model initialization is not yet verified.
-- Next: publish checked preparation-only source, start only the existing free Space,
-  observe disk/download/hash/native-init events, preserve game inference block.
+- Current private source3172be7f814084160c62ee55cc6411466b1dda1d, application6deff11;
+  existing free zero-a10g unchanged, preparation-only active, no inference path enabled.
+- Native dependencies installed and all20weight hashes/model initialization actually
+  observed on prior83fd8297/a0f83281. Then two hosting-contract errors were found:
+  missing SDK launch-hook report and SSR occupying7860. They have targeted fixes;
+  the new source3172be7f is now RUNNING, private, with current/requested zero-a10g.
+- Empty loopback Gradio launch/close runs the pinned SDK startup hook without a
+  generation endpoint; protected ASGI has SSR/MCP/history disabled. Registered
+  private GPU function stays disconnected; preparation rejects before invocation.
+- 21CPU/HTTP tests, real empty local handshake and four strict CSP browser/runtime
+  targets passed. Root PROGRESS.md records later deployment/CI outcomes.
 - No GPU calls authorized or performed. No moderation/billing qualification.
-- Root PROGRESS.md is authoritative for release IDs and subsequent checkpoints.
+- Actual HTTP200: modelLoaded=true, preparationOnly=true, generationAvailable=false;
+  configuration does not advertise generation readiness. Generic file, private
+  download without capability and direct call endpoints actually404.
+- Next: qualify moderation/privacy/hosting; only then separately approve personal
+  GPU tests and verify inference quality/runtime/quota. Never infer billing from health.
 
 ## Historical preparation notes (superseded where contradicted above)
 

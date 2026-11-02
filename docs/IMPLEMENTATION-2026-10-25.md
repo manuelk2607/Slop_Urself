@@ -886,3 +886,20 @@ wird ausdrücklich installiert, CSP-Test prüft erlaubten Fixture-Request und
 verbotenen Host mit echter Browser-Policy-Verletzung/keinem Request. Keine
 Akzeptanz von Status0 als Wiedergabe. Beide Browser auf Node/workerd lokal
 bestanden. Remoter neuer Gesamt-CI-Nachweis steht noch aus.
+
+
+### Verifizierter Abschluss2.11.
+
+Code6deff11 gepusht; GitHub41415239997 vollständig erfolgreich (safety-cpu,
+Chromium/Ubuntu/PostgreSQL17 und WebKit/macOS).21Wan-CPU/HTTP-,38Moderations-
+und237App-Tests lokal bestanden. HF3172be7f RUNNING/privat/zero-a10g unverändert:
+34,2GB ausschließlich extern geladen,20Gewichtshashes geprüft, native Initialisierung
+und SDK-Start vollzogen. Health200 bestätigt Modell geladen/Vorbereitung=true/
+Generierung=false; Dateigrenzen und Direktaufruf404 tatsächlich geprüft.
+
+Cloudflare9dd44862-e6cc-4117-af51-0fe330d9c616 veröffentlicht und produktiver
+Smoke-Test bestanden, inklusive Releasekennung, SEO-Dateien, privater APIs und
+Claim-/KI-Sperre. Keine GPU-/bezahlten Modellaufrufe, keine Produktivdatenänderung.
+Moderation bleibt unqualifiziert; echte individuelle Abrechnung und vollständige
+reale Generierungs-Partie offen. Maßgeblicher Fortsetzungspunkt:PROGRESS.md,
+gefilterter Nachweis:docs/audits/2026-11-02-preparation.json.

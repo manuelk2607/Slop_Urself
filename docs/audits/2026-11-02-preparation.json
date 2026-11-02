@@ -17,14 +17,14 @@
       "inferenceCalls": 0
     },
     "preparationOnly": true,
-    "currentStage": "RUNTIME_ERROR",
-    "remoteInstallationProgress": "Full pinned snapshot downloaded, all 20 hashes verified, native model initialized; HTTP startup blocked by ZeroGPU requiring a registered GPU function",
+    "currentStage": "RUNNING",
+    "remoteInstallationProgress": "Native installation, all20snapshot hashes, model initialization, SDK startup and protected HTTP boundary tests passed; inference remains disabled",
     "nativeEvents": [
       {
         "event": "public_snapshot_preflight",
         "requiredBytes": 34201418400,
         "verifiedExistingBytes": 0,
-        "freeBytes": 2556400431104,
+        "freeBytes": 2678918459392,
         "reserveBytes": 2147483648,
         "gpuCalls": 0
       },
@@ -45,6 +45,15 @@
         "revision": "b8fff7315c768468a5333511427288870b2e9635",
         "preparationOnly": true,
         "gpuCalls": 0
+      },
+      {
+        "event": "native_runtime_registered",
+        "gpuCalls": 0
+      },
+      {
+        "event": "producer_start",
+        "modelReady": false,
+        "gpuCalls": 0
       }
     ],
     "startupError": "No @spaces.GPU function detected during startup",
@@ -54,7 +63,54 @@
     "registrationFixSource": "a0f83281abd95b517cbd49d1b8bb38c7ebe6dd6b",
     "nextActualStartupFailure": "Gradio Space-default SSR Node process occupies7860 before protected ASGI bind",
     "sdkContractFix": "Pinned spaces0.51.3 public Gradio launch hook performs startup packing/report; empty loopback-only handshake with no GPU endpoint then close, protected mounted ASGI with SSR/MCP/history false",
-    "sdkContractFixPublished": false
+    "sdkContractFixPublished": true,
+    "currentStagedSource": {
+      "sourceRevision": "3172be7f814084160c62ee55cc6411466b1dda1d",
+      "applicationCommit": "6deff11c5cf7f25bb8f15e2a1eed02aa80171b2a",
+      "sourceFilesVerified": 9,
+      "qualified": false,
+      "inferenceCalls": 0
+    },
+    "nativeHttp": {
+      "sourceRevision": "3172be7f814084160c62ee55cc6411466b1dda1d",
+      "health": {
+        "modelLoaded": true,
+        "preparationOnly": true,
+        "generationAvailable": false,
+        "revision": "b8fff7315c768468a5333511427288870b2e9635"
+      },
+      "probes": [
+        {
+          "path": "/healthz",
+          "status": 200
+        },
+        {
+          "path": "/config",
+          "status": 200,
+          "modelIdentityAdvertised": false
+        },
+        {
+          "path": "/gradio_api/file=/etc/passwd",
+          "status": 404
+        },
+        {
+          "path": "/private-videos/00000000-0000-4000-8000-000000000000.mp4",
+          "status": 404
+        },
+        {
+          "path": "/gradio_api/call/generate_video",
+          "status": 404
+        }
+      ],
+      "inferenceRequests": 0,
+      "uploads": 0,
+      "qualified": false
+    },
+    "runtimeHardware": {
+      "current": "zero-a10g",
+      "requested": "zero-a10g"
+    },
+    "sdkHotReloadWarning": "A nonfatal SDK empty-loopback-demo notice was observed; actual protected HTTP endpoints and RUNNING state were verified"
   },
   "technical": {
     "wanCpuHttpTests": 21,
@@ -65,7 +121,8 @@
     "wanTestsLogSha256": "206cc43ea346fc2f28b929f43b052b987885e246b7a73218ed16439d8e9a9c2d",
     "moderationTestsLogSha256": "3d0f395def372c6db6ae82598372e72853306483b963f55eede84c2b8152cd67",
     "rootUnitLogSha256": "9be2611057c737c5efcadaeaddb122effde65daf1d3ef22e985421336f89ebcf",
-    "realEmptyLocalGradioHandshakePassed": true
+    "realEmptyLocalGradioHandshakePassed": true,
+    "wanSdkTestsLogSha256": "301c775e2dd38220deab6bbf3017c8e454438f57f3f6a411a22ef4ca5a88936c"
   },
   "freeContextDiagnostic": {
     "reportSha256": "e6809a65e99cffb8bec484aa6458d9a7e6166f51aac7818966d51d2289fb31da",
@@ -126,16 +183,17 @@
     "limits": "Synthetic calibration image and abstract intent only. Provider holds do not demonstrate semantic recognition, visual age or consent understanding."
   },
   "externalLimits": [
-    "HTTP startup after registration fix not yet verified; native weights/hash/initialization were observed",
-    "ZeroGPU debit not tested; no GPU consent",
-    "Moderation not qualified for player media",
-    "HF builder/base image supply chain not independently attested"
+    "Moderation representative semantic quality, operator approval, durable free hosting and player-media consent remain open",
+    "No real GPU/video inference authorized or executed; personal GPU debit/quality/latency unverified",
+    "Private producer access for second test account not configured",
+    "No full newly generated authenticated production party",
+    "HF source, hashes and live health observed; underlying provider runtime is not cryptographically attested"
   ],
-  "sourceCommit": "45a167a0f74e1641419bf6dc729770b5f382ea81",
+  "sourceCommit": "6deff11c5cf7f25bb8f15e2a1eed02aa80171b2a",
   "branch": "codex/audit-remediation",
   "sourcePushed": true,
   "productionSmoke": {
-    "release": "6c6d1e83-10cf-41a5-b876-306245af4f52",
+    "release": "9dd44862-e6cc-4117-af51-0fe330d9c616",
     "origin": "https://slopurself.maki26.workers.dev",
     "probes": [
       {
@@ -222,7 +280,7 @@
       "workerd/chromium",
       "workerd/webkit"
     ],
-    "newRemoteResultVerified": false,
+    "newRemoteResultVerified": true,
     "run41411256316": {
       "safety-cpu": "success",
       "chromium": "success",
@@ -231,6 +289,37 @@
     "nextFix": "Full WebKit matrix on standard macos-15; strict HTTP200 fixture assertion retained, forbidden-host CSP control remains",
     "repositoryVisibilityVerified": "PUBLIC",
     "freeStandardRunnerDocumentation": "https://docs.github.com/en/billing/concepts/product-billing/github-actions",
-    "webkitPlatformDocumentation": "https://playwright.dev/docs/browsers"
+    "webkitPlatformDocumentation": "https://playwright.dev/docs/browsers",
+    "verifiedFinalRun": {
+      "conclusion": "success",
+      "headSha": "6deff11c5cf7f25bb8f15e2a1eed02aa80171b2a",
+      "jobs": [
+        {
+          "conclusion": "success",
+          "name": "safety-cpu"
+        },
+        {
+          "conclusion": "success",
+          "name": "test (chromium)"
+        },
+        {
+          "conclusion": "success",
+          "name": "webkit-macos"
+        }
+      ],
+      "status": "completed",
+      "url": "https://github.com/manuelk2607/Slop_Urself/actions/runs/41415239997"
+    }
+  },
+  "deployedCodeCommit": "6deff11c5cf7f25bb8f15e2a1eed02aa80171b2a",
+  "bootstrapCommit": "45a167a0f74e1641419bf6dc729770b5f382ea81",
+  "cloudflareLoggingVerification": {
+    "localConfig": {
+      "redact_query_string": true,
+      "invocation_logs": false
+    },
+    "activeVersionVerified": "9dd44862-e6cc-4117-af51-0fe330d9c616",
+    "loggingSettingsExposedByVersionView": false,
+    "productionLoggingFlagsIndependentlyVerified": false
   }
 }

@@ -1,166 +1,115 @@
 # Slop Urself – Fortsetzungspunkt, 2. November 2026
 
-## Auftrag / feste Grenzen
+## Auftrag / unveränderte Grenzen
 
-Vier konkrete Pakete: Moderation, kontrollierter Wan-Producer, persönliche
-HF-Abrechnungsprüfung, vollständige Multiplayer-Partie. Branch ausschließlich
-`codex/audit-remediation`; Commit/Push und geprüfte sichere Deployments autorisiert.
-Nur kostenlose synthetische Moderationstests erlaubt. Kostenpflichtige OpenAI-
-Kontextaufrufe ausdrücklich abgelehnt. Gemini-Projekt laut Nutzer Free/ohne
-Abrechnungskonto. Keine Freigabe echter Spielerbilder an neue Moderationsdienste.
-Keine echten GPU-Aufträge freigegeben oder gestartet. Keine Produktivdaten löschen.
-Neu freigegeben:34,2GB ausschließlich im bestehenden kostenlosen HF-ZeroGPU-
-Space herunterladen und nativ initialisieren, keine Gewichte auf dem Mac,
-kein kostenpflichtiger Speicher/Hardware. Vorbereitung muss GPU-Aufrufe sperren. Registrierung allein ist keine Zuteilung.
+Vier Pakete: Moderation, kontrollierter Wan-Producer, persönliche HF-Abrechnung,
+vollständige reale Multiplayer-Partie. Branch `codex/audit-remediation`;
+Commit/Push und sichere getestete Deployments autorisiert. Nur kostenlose
+synthetische Moderationstests erlaubt; bezahlte OpenAI-Kontexttests abgelehnt.
+Gemini laut Nutzer Free/ohne verknüpftes Abrechnungskonto, nicht per API verifiziert.
+Keine Freigabe echter Spielerbilder an neue Moderationsdienste. Keine echten
+GPU-Aufträge freigegeben/gestartet. Keine Produktivdaten löschen.
+34,2GB Download/Initialisierung ausschließlich im bestehenden kostenlosen HF-
+ZeroGPU-Space ausdrücklich genehmigt; keine Gewichte auf dem Mac, kein bezahlter
+Speicher/Hardware. Diese Vorbereitung ist inzwischen tatsächlich abgeschlossen.
 
-## Aktuelles Paket – implementiert und lokal geprüft
+## Erledigt / gemessen
 
-### Fortsetzung2.11.: konkreter Buildfehler / Moderationslücke
+- Kontrollierter offizieller Wan5B-Adapter samt persönlichem Identitätscheck,
+  signiertem exaktem Auftrag, lokaler und dauerhafter CF-Einmal-Freigabe vor GPU,
+  privaten kurzlebigen Videos und striktem eigenem50-Schritte-Profil implementiert.
+  Keine stillen4-/8-Schritt-/Modellwechsel. Bestehende Spielkonfiguration unverändert.
+- Native HF-Abhängigkeiten tatsächlich installiert, vollständiger offizieller
+  Snapshot b8fff7315c768468a5333511427288870b2e9635 ausschließlich extern geladen:
+ 20Dateien/34.201.418.400Bytes, alle lokalen SHA256 auf dem Host geprüft,
+  native Modellinitialisierung und SDK-Startup abgeschlossen. Das ist noch kein
+  Inferenz-/Qualitäts-/Abrechnungsnachweis oder kryptografisches Laufzeitattest.
+- Drei konkret gemessene Hostfehler behoben:HF injiziert hashlose pip-Argumente
+  und Gradio-oauth/mcp-Extras; kompletter Hash-Lock läuft nun als pre-requirements,
+  identische exakte Bootstrap-Pins folgen. Pydantic2.12.5 erfüllt die Extras.
+  ZeroGPU benötigt Registrierung und den Gradio-launch-Startup-Hook:leerer
+  Loopback-Handshake ohne Generation, dann schließen. API-SSR explizit aus,
+  da dessen Node-Server zuvor7860 belegte; MCP/Browser-Verlauf ebenfalls aus.
+- Vorbereitung hält die registrierte private GPU-Funktion von sämtlichen API-/
+  Queuepfaden getrennt; zusätzliche Abweisung vor Aufruf. Tatsächliches HTTP200:
+  modelLoaded=true, preparationOnly=true, generationAvailable=false. /config
+  behauptet keine generierungsbereite Modellidentität. Generische Dateirouten,
+  ungültige private Downloads und direkte call-API tatsächlich404. Kein Upload.
+- Moderationsbackend:explizite Provider/Versionen, vollständiges natives Frame-
+  Decoding, begrenzte parallele Batches, feste HTTPS-Endpunkte, strikte Antworten,
+  SQLite-Anfragebudget und verschlüsselte Prüfjobs. Nicht qualifiziert, nicht als
+  produktiver Spielerbilddienst freigegeben. Provider-Safety-Hold wird getrennt
+  von Kategorienbewertung erfasst, nie als fachlicher Erfolgsnachweis.
+- Neue4kostenlose synthetische Gemini-Prüfungen:harmloser Kontrollfall erlaubt,
+  Grafikmissbrauch-Intent blockiert, Minderjährigen-/Override-Intent vom Provider
+  zurückgehalten. Letztere2nicht semantisch klassifiziert. Frühere Messungen:
+  Gemini20harmlose Fälle/NCII bestanden, drei81-Frame-Videos vollständig geprüft;
+  OpenAI-Gratis-Screen übersah NCII. Kein Ersatz für repräsentative Qualifikation.
+- CI repariert:FFmpeg/FFprobe im Sicherheitsjob explizit installieren. WebKit-
+  Linux umging native Medienabfanglogik; vollständige Safari-nahe Matrix jetzt
+  Standard-macos-15, strikte HTTP200-/CSP-Positiv-/Negativprüfung bleibt erhalten.
+  Repo PUBLIC tatsächlich geprüft; Standardrunner laut GitHub kostenlos.
+  PostgreSQL17-Integration bleibt auf Ubuntu, keine Produktiv-DB angefasst.
 
-- Update:45a167a/0fd8fbb gepusht. Native Quellea0f83281 bestätigte erneut
-  alle20Gewichtshashes und Modellinitialisierung. Danach konkreter Portfehler:
-  Gradio-Space-SSR belegt7860. Pin-SDK0.51.3 zusätzlich geprüft:GPU-Startup-
-  Report/CUDA-Packing laufen über den öffentlichen Gradio-launch-Hook, nicht
-  über FastAPI-Mount allein. Korrektur:leerer Loopback-Handshake ohne GPU-
-  Endpoint, schließen, geschütztes ASGI mit SSR/MCP/Verlauf explizit aus.
- 21CPU-/HTTP-Tests und echter leerer lokaler Handshake bestanden. Neuer Remote-
-  Start nach Commit erforderlich; kein unveränderter Wiederholungsversuch.
-- GitHub41411256316:safety-cpu und Chromium komplett bestanden, WebKit/Linux
-  missachtet native Medienabfanglogik. Strikte HTTP200-Prüfung bleibt erhalten.
-  Safari-nahe Tests auf Standard-macos-15 verlegt, Datenbanktests weiter Ubuntu.
-  Repository tatsächlich PUBLIC; Standardrunner laut GitHub kostenlos.
+## Veröffentlichungen / Tests
 
-- af70dba ist committed/gepusht. Vorbereitungs-Space c865a604 wurde tatsächlich
-  gestartet, scheiterte aber im HF-Builder vor Download/Modellinitialisierung:
-  zusätzlich injizierte Paketargumente ohne Hashes kollidierten mit dem Hashmodus.
-  Die Gradio-mcp-Extras benötigen außerdem Pydantic<=2.12.5. Kein GPU-Aufruf.
-  Fehler gezielt gelesen, anschließend fehlgeschlagenen Space wieder PAUSED.
-  Korrektur45a167a committed/gepusht; HF-Quelle83fd829720a06dc91e5395248ac8c1090df6b94c
-  veröffentlicht und genehmigte Gratis-Vorbereitung neu gestartet:BUILDING.
-- Korrektur implementiert: Hash-Lock einschließlich oauth/mcp/Websockets,
-  Pydantic2.12.5/Core2.41.5; andere bestehende Pins unverändert. Voller Hash-Lock
-  als pre-requirements, exakte entsprechende Pins als requirements für den HF-
-  Bootstrap. Paketbau/Regression sichern Gleichheit; jetzt9Dateien im Paket.
-  Hashgeprüfte CPU-Abhängigkeiten tatsächlich installiert;20CPU-/HTTP-Tests,
- 38Moderationstests,237App-Units, Builds und Tool-Typprüfung bestanden.
-  Remote-Neubuild läuft; Speicher-/Modellinitialisierung noch nicht bestätigt.
-- Gemini dokumentierte Prompt-/Candidate-Safety-Holds explizit behandelt,
-  niemals als semantischer Kategoriennachweis. Gezielt4Gratis-Aufrufe mit
-  synthetischem Bild:harmloser Kontrollfall erlaubt, Grafikmissbrauch blockiert,
-  Minderjährigen-/Override-Intent vom Provider zurückgehalten. Keine technische
-  Fehlantwort, aber2Holds ohne Kategorienbewertung; weiterhin nicht qualifiziert.
-  Privater Nachweis managed-free-515d2e72-5e24-4d53-bf42-2d7ca02bfcee.json.
-- Neu vorhandene ungetrackte Nebenprojekte.code-workspace ist fremde lokale
-  Nutzerarbeit; unverändert erhalten, nicht in dieses Paket aufnehmen.
+- Codecommits45a167a,0fd8fbb,6deff11 auf origin/codex/audit-remediation gepusht.
+  Veröffentlichter Anwendungscode:6deff11c5cf7f25bb8f15e2a1eed02aa80171b2a.
+- GitHub41415239997 vollständig SUCCESS:safety-cpu, Chromium, WebKit/macOS,
+  einschließlich isolierter PostgreSQL17-Prüfungen im Linux-Job. Link:
+  https://github.com/manuelk2607/Slop_Urself/actions/runs/41415239997
+- Lokal237App-Units,38Moderationstests,21Wan-CPU/HTTP-Tests, vier strikte CSP-
+  Browser-/Node-/workerd-Ziele, echter leerer lokaler Gradio-Handshake, Builds,
+  Typprüfung, YAML-/Diff-/Secretprüfung bestanden. Frühere volle lokale Matrix
+  mit98Integrations-/Browser-Prüfschritten bleibt dokumentiert, nicht erneut behauptet.
+- Cloudflare Worker9dd44862-e6cc-4117-af51-0fe330d9c616 auf
+  https://slopurself.maki26.workers.dev veröffentlicht und extern nachgetestet:
+  Releasekennung/Header, Startseite/Metadaten/CSP, robots/sitemap200 incl.Bot-UA,
+  private APIs401, fremde Herkunft403, Producer-Claim503, KI-Sperre=true.
+  Kein Schreib-/Inferenzaufruf. Bot-UA ist kein echter Google-Crawl-Nachweis.
+  Vorversion6c6d1e83-10cf-41a5-b876-306245af4f52 wäre der Rollback-Punkt.
+- Privater HF-Test-Space aktuell3172be7f814084160c62ee55cc6411466b1dda1d,
+  neun Quelldateien unabhängig gegen Paket6deff11 gehasht, tatsächlich RUNNING,
+  current/requested zero-a10g unverändert. Kein Storage-/Hardware-/Sichtbarkeits-
+  Wechsel. Statvfs meldet Hostpool-Bytes, keinen eigens gebuchten Speicher.
+- Dokumentationsabschluss ist ein eigener reiner Nachweis-Commit; kein weiterer
+  Anwendungscode. Zusätzliche ungetrackte Workspace-Datei ist unverändert erhalten.
 
-- Verwalteter Moderationsdienst: explizite Backends, feste Endpunkte/Modelle,
-  striktes Antwortformat/Modellversionsprüfung, Bilddekodierung vor Übertragung,
-  Timeout/Abbruch, SQLite-Anfragebudget gegen Prozessneustart-Resets, vorhandene
-  verschlüsselte Prüfjobs/Recovery weiterverwendet. Gemini-only kann den
-  kostenpflichtigen Responses-Endpunkt nicht aufrufen. Keine automatische
-  Provider-/Modellumschaltung. Noch keine qualification.json / Veröffentlichung.
-- Gratis-Gemini3.5-Flash-Lite ist tatsächlich verfügbar;2.5 antwortet für dieses
-  neue Projekt trotz Modelllisteneintrag mit404. Expliziter geprüfter Ersatz.
-  OpenAI-Gratis-Test:20/20 harmlose Fälle akzeptiert,3/4 abstrakte Risikofälle
-  zurückgehalten; NCII-Anfrage übersehen. Deshalb keine Alleinfreigabe.
-- Gemini:20 harmlose Fälle und NCII-Anfrage bestanden. HTTP429 drosselte den
-  ersten Lauf; Fortsetzung übersprang abgeschlossene Fälle. Ein weiterer
-  Risikofall endete ohne auswertbare Antwort und zählt nicht als Erfolg. Keine
-  unveränderte Wiederholung. Alle drei synthetischen5,06s-Clips bestanden mit
-  jeweils81/81 verschiedenen nativen Frames (7,9–10,6s, sechs Gratis-Aufrufe).
-  Batches maximal64Frames/8MiB, zwei parallel, keine zeitliche Auswahl/Thumbnails.
-  Das belegt Transport/Latenz, keine fachliche Missbrauchserkennungsqualität.
-- Offizieller Wan5B-Endpunkt vollständig vorbereitet: Gradio/FastAPI,20 Artefakt-
-  Pins/34.201.418.400Bytes, offizieller Snapshot
-  b8fff7315c768468a5333511427288870b2e9635/Apache2.0-Metadaten. Alle lokalen
-  Dateien prüfen, zusätzliche kanonische Gewichte und Symlinks ablehnen.
-  Native Gewichte noch nicht heruntergeladen/geladen. Eigenes Profil:
- 50Schritte/121Frames/24fps/large/max120GPU-Sekunden (harte Grenze, keine Messung).
-- Persönliche HF-Identität vor GPU-Zuteilung, HMAC-Freigabe bindet Konto/Bild/
-  Prompt/Seed/Modell. SQLite plus dauerhaftes einmaliges Services-DO-Claim
-  verhindern auch nach Space-Rebuild doppelte Zuteilung. Unklare Antwort hält
-  zurück. Private Videodateien nur mit kurzlebiger Freigabe, Range/TTL/Prüfung.
-  Zusätzliche kanonische Dateien können keine verifizierten Shards übersteuern.
-- App-Profil `wan22-official` ist ausdrücklich getrennt, keine4-/8-Schritt-
-  Umdeutung oder gemischte Fallbackkette. Standardkonfiguration bleibt unverändert.
-  Neuer `/api/producer/claim` bleibt bei blockierter KI ebenfalls gesperrt.
-- Vollständig hashgefrorene Space- und CPU-HTTP-Abhängigkeiten. Konkreten
-  Gradio/Transformers-Hub-Konflikt behoben. CPU-HTTP-Tests verwenden echte
-  Gradio-/FastAPI-Routen und synthetischen Encoder, ausdrücklich keine Wan-Inferenz.
-  Whitelist-Paketbau/Uploader: nur bestehender privater pausierter Gratis-Test-
-  Space; keine Hardware-/Sichtbarkeitsänderung, kein automatisches Wiederaufwecken.
+## Weiterhin offen / nächster konkreter Schritt
 
-## Verifikation / Veröffentlichungsstand
+1. Repräsentativen ausschließlich rechtmäßigen synthetischen Moderationskorpus
+   vervollständigen und Fehlklassifizierungen/Umgehungen fachlich bewerten.
+   Aktuelle Provider-Holds nicht zu Kategoriennachweisen umdeuten. Noch keine
+   qualification.json erzeugen. Gratis-Hosting/Dauerhaftigkeit des Moderators und
+   Datenschutzfreigabe für echte Spielerbilder fehlen weiterhin.
+2. Erst danach zweiten HF-Nutzerzugriff auf privaten Producer klären; keine
+   automatische Veröffentlichung. Persönliche Zwei-Konten-Anmeldung/Lobby ist
+   bereits vom30.10.geprüft, Grants anschließend verworfen. Nicht erneut um
+   Anmeldungen bitten, solange der tatsächliche genehmigte Test nicht bereitsteht.
+3. Nach ausreichenden Sicherheitsnachweisen separat begrenzten kostenlosen GPU-
+   Test je Konto genehmigen lassen, Quota vor/nach beobachten. Keine Freigabe
+   vorhanden. Aggregierte Quota-Differenz ist kein jobgenauer Abrechnungsbeleg.
+   Dann Qualität/Laufzeit/5s-Wiedergabe und vollständige reale Produktionspartie
+   mit Reload, gegenseitiger Bewertung, Endwertung/Archiv prüfen.
+4. Beide Sperren beibehalten:AI_GENERATION_RELEASE=blocked und HF-Vorbereitung.
+   Neues Modell ist noch nicht als spielbereiter Provider konfiguriert/qualifiziert.
+   HF-Basisimage/SDK-Dienste sind externe Vertrauensgrenzen, nicht voll attestiert.
+5. Übrige P1 ausdrücklich offen:M04 Altarchiv/Einspruch/Betreiberabnahme,
+   M06 sichere manuelle Bestandskontozuordnung, M09/M11 echte Wan-/Safari-Ausgabe,
+   M18 vollständige Betroffenen-/HF-/DO-Löschung, M19 externe Speicherabnahme,
+   RestM20 produktive Logeinstellungen/weitere Stufendiagnose. Lokale Wrangler-
+   Redaktion=true/Invocation-Logs=false; Versions-API legt diese Flags nicht offen,
+   daher keine unabhängige Produktionsbestätigung behaupten.
+6. P2-Reste:M24/M26/M28/M44 UUID-/Migrations-/eingeschränkte-DB-Rolle/Querypläne/
+   Restore, M31/M32 weitere Crashfenster, M43 Ereignisschemata, M45 Release-/Asset-
+   Kompatibilität, M39 reale Geräte/Screenreader; M46–M54 optionale Erweiterungen.
+   Original-Audits24.10. und docs/IMPLEMENTATION-2026-10-25.md nutzen; bereits
+   erledigte Archiv-/Auth-/Votes-/Recovery-Arbeiten nicht doppelt bauen.
 
-- Moderationsdienst: Build/38 technische Tests bestanden, einschließlich präziser
-  Trennung von Provider-Safety-Hold und semantischer Risikoeinstufung.
-- Wan:20 CPU-/HTTP-/Krypto-/Replay-/Range-/Dateischutztests bestanden; Cross-Runtime-
-  HMAC Node→Python und sechs neue App-/Worker-/DO-Regressionen bestanden.
-- Gesamtmatrix vollständig bestanden (Exit0):237 Units/98 PASS-Prüfschritte,
-  Chromium/WebKit, Node/workerd, klassische Mehrspielerpartien inklusive
-  Anmeldung, Upload, Wiedergabe, gegenseitiger Bewertung, Endwertung und Reload.
-  Externe HF-/Storage-Dienste simuliert; keine echte Produktionsrunde. Log:
-  `.local/audit-tests/ci-2026-11-01-managed-official-validated.log`.
-  Erster eingeschränkter Lauf:237 Units und workerd-Grenzen bestanden, macOS
-  verweigerte anschließend Chromium-Mach-Port vor Browserstart. Kein Codefehler,
-  kein Gesamterfolg. Finaler SHA256: cd5770215269d30f3847ed214da3086c7ae53ccb91d3e5464f9ec1220a0b5b3b.
-- Commits e2df2a2/b3f965e auf origin/codex/audit-remediation gepusht/verifiziert.
-  Cloudflare veröffentlicht:6c6d1e83-10cf-41a5-b876-306245af4f52, Anwendungscode
-  b3f965e. Produktiver Smoke-Test vollständig bestanden:Release/Header, Startseite,
-  robots/sitemap200, Metadaten/CSP, private APIs401, fremde Herkunft403,
-  Producer-Claim503 und offengelegte KI-Sperre. Keine Schreib-/Inferenzaufrufe.
-  Kein aktueller angemeldeter positiver Produktionstest; lokale Matrix ist simuliert.
-- Privater HF-Space aktuell83fd829720a06dc91e5395248ac8c1090df6b94c,
-  neun Quelldateien unabhängig gehasht, kostenloses zero-a10g unverändert.
-  34.201.418.400Bytes vollständig extern geladen,20SHA256 geprüft,
-  native Initialisierung tatsächlich bestätigt. Danach RUNTIME_ERROR:
-  HF verlangt eine registrierte @spaces.GPU-Funktion beim Start. Health503,
-  noch kein betriebsbereiter Producer. Korrektur hält registrierte private
-  Funktion von allen Vorbereitungspfaden getrennt und weist Eingaben vor Aufruf ab.
-  Scoped Deploy-Zugang nur lokal/HF, nie im Repository. Historische CPU/unready-
-  Quelle4cd4df2 wurde vor Aktivierung getrennt geprüft.
-- Externer Vorbereitungsmodus implementiert und19CPU-/HTTP-Tests bestanden:
-  lokaler/ohne Flags erfolgender Download verweigert; echte freie Bytes vor
-  Download, Hashprüfung bestehender Dateien, keine doppelte Blob-/Xet-Ablage;
-  preparation-only ruft auch nach Modellinitialisierung keine GPU-Funktion auf.
-  Native Installation/Download/Hashes/Modellinitialisierung inzwischen bestätigt;
-  vollständiger HTTP-Start nach ZeroGPU-Registrierungskorrektur noch offen. Kein Freigabeersatz.
-- Persönliche Zwei-HF-Konten und Produktionslobby am30.10. bereits bestanden,
-  je300/300 unverändert, Verbindungen danach getrennt. Nicht erneut anmelden,
-  solange kein tatsächlich ausführbarer freigegebener GPU-Test ansteht.
+## Nachweise / Fortsetzung
 
-## Nächste Schritte (nicht neu auditieren)
-
-1. Geprüfte SDK-Start-/SSR-Korrektur und macOS-WebKit-CI committen/pushen.
-   Fehlgeschlagenea0f83281 pausieren, neues Paket bereitstellen
-   und genehmigte externe Gratis-Vorbereitung genau einmal starten.
-   Nur unverändertes zero-a10g, keine Storage-/Hardware-/Sichtbarkeitsänderung.
-   Modellgewichte ausschließlich extern, bei Platzmangel abbrechen. Gefilterte
-   Build-/Prüfereignisse und /healthz lesen; nicht blind neu starten.
-2. Native Ergebnisse dokumentieren und erforderlichenfalls gezielt reparieren.
-   Cloudflare-Code unverändert; Produktions-Smoke2.11. wieder bestanden,
-   Release6c6d1e83 unverändert. Kein erneutes App-Deployment für reine Space-/Docs-
-   Änderungen erforderlich. Aktuelle Produktionssperre beibehalten.
-3. Verbleibende Moderationsrisikogruppen/kuratierten sicheren Korpus und fachliche
-   Betreiberabnahme vervollständigen; aktuellen Bericht nicht als qualifiziert
-   ausgeben. Dauerhaftes kostenloses Diensthosting und Datenschutzfreigabe fehlen.
-4. Native Modell-/Host-/Diskprüfung jetzt nur im genehmigten externen Gratis-
-   Umfang. Zweites Konto braucht Zugriff auf
-   privaten Producer; keine automatische öffentliche Sichtbarkeit.
-5. Erst nach ausreichend geprüften Voraussetzungen separat begrenzten Test mit
-   je einem persönlichen Auftrag/max120large-GPU-Sekunden und Quota vor/nach
-   genehmigen lassen. Aggregierte Differenz ist kein jobgenauer HF-Beleg.
-   Anschließend vollständige reale Produktionsrunde; aktuell nur Simulationen.
-
-## Fortsetzungsbelege
-
-Private, ignorierte Messungen: `.local/audit-tests/managed-free-755f8db2-*.json`,
-`managed-free-f5263a04-*.json`, `managed-free-000e18c3-*.json`,
-`managed-video-49da7a07-*.json`. Keine Tokens/Originalantworten enthalten.
-Details: docs/IMPLEMENTATION-2026-10-25.md, beide Audits24.10.,
-moderation-service/README.md, wan-service/README.md. Älterer vollständiger Stand:
-docs/progress/2026-11-01-before-managed-official.md. Noch offene P1/P2/P3 aus
-vorigem Stand bleiben erhalten; dieses Paket behauptet nicht deren Gesamtabnahme.
-
-Gefilterte Nachweise: docs/audits/2026-11-01-managed-official.json und
-docs/audits/2026-11-02-preparation.json.
+docs/audits/2026-11-02-preparation.json enthält den aktuellen gefilterten Nachweis;
+docs/audits/2026-11-01-managed-official.json und2026-11-01-release.json sind
+historische Messstände. Private ignorierte Einzelberichte und Logs liegen in
+.local/audit-tests (keine Tokens/Originalantworten). PROGRESS-Vorgänger:
+docs/progress/2026-11-02-before-native-ready.md und2026-11-01-before-managed-official.md.
