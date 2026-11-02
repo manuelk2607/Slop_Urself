@@ -21,6 +21,7 @@ import { validationConfig, validationScope, validationMember, parseValidationCam
 import { boundedJson } from '../body';
 import { approvedProvider, verifyPinnedProvider } from '../../ai/provider-trust';
 import { probePersonalProxy, personalProxyFailure } from '../../ai/personal-proxy';
+import { releaseId } from '../../security/release';
 
 export class ServiceDurableObject {
     private quotaOperations: Promise<unknown> = Promise.resolve();
@@ -60,10 +61,10 @@ export class ServiceDurableObject {
                     phase = 'membership'; const member = validationMember(scope, data.accountId);
                     phase = 'credential'; const credential = await this.hf.credential(data.connection, data.accountId);
                     phase = 'ownership'; if (credential.subject !== member.subject) throw new HfRequiredError();
-                    phase = 'producer'; return json(await probePersonalProxy(credential.token));
+                    phase = 'producer'; return json({ ...await probePersonalProxy(credential.token), serviceRelease: releaseId(this.env.CF_VERSION_METADATA?.id) });
                 } catch (error) {
                     const kind = error instanceof TypeError ? 'TypeError' : error instanceof HfRequiredError ? 'HfRequiredError' : 'Error';
-                    return json({ probeFailed: true, phase, errorKind: kind, code: personalProxyFailure(error), gpuCalls: 0, billingVerified: false });
+                    return json({ probeFailed: true, phase, errorKind: kind, code: personalProxyFailure(error), gpuCalls: 0, billingVerified: false, serviceRelease: releaseId(this.env.CF_VERSION_METADATA?.id) });
                 }
             }
             const quality = generationQuality(data.quality);
