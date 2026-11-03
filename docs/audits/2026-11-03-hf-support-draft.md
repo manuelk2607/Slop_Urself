@@ -1,4 +1,8 @@
-# Supportentwurf – noch nicht versendet
+# HF-Supportanfrage – veröffentlicht
+
+Veröffentlicht am 3. November 2026: [huggingface/hub-docs#2966](https://github.com/huggingface/hub-docs/issues/2966).
+Der erneut abgerufene öffentliche Titel und Inhalt entsprechen dem freigegebenen Text.
+Nur der englische Fragetext wurde übertragen; interne Nachweise bleiben hier.
 
 ## Title
 
@@ -60,7 +64,8 @@ We will not post credentials, proxy tokens, cookies, private logs or media.
 - Beide persönlichen Identitäten bestätigt; Proxy-Vergleichskategorie
   `opaque-unrelated`, `actor_mismatch`, `gpuCalls=0`.
 - Keine bestätigte falsche Belastung; tatsächliche Belastung noch ungeprüft.
-- Dieser Text wird nur nach ausdrücklicher Freigabe extern veröffentlicht.
+- Veröffentlichung ausdrücklich freigegeben und anschließend per getrenntem GET geprüft.
+- Rückmeldung des Anbieters steht aus; keine zweite Supportanfrage oder neue HF-Codes erforderlich.
 - Eine Anbieterbestätigung allein beweist noch keine individuelle Belastung:
   danach bleiben die genau zwei genehmigten Gratisaufträge und ihre getrennten
   Vor-/Nachmessungen sowie Wiedergabe/Abstimmung/Archivprüfung erforderlich.

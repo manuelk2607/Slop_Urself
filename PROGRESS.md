@@ -49,8 +49,9 @@ signierten Ersatzsitzungen und keine Nutzung des Betreiberkontos für Spielerjob
   opaque X-IP-Token.user-Kennung an whoami-ID/Name. Unser strikter Vergleich kann
   eine nicht unterstützte Annahme sein. Nicht durch fuzzy/contains/owner-Bindung
   ersetzen; HF nach unterstütztem Attributionsvertrag/Beleg fragen.
-- Konkreter Supporttext docs/audits/2026-11-03-hf-support-draft.md vorbereitet;
-  ausdrückliche Freigabe zum externen Veröffentlichen angefragt, noch NICHT erteilt.
+- Nach ausdrücklicher Nutzerfreigabe Supportanfrage veröffentlicht und Inhalt
+  per getrenntem GET verifiziert: https://github.com/huggingface/hub-docs/issues/2966.
+  Text/Nachweis: docs/audits/2026-11-03-hf-support-draft.md. Anbieterantwort offen.
   Keine neue Anmeldung, zusätzliche Scopes oder Wiederholung gleicher Proben nötig.
 - Commitsd57270b/54be8e6/1527619/782f36c auf origin/codex/audit-remediation
   gepusht.32native Tests,251App-Unit-Tests inCI,12gezielte App-Tests lokal, Build und echter workerd-Test
@@ -135,9 +136,9 @@ persistiert; bei Unklarheit nie einen GPU-Auftrag wiederholen.
 
 1. CI41551287353 ist für den veröffentlichten Code782f36c vollständig bestanden.
    Keine bestandenen Tests/Grundlagenanalysen erneut abarbeiten.
-2. Nutzerfreigabe zur geheimnisfreien Supportanfrage abwarten; danach gezielt
-   offiziellen HF-/Gradio-Vertrag für die opaque Proxy-Kennung klären. Entwurf
-   liegt bereit, noch keine externe Nachricht versendet. Keine neuen HF-Codes,
+2. Anbieterantwort in https://github.com/huggingface/hub-docs/issues/2966
+   prüfen und den offiziell bestätigten Zuordnungsweg übernehmen. Anfrage bereits
+   veröffentlicht; keine zweite Anfrage erstellen. Keine neuen HF-Codes,
    Scopes, Blindproben oder weiteren Diagnose-Deployments ohne neue Erkenntnis.
 3. Bestätigten Attributionsweg implementieren und gezielt testen; dann bestehende
    gültige Sitzungen nutzen und exakt2genehmigte Gratisvideos ausführen. Pro Job
@@ -153,5 +154,5 @@ Details/Nachweise:docs/audits/2026-11-03-live-validation.json.
 
 Abschluss dieses Pakets: neue Code-Commitsd57270b/54be8e6/1527619/782f36c gepusht;
 produktiver Release4b62baad-18a8-4489-9f1e-5e5925146f1a verifiziert.
-Diese Dokumentationsänderung erfordert kein erneutes Deployment. Supportfreigabe
-noch ausstehend; kein tatsächlicher GPU-/Abrechnungsnachweis, keine allgemeine KI-Freigabe.
+Diese Dokumentationsänderung erfordert kein erneutes Deployment. Supportanfrage
+veröffentlicht, Anbieterantwort noch ausstehend; kein tatsächlicher GPU-/Abrechnungsnachweis, keine allgemeine KI-Freigabe.

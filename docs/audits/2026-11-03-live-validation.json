@@ -170,12 +170,12 @@
     "note": "Availability was observed at this checkpoint, not guaranteed after expiry or host restart."
   },
   "open": [
-    "Obtain supported HF attribution contract for opaque proxy identity; comparison failure is not evidence of wrong billing. Support-publication permission pending; draft ready.",
+    "Obtain supported HF attribution contract for opaque proxy identity; comparison failure is not evidence of wrong billing. Authorized support request published and verified: https://github.com/huggingface/hub-docs/issues/2966. Await provider response.",
     "Implement and validate the confirmed supported binding without weakening safety; only then run exactly the two already-authorized free videos, capture both personal quotas before/after each, and obtain actual output review.",
     "Complete real generated-video playback, reload/reconnect, mutual votes, final scores, archive and statistics with those same two videos.",
     "General moderation qualification and authoritative per-job billing/identity attestation remain unverified; aggregate quota deltas alone are not itemized billing receipts."
   ],
-  "next": "Do not repeat passed CI, ask for new HF codes, restart models, broaden scopes or schedule GPUs without new attribution evidence. Await permission for the prepared public support request, then clarify the official opaque-identity contract.",
+  "next": "Read the provider response at https://github.com/huggingface/hub-docs/issues/2966 before changing identity rules. No duplicate support request, new HF codes, scope expansion or GPU scheduling without new attribution evidence. Existing two-video free authorization remains unused.",
   "evidence": [
     ".local/audit-tests/actor-relation-native.log",
     ".local/audit-tests/actor-relation-unit.log",
@@ -369,9 +369,17 @@
     },
     "supportRequest": {
       "draft": "docs/audits/2026-11-03-hf-support-draft.md",
-      "published": false,
-      "permissionPending": true,
-      "need": "Supported binding/attestation for opaque ZeroGPU caller plus per-job usage receipt; no evidence of HF billing defect."
+      "published": true,
+      "permissionPending": false,
+      "need": "Supported binding/attestation for opaque ZeroGPU caller plus per-job usage receipt; no evidence of HF billing defect.",
+      "permissionGranted": true,
+      "url": "https://github.com/huggingface/hub-docs/issues/2966",
+      "repository": "huggingface/hub-docs",
+      "issueNumber": 2966,
+      "state": "open",
+      "publishedAt": "2026-11-03T00:31:05Z",
+      "publishedBodyVerified": true,
+      "awaitingProviderResponse": true
     },
     "ci": {
       "run": 41551287353,
@@ -438,7 +446,7 @@
       "observedAt": 1793665650352
     }
   },
-  "updatedAt": "2026-11-03T00:28:35.538Z",
+  "updatedAt": "2026-11-03T00:31:52.985Z",
   "previousCheckpoint": {
     "production": {
       "at": "2026-11-02T23:15:52.854Z",
