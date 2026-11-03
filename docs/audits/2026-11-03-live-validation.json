@@ -21,7 +21,7 @@
     "safeProxyFailureCodes": true,
     "readOnlyFailurePhases": true,
     "canonicalNameRequiresFreshSameHfIdentity": true,
-    "producerPin": "8a1467627cf78078fd7a857f3341769dea62b88d",
+    "producerPin": "15a332bbb6bd6a389c6a2ec92867846509732f22",
     "servicesReleaseCorrelation": true
   },
   "provenRootCause": {
@@ -74,7 +74,7 @@
     ],
     "proxyUserType": "string",
     "proxyUserMatchesImmutableSubject": false,
-    "canonicalNameBinding": "Fresh same-account whoami succeeded; actual proxy scalar still actor_mismatch. Also reproduced with existing read token; no GPU call.",
+    "canonicalNameBinding": "Fresh same-account whoami succeeded; both actual proxy actors are opaque-unrelated, not verified by subject/name comparison. No proof of wrong-account debit.",
     "individualBillingVerified": false,
     "perJobBillingReceiptsAvailable": "not verified; only aggregate quota interface inspected",
     "wrongAccountCharged": "not observed; no GPU request was started"
@@ -89,111 +89,114 @@
     "realVotesFinalArchiveStatistics": false
   },
   "tests": {
-    "applicationUnits": 248,
-    "nativeCpuHttp": 30,
+    "applicationUnits": 251,
+    "nativeCpuHttp": 32,
+    "targetedApplicationTests": 12,
     "build": true,
-    "workerdPersonalProxyReadiness": "passed with simulated outbound services",
-    "workerdBoundedGeneration": "passed with simulated providers",
-    "priorFullGithubMatrix": {
-      "commit": "02948a8aa02f4421bf79c92050d6cefcfd5e4b52",
-      "run": 41520218201,
-      "conclusion": "success"
-    },
+    "workerdPersonalProxyReadiness": "passed; actual workerd, outbound fixtures only",
     "latestGithub": {
-      "commit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
-      "run": 41543724347,
-      "lastObservedStatus": "completed",
-      "conclusion": "success"
+      "run": 41551287353,
+      "url": "https://github.com/manuelk2607/Slop_Urself/actions/runs/41551287353",
+      "source": "782f36c3e45534ca8b4c681c8b0077acfbffdef5",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "webkit-macos",
+          "conclusion": "success",
+          "completedAt": "2026-11-03T00:25:44Z"
+        },
+        {
+          "name": "safety-cpu",
+          "conclusion": "success",
+          "completedAt": "2026-11-03T00:15:35Z"
+        },
+        {
+          "name": "test (chromium)",
+          "conclusion": "success",
+          "completedAt": "2026-11-03T00:22:01Z"
+        }
+      ],
+      "applicationUnitTests": 251,
+      "applicationUnitPass": 251,
+      "applicationUnitFail": 0
     }
   },
   "production": {
-    "at": "2026-11-02T23:15:52.854Z",
-    "release": "5991962e-cb18-4f0d-b420-67761cf7dd4b",
-    "sourceCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+    "at": "2026-11-03T00:19:51.311Z",
     "url": "https://slopurself.maki26.workers.dev",
-    "campaignRemoved": true,
-    "actualGpuRequests": 0,
-    "results": [
-      {
-        "path": "/",
-        "status": 200,
-        "type": "text/html"
-      },
-      {
-        "path": "/api/config",
-        "status": 200,
-        "type": "application/json",
-        "generationBlocked": true,
-        "aiRoundLimit": 0,
-        "mockAi": false,
-        "hfRequired": true
-      },
-      {
-        "path": "/api/stats",
-        "status": 401,
-        "type": "application/json"
-      },
-      {
-        "path": "/api/hf/validation",
-        "status": 401,
-        "type": "application/json"
-      },
-      {
-        "path": "/robots.txt",
-        "status": 200,
-        "type": "text/plain"
-      },
-      {
-        "path": "/sitemap.xml",
-        "status": 200,
-        "type": "application/xml"
-      },
-      {
-        "path": "/api/producer/claim",
-        "status": 503
-      }
-    ],
-    "authenticatedPartyAfterFinalRelease": false,
-    "temporaryCampaignRemoved": true,
-    "producerPaused": true,
-    "lastRunningProducerSource": "574ef59b42a6469fe241f5ec2e3079fa86e15c45",
-    "producerModelReadyInPreparationWasVerified": true,
-    "producerInferenceActivationPerformed": false
+    "sourceCommit": "782f36c3e45534ca8b4c681c8b0077acfbffdef5",
+    "release": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+    "homepageHttp": 200,
+    "workerRelease": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+    "configHttp": 200,
+    "generalGenerationBlocked": true,
+    "hfRequired": true,
+    "mockAi": false,
+    "producerHealthHttp": 200,
+    "producerModelLoaded": true,
+    "producerPreparationOnly": true,
+    "producerGenerationAvailable": false,
+    "producerModelRevision": "b8fff7315c768468a5333511427288870b2e9635",
+    "gpuRequests": 0,
+    "campaignConfigured": true,
+    "campaignExpiresAutomatically": true,
+    "producer": {
+      "source": "15a332bbb6bd6a389c6a2ec92867846509732f22",
+      "runtimeSource": "15a332bbb6bd6a389c6a2ec92867846509732f22",
+      "stage": "RUNNING",
+      "hardware": "zero-a10g",
+      "modelLoaded": true,
+      "preparationOnly": true,
+      "generationAvailable": false,
+      "modelRevision": "b8fff7315c768468a5333511427288870b2e9635",
+      "weightsDownloadedLocally": false
+    },
+    "authenticatedLobbyPassed": true,
+    "lobbyReloadReconnectPassed": true,
+    "authenticatedPermissionsPassed": true,
+    "fullRealAiPartyPassed": false,
+    "actualGpuRequests": 0
   },
   "interruption": {
-    "controllerProcessAvailable": false,
-    "localModeratorAvailable": false,
-    "ephemeralBrowserSessionsAvailable": false,
+    "observedAt": "2026-11-03T00:27:30.352Z",
+    "controllerProcessAvailable": true,
+    "localModeratorAvailable": true,
+    "ephemeralBrowserSessionsAvailable": true,
+    "controllerMaximumHours": 8,
+    "moderatorCampaignHours": 3,
     "cookiesExported": false,
     "tokensCommitted": false,
-    "serverSideHfConnectionsDeleted": false
+    "note": "Availability was observed at this checkpoint, not guaranteed after expiry or host restart."
   },
   "open": [
-    "Determine the actual personal proxy-user representation with structural diagnostics only; do not infer billing from authentication or accept unknown actor mappings.",
-    "Prepare interruption-resistant isolated test windows without writing credentials to repository; obtain fresh official HF confirmations only when the user is ready.",
-    "After successful proxy and model readiness, use the existing exact two-video free authorization; record both quotas before/after each job and require actual output review.",
-    "Complete real playback, reload, mutual voting, final score, archive and statistics; these remain untested with real generated videos.",
-    "General moderation qualification, HF proxy signature attestation and job-itemized billing remain separate unverified limits."
+    "Obtain supported HF attribution contract for opaque proxy identity; comparison failure is not evidence of wrong billing. Support-publication permission pending; draft ready.",
+    "Implement and validate the confirmed supported binding without weakening safety; only then run exactly the two already-authorized free videos, capture both personal quotas before/after each, and obtain actual output review.",
+    "Complete real generated-video playback, reload/reconnect, mutual votes, final scores, archive and statistics with those same two videos.",
+    "General moderation qualification and authoritative per-job billing/identity attestation remain unverified; aggregate quota deltas alone are not itemized billing receipts."
   ],
-  "next": "Check GitHub run41543724347. Do not reopen auth-code loops or restart/deploy providers automatically while the same external blocker remains.",
+  "next": "Do not repeat passed CI, ask for new HF codes, restart models, broaden scopes or schedule GPUs without new attribution evidence. Await permission for the prepared public support request, then clarify the official opaque-identity contract.",
   "evidence": [
-    ".local/audit-tests/2026-11-03-production-smoke.json",
-    ".local/audit-tests/2026-11-03-validation-cleanup.json",
-    ".local/live-validation/10d8afed-acf6-49ea-8c58-e70f906a94b2/proxy-observation.json",
-    ".local/live-validation/10d8afed-acf6-49ea-8c58-e70f906a94b2/producer-canonical-actor-observation.json",
-    ".local/audit-tests/final-proxy-pin-units.log",
-    ".local/audit-tests/canonical-actor-native-tests.log",
-    ".local/audit-tests/final-personal-proxy-runtime.log",
-    ".local/audit-tests/final-proxy-generation-runtime.log"
+    ".local/audit-tests/actor-relation-native.log",
+    ".local/audit-tests/actor-relation-unit.log",
+    ".local/audit-tests/actor-pin-runtime.log",
+    ".local/audit-tests/actor-relation-native-ready.json",
+    ".local/audit-tests/production-matrix-20261103.json",
+    ".local/audit-tests/ci-782f36c-chromium.log",
+    ".local/live-validation/984a71be-7157-4b53-938d-9432109b883c/proxy-observation.json",
+    ".local/live-validation/984a71be-7157-4b53-938d-9432109b883c/proxy-space-signed-observation.json",
+    ".local/live-validation/984a71be-7157-4b53-938d-9432109b883c/lobby-recovery.json",
+    ".local/live-validation/984a71be-7157-4b53-938d-9432109b883c/permissions.json",
+    ".local/live-validation/984a71be-7157-4b53-938d-9432109b883c/moderator-health.json"
   ],
   "git": {
     "branch": "codex/audit-remediation",
-    "applicationCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+    "applicationCommit": "782f36c3e45534ca8b4c681c8b0077acfbffdef5",
     "applicationPushVerified": true,
-    "documentationCheckpoint": "local commit; push after run41543724347 finishes, preserving ongoing CI"
+    "documentationCheckpoint": "This subsequent checkpoint changes documentation only; deployment remains the fully tested application commit."
   },
   "activeContinuation": {
-    "at": "2026-11-03T00:12:41.290Z",
+    "at": "2026-11-03T00:21:34.099Z",
     "campaign": "984a71be-7157-4b53-938d-9432109b883c",
     "room": "F815",
     "actualFreshAccountsConnected": true,
@@ -202,14 +205,17 @@
       300
     ],
     "producer": {
-      "source": "8a1467627cf78078fd7a857f3341769dea62b88d",
+      "source": "15a332bbb6bd6a389c6a2ec92867846509732f22",
+      "runtimeSource": "15a332bbb6bd6a389c6a2ec92867846509732f22",
       "stage": "RUNNING",
+      "hardware": "zero-a10g",
+      "modelLoaded": true,
       "preparationOnly": true,
       "generationAvailable": false,
-      "officialFilesVerified": 20,
-      "remoteOnlyBytes": 34201418400
+      "modelRevision": "b8fff7315c768468a5333511427288870b2e9635",
+      "weightsDownloadedLocally": false
     },
-    "productionRelease": "c8e13f35-5902-4dba-b0a6-7d458e89d746",
+    "productionRelease": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
     "signedTransport": [
       false,
       false
@@ -222,9 +228,314 @@
     "nativeTests": 32,
     "targetedAppTests": 12,
     "workerdIntegration": "passed with outbound fixtures; not billing proof",
-    "newDiagnostic": "local tested, not yet published",
+    "newDiagnostic": "published and actually observed for both callers",
     "actualGpuRequests": 0,
-    "individualBillingVerified": false
+    "individualBillingVerified": false,
+    "proxyObservations": [
+      {
+        "slot": "A",
+        "status": 200,
+        "release": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+        "serviceRelease": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+        "probeFailed": false,
+        "personalIdentityVerified": true,
+        "proxySubjectMatches": false,
+        "proxyClaimKeys": [
+          "ip",
+          "user",
+          "uuid",
+          "error",
+          "exp"
+        ],
+        "proxyUserFormat": "other-string",
+        "proxyBindingFailure": "actor_mismatch",
+        "proxyActorRelation": "opaque-unrelated",
+        "billingVerified": false,
+        "gpuCalls": 0
+      },
+      {
+        "slot": "B",
+        "status": 200,
+        "release": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+        "serviceRelease": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+        "probeFailed": false,
+        "personalIdentityVerified": true,
+        "proxySubjectMatches": false,
+        "proxyClaimKeys": [
+          "ip",
+          "user",
+          "uuid",
+          "error",
+          "exp"
+        ],
+        "proxyUserFormat": "other-string",
+        "proxyBindingFailure": "actor_mismatch",
+        "proxyActorRelation": "opaque-unrelated",
+        "billingVerified": false,
+        "gpuCalls": 0
+      }
+    ],
+    "productionSafety": {
+      "at": "2026-11-03T00:19:51.311Z",
+      "homepageHttp": 200,
+      "workerRelease": "4b62baad-18a8-4489-9f1e-5e5925146f1a",
+      "configHttp": 200,
+      "generalGenerationBlocked": true,
+      "hfRequired": true,
+      "mockAi": false,
+      "producerHealthHttp": 200,
+      "producerModelLoaded": true,
+      "producerPreparationOnly": true,
+      "producerGenerationAvailable": false,
+      "producerModelRevision": "b8fff7315c768468a5333511427288870b2e9635",
+      "gpuRequests": 0
+    },
+    "livePermissions": {
+      "at": "2026-11-03T00:14:13.876Z",
+      "observations": [
+        {
+          "slot": "A",
+          "adminUnavailable": true,
+          "adminAccountsReturned": 0,
+          "ownArchiveHttp": 200,
+          "anonymousValidationHttp": 401,
+          "untrustedTransportHttp": 400,
+          "gpuRequests": 0
+        },
+        {
+          "slot": "B",
+          "adminUnavailable": true,
+          "adminAccountsReturned": 0,
+          "ownArchiveHttp": 200,
+          "anonymousValidationHttp": 401,
+          "untrustedTransportHttp": 400,
+          "gpuRequests": 0
+        }
+      ]
+    },
+    "lobbyRecovery": {
+      "at": "2026-11-03T00:10:04.373Z",
+      "room": "F815",
+      "reload": true,
+      "reconnect": true,
+      "snapshots": [
+        {
+          "gameState": "LOBBY",
+          "roomId": "F815",
+          "players": [
+            {
+              "id": "95d1f300-b397-4a59-8364-7453c31ceaf2",
+              "name": "LiveA_825b2353",
+              "score": 0,
+              "connected": true
+            },
+            {
+              "id": "1cbc24e0-dd66-488d-a835-a33048422dc1",
+              "name": "LiveB_825b2353",
+              "score": 0,
+              "connected": true
+            }
+          ]
+        },
+        {
+          "gameState": "LOBBY",
+          "roomId": "F815",
+          "players": [
+            {
+              "id": "95d1f300-b397-4a59-8364-7453c31ceaf2",
+              "name": "LiveA_825b2353",
+              "score": 0,
+              "connected": true
+            },
+            {
+              "id": "1cbc24e0-dd66-488d-a835-a33048422dc1",
+              "name": "LiveB_825b2353",
+              "score": 0,
+              "connected": true
+            }
+          ]
+        }
+      ],
+      "gpuRequests": 0
+    },
+    "moderatorHealth": {
+      "at": "2026-11-03T00:15:26.727Z",
+      "http": 200,
+      "scopedReady": true,
+      "scopeMatches": true,
+      "versionMatches": true,
+      "qualifiedForGeneralUse": false,
+      "gpuRequests": 0
+    },
+    "supportRequest": {
+      "draft": "docs/audits/2026-11-03-hf-support-draft.md",
+      "published": false,
+      "permissionPending": true,
+      "need": "Supported binding/attestation for opaque ZeroGPU caller plus per-job usage receipt; no evidence of HF billing defect."
+    },
+    "ci": {
+      "run": 41551287353,
+      "url": "https://github.com/manuelk2607/Slop_Urself/actions/runs/41551287353",
+      "source": "782f36c3e45534ca8b4c681c8b0077acfbffdef5",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "webkit-macos",
+          "conclusion": "success",
+          "completedAt": "2026-11-03T00:25:44Z"
+        },
+        {
+          "name": "safety-cpu",
+          "conclusion": "success",
+          "completedAt": "2026-11-03T00:15:35Z"
+        },
+        {
+          "name": "test (chromium)",
+          "conclusion": "success",
+          "completedAt": "2026-11-03T00:22:01Z"
+        }
+      ],
+      "applicationUnitTests": 251,
+      "applicationUnitPass": 251,
+      "applicationUnitFail": 0
+    },
+    "finalStatus": {
+      "githubCi": "passed for deployed code 782f36c",
+      "zeroGpuSpace": "running with pinned initialized model; inference blocked",
+      "realWanGeneration": "authorized but not executed because identity preflight is unverified",
+      "individualDebit": "not proven; zero GPU requests",
+      "multiplayer": "partial: live authenticated lobby/reload/reconnect/authorization passed; video/vote/final/archive output untested",
+      "publicAiRelease": "blocked: opaque proxy actor binding and actual debit remain unverified; general moderation not qualified"
+    },
+    "lastActualProfiles": {
+      "profiles": [
+        {
+          "slot": "A",
+          "name": "LiveA_825b2353",
+          "accountId": "74a96ba8-7b6b-4db7-a37d-74156f0c4ba2",
+          "identityVerified": true,
+          "status": 200,
+          "connected": true,
+          "username": "Manuel260702",
+          "remaining": 300,
+          "total": 300,
+          "expectedAccount": true
+        },
+        {
+          "slot": "B",
+          "name": "LiveB_825b2353",
+          "accountId": "c6f07480-b834-4936-9c23-e0559125e84b",
+          "identityVerified": true,
+          "status": 200,
+          "connected": true,
+          "username": "Manuel2607",
+          "remaining": 300,
+          "total": 300,
+          "expectedAccount": true
+        }
+      ],
+      "observedAt": 1793665650352
+    }
   },
-  "updatedAt": "2026-11-03T00:12:41.289Z"
+  "updatedAt": "2026-11-03T00:28:35.538Z",
+  "previousCheckpoint": {
+    "production": {
+      "at": "2026-11-02T23:15:52.854Z",
+      "release": "5991962e-cb18-4f0d-b420-67761cf7dd4b",
+      "sourceCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+      "url": "https://slopurself.maki26.workers.dev",
+      "campaignRemoved": true,
+      "actualGpuRequests": 0,
+      "results": [
+        {
+          "path": "/",
+          "status": 200,
+          "type": "text/html"
+        },
+        {
+          "path": "/api/config",
+          "status": 200,
+          "type": "application/json",
+          "generationBlocked": true,
+          "aiRoundLimit": 0,
+          "mockAi": false,
+          "hfRequired": true
+        },
+        {
+          "path": "/api/stats",
+          "status": 401,
+          "type": "application/json"
+        },
+        {
+          "path": "/api/hf/validation",
+          "status": 401,
+          "type": "application/json"
+        },
+        {
+          "path": "/robots.txt",
+          "status": 200,
+          "type": "text/plain"
+        },
+        {
+          "path": "/sitemap.xml",
+          "status": 200,
+          "type": "application/xml"
+        },
+        {
+          "path": "/api/producer/claim",
+          "status": 503
+        }
+      ],
+      "authenticatedPartyAfterFinalRelease": false,
+      "temporaryCampaignRemoved": true,
+      "producerPaused": true,
+      "lastRunningProducerSource": "574ef59b42a6469fe241f5ec2e3079fa86e15c45",
+      "producerModelReadyInPreparationWasVerified": true,
+      "producerInferenceActivationPerformed": false
+    },
+    "tests": {
+      "applicationUnits": 248,
+      "nativeCpuHttp": 30,
+      "build": true,
+      "workerdPersonalProxyReadiness": "passed with simulated outbound services",
+      "workerdBoundedGeneration": "passed with simulated providers",
+      "priorFullGithubMatrix": {
+        "commit": "02948a8aa02f4421bf79c92050d6cefcfd5e4b52",
+        "run": 41520218201,
+        "conclusion": "success"
+      },
+      "latestGithub": {
+        "commit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+        "run": 41543724347,
+        "lastObservedStatus": "completed",
+        "conclusion": "success"
+      }
+    },
+    "interruption": {
+      "controllerProcessAvailable": false,
+      "localModeratorAvailable": false,
+      "ephemeralBrowserSessionsAvailable": false,
+      "cookiesExported": false,
+      "tokensCommitted": false,
+      "serverSideHfConnectionsDeleted": false
+    },
+    "git": {
+      "branch": "codex/audit-remediation",
+      "applicationCommit": "37f89f26350b5af6c47ab3e1bc2b905d47b967cd",
+      "applicationPushVerified": true,
+      "documentationCheckpoint": "local commit; push after run41543724347 finishes, preserving ongoing CI"
+    },
+    "next": "Check GitHub run41543724347. Do not reopen auth-code loops or restart/deploy providers automatically while the same external blocker remains.",
+    "evidence": [
+      ".local/audit-tests/2026-11-03-production-smoke.json",
+      ".local/audit-tests/2026-11-03-validation-cleanup.json",
+      ".local/live-validation/10d8afed-acf6-49ea-8c58-e70f906a94b2/proxy-observation.json",
+      ".local/live-validation/10d8afed-acf6-49ea-8c58-e70f906a94b2/producer-canonical-actor-observation.json",
+      ".local/audit-tests/final-proxy-pin-units.log",
+      ".local/audit-tests/canonical-actor-native-tests.log",
+      ".local/audit-tests/final-personal-proxy-runtime.log",
+      ".local/audit-tests/final-proxy-generation-runtime.log"
+    ]
+  }
 }
