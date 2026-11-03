@@ -18,7 +18,7 @@ test('personal resource authorization is short-lived, Space-scoped and read-only
     });
     assert.equal(await personalSpaceAuthorization('own-fixture'), `Bearer ${jwt}`);
 });
-test('resource authorization rejects redirects, denied credentials, excessive lifetime and conflicting tokens', async t => {
+test('resource authorization rejects redirects, denied credentials, excessive lifetime and malformed raw tokens', async t => {
     let reply = new Response(null, { status: 302, headers: { location: 'https://untrusted.test/' } });
     t.mock.method(globalThis, 'fetch', async () => reply);
     await assert.rejects(personalSpaceAuthorization('fixture'), /space_access_redirect/);
@@ -29,8 +29,10 @@ test('resource authorization rejects redirects, denied credentials, excessive li
         await assert.rejects(personalSpaceAuthorization('fixture'), /space_access_invalid/);
     }
     const expiry = Math.floor(Date.now() / 1000) + 240;
-    reply = Response.json({ token: token(expiry), accessToken: 'Bearer different' });
+    reply = Response.json({ token: 'invalid', accessToken: `Bearer ${token(expiry)}` });
     await assert.rejects(personalSpaceAuthorization('fixture'), /space_access_invalid/);
+    reply = Response.json({ token: token(expiry), accessToken: 'unrelated-legacy-field', exp: expiry });
+    assert.equal(await personalSpaceAuthorization('fixture'), `Bearer ${token(expiry)}`);
 });
 test('experimental read-only resource routes retain the personal application credential and expose no resource secret', async t => {
     const expiry = Math.floor(Date.now() / 1000) + 240, jwt = token(expiry);
