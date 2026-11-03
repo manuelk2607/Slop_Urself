@@ -8,6 +8,7 @@ const codes = new Set(['validation_scope_unavailable', 'producer_unreachable', '
     ...[401, 403, 404, 429, 500, 502, 503, 504].map(status => `producer_http_${status}`), 'producer_http_rejected']);
 const userFormats = new Set(['object', 'other', 'empty', 'anonymous-label', 'role-label', 'credential-like', 'hex-id', 'uuid', 'json-object', 'json-array', 'other-string']);
 const bindingFailures = new Set(['actor_schema_unknown', 'identity_lookup_unavailable', 'identity_changed', 'actor_mismatch', 'context_unavailable']);
+const actorRelations = new Set(['non-string', 'exact-subject', 'exact-name', 'case-only-name', 'namespaced-subject', 'namespaced-name', 'contains-subject', 'contains-name', 'opaque-unrelated']);
 export function personalProxyFailure(error: unknown) {
     return error instanceof Error && codes.has(error.message) ? error.message : 'validation_unavailable';
 }
@@ -49,5 +50,6 @@ export async function probePersonalProxy(token: string, transport: ReturnType<ty
         proxyClaimKeys: result.proxyClaimKeys as string[], billingVerified: false, gpuCalls: 0,
         ...(transport !== 'personal' ? { credentialRoute: transport } : {}),
         ...(typeof result.proxyUserFormat === 'string' && userFormats.has(result.proxyUserFormat) ? { proxyUserFormat: result.proxyUserFormat } : {}),
+        ...(typeof result.proxyActorRelation === 'string' && actorRelations.has(result.proxyActorRelation) ? { proxyActorRelation: result.proxyActorRelation } : {}),
         ...(result.proxyBindingFailure === null || typeof result.proxyBindingFailure === 'string' && bindingFailures.has(result.proxyBindingFailure) ? { proxyBindingFailure: result.proxyBindingFailure } : {}) };
 }

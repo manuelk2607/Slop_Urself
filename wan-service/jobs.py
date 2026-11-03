@@ -34,6 +34,21 @@ def proxy_user_format(payload):
     return 'other-string'
 
 
+def proxy_actor_relation(payload, subject, username):
+    """Finite comparison labels only; diagnostic, never an authorization rule."""
+    value=payload.get('user')
+    if not isinstance(value,str):return 'non-string'
+    if value==subject:return 'exact-subject'
+    if value==username:return 'exact-name'
+    if isinstance(username,str) and value.casefold()==username.casefold():return 'case-only-name'
+    for prefix in ('user:', 'user_', 'user/', 'uid:', 'hf:', 'api:', 'oauth:'):
+        if value==prefix+subject:return 'namespaced-subject'
+        if value==prefix+username:return 'namespaced-name'
+    if subject in value:return 'contains-subject'
+    if username and username.casefold() in value.casefold():return 'contains-name'
+    return 'opaque-unrelated'
+
+
 def validate_proxy_token(token,now=None,subject=None,verified_username=None):
     """Reject SDK's explicit missing/error/IP-fallback cases, not a billing proof.
 

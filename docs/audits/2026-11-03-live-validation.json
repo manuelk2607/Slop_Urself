@@ -21,7 +21,7 @@
     "safeProxyFailureCodes": true,
     "readOnlyFailurePhases": true,
     "canonicalNameRequiresFreshSameHfIdentity": true,
-    "producerPin": "574ef59b42a6469fe241f5ec2e3079fa86e15c45",
+    "producerPin": "8a1467627cf78078fd7a857f3341769dea62b88d",
     "servicesReleaseCorrelation": true
   },
   "provenRootCause": {
@@ -74,7 +74,7 @@
     ],
     "proxyUserType": "string",
     "proxyUserMatchesImmutableSubject": false,
-    "canonicalNameBinding": "unverified; reason not fully separated from secondary identity-lookup failure",
+    "canonicalNameBinding": "Fresh same-account whoami succeeded; actual proxy scalar still actor_mismatch. Also reproduced with existing read token; no GPU call.",
     "individualBillingVerified": false,
     "perJobBillingReceiptsAvailable": "not verified; only aggregate quota interface inspected",
     "wrongAccountCharged": "not observed; no GPU request was started"
@@ -193,27 +193,38 @@
     "documentationCheckpoint": "local commit; push after run41543724347 finishes, preserving ongoing CI"
   },
   "activeContinuation": {
-    "freshPersonalConnectionsVerified": true,
+    "at": "2026-11-03T00:12:41.290Z",
+    "campaign": "984a71be-7157-4b53-938d-9432109b883c",
+    "room": "F815",
+    "actualFreshAccountsConnected": true,
     "quotas": [
       300,
       300
     ],
-    "controller": {
-      "pid": 90780,
-      "detached": true,
-      "maximumHours": 8,
-      "credentialsPersisted": false
+    "producer": {
+      "source": "8a1467627cf78078fd7a857f3341769dea62b88d",
+      "stage": "RUNNING",
+      "preparationOnly": true,
+      "generationAvailable": false,
+      "officialFilesVerified": 20,
+      "remoteOnlyBytes": 34201418400
     },
-    "room": "F815",
-    "producerSource": "8a1467627cf78078fd7a857f3341769dea62b88d",
-    "producerRestartAcknowledged": true,
-    "mode": "preparation-only; startup in progress",
-    "newTests": {
-      "native": 31,
-      "focusedApp": 9,
-      "build": true,
-      "workerdProxyReadiness": true
+    "productionRelease": "c8e13f35-5902-4dba-b0a6-7d458e89d746",
+    "signedTransport": [
+      false,
+      false
+    ],
+    "readTokenComparison": {
+      "personalIdentityVerified": true,
+      "proxySubjectMatches": false
     },
-    "actualGpuRequests": 0
-  }
+    "lobbyReloadReconnectPassed": true,
+    "nativeTests": 32,
+    "targetedAppTests": 12,
+    "workerdIntegration": "passed with outbound fixtures; not billing proof",
+    "newDiagnostic": "local tested, not yet published",
+    "actualGpuRequests": 0,
+    "individualBillingVerified": false
+  },
+  "updatedAt": "2026-11-03T00:12:41.289Z"
 }

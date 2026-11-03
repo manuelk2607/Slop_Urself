@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from official import manifest, parameters, load_pipeline, infer
 from producer import write_video
-from jobs import JobLedger, validate_permit, media_capability, validate_media_capability, validation_window, validate_proxy_token, proxy_user_format
+from jobs import JobLedger, validate_permit, media_capability, validate_media_capability, validation_window, validate_proxy_token, proxy_user_format, proxy_actor_relation
 
 PUBLIC_VALIDATION_SPACE='Manuel2607/SlopUrself-Wan22-Validated'
 CONTROLLED_SPACES={'Manuel2607/SlopUrself-Wan22-GPU-Test',PUBLIC_VALIDATION_SPACE}
@@ -86,7 +86,9 @@ def input_path(value, upload_root):
 
 
 class ProxyBindingError(ValueError):
-    pass
+    def __init__(self, code, relation=None):
+        super().__init__(code)
+        self.relation=relation
 
 
 def verified_proxy_payload(request,subject):
@@ -102,7 +104,7 @@ def verified_proxy_payload(request,subject):
         if not isinstance(identity,dict) or identity.get('id')!=subject:
             raise ProxyBindingError('identity_changed')
         try:validate_proxy_token(token,subject=subject,verified_username=identity['name'])
-        except ValueError:raise ProxyBindingError('actor_mismatch') from None
+        except ValueError:raise ProxyBindingError('actor_mismatch',proxy_actor_relation(payload,subject,identity['name'])) from None
         return payload,'canonical-name'
 
 
@@ -272,9 +274,9 @@ def build_app():
             subject=hf_subject(authorization)
             stage='personal_proxy_context_unavailable'
             payload=validate_proxy_token(request.headers.get('x-ip-token'))
-            failure=None
+            failure=None;relation=None
             try:_,binding=verified_proxy_payload(request,subject);bound=True
-            except ProxyBindingError as error:bound=False;binding='unverified';failure=str(error)
+            except ProxyBindingError as error:bound=False;binding='unverified';failure=str(error);relation=error.relation
             except Exception:bound=False;binding='unverified';failure='context_unavailable'
             keys=[k for k in payload if re.fullmatch(r'[A-Za-z0-9_]{1,64}',k)][:20]
             user=payload.get('user')
@@ -282,10 +284,10 @@ def build_app():
                 'proxyUserScalarMatchesSubject':isinstance(user,str) and user==subject,
                 'proxyUserType':'string' if isinstance(user,str) else 'object' if isinstance(user,dict) else 'other',
                 'proxyBinding':binding,
-                'proxyUserFormat':proxy_user_format(payload),'proxyBindingFailure':failure,
+                'proxyUserFormat':proxy_user_format(payload),'proxyBindingFailure':failure,'proxyActorRelation':relation,
                 **received,'gpuCalls':0}),flush=True)
             return JSONResponse({'personalIdentityVerified':True,'proxySubjectMatches':bound,'proxyClaimKeys':keys,
-                'proxyUserFormat':proxy_user_format(payload),'proxyBindingFailure':failure,
+                'proxyUserFormat':proxy_user_format(payload),'proxyBindingFailure':failure,'proxyActorRelation':relation,
                 'billingVerified':False,'gpuCalls':0},headers={'cache-control':'no-store'})
         except Exception:
             print(json.dumps({'event':'identity_preflight_rejected','code':stage,**received,'gpuCalls':0}),flush=True)

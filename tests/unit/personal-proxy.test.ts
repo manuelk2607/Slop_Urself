@@ -15,9 +15,9 @@ test('read-only proxy probes keep caller transport and never equate identity wit
     assert.deepEqual(await probePersonalProxy('fixture-personal'), identity);
     bound = false;
     assert.deepEqual(await probePersonalProxy('fixture-personal'), { ...identity, proxySubjectMatches: false });
-    diagnostics = { proxyUserFormat: 'json-object', proxyBindingFailure: 'actor_mismatch' };
+    diagnostics = { proxyUserFormat: 'json-object', proxyBindingFailure: 'actor_mismatch', proxyActorRelation: 'opaque-unrelated' };
     assert.deepEqual(await probePersonalProxy('fixture-personal'), { ...identity, proxySubjectMatches: false, ...diagnostics });
-    diagnostics = { proxyUserFormat: 'private-fixture-never-return', proxyBindingFailure: 'private-fixture-never-return' };
+    diagnostics = { proxyUserFormat: 'private-fixture-never-return', proxyBindingFailure: 'private-fixture-never-return', proxyActorRelation: 'private-fixture-never-return' };
     assert.deepEqual(await probePersonalProxy('fixture-personal'), { ...identity, proxySubjectMatches: false });
 });
 

@@ -17,30 +17,45 @@ Gemini laut Nutzer Free/kein Billing-Konto; bezahlte Kontexttests abgelehnt.
 Tokens/Cookies niemals ausgeben oder ins Repository schreiben, keine selbst
 signierten Ersatzsitzungen und keine Nutzung des Betreiberkontos für Spielerjobs.
 
-## Aktive Fortsetzung am 3. November
+## Aktive Fortsetzung am 3. November (00:14 UTC)
 
-- GitHub41543724347 für37f89f2 vollständig erfolgreich: safety-cpu, Chromium,
-  WebKit/macOS. Nutzer hat die erneuten offiziellen HF-Freigaben bestätigt;
-  tatsächliche APIs bestätigen beide bisherigen Profile owner=true, richtige
-  getrennte HF-Konten und300/300Sekunden. Neue LobbyF815. Keine erneuten Codes
-  anfordern. Die darunter beschriebenen verlorenen Sessions sind HISTORISCH.
-- Neuer Controller läuft als vom Arbeitsprozess getrennter ProzessPID90780 mit
-  maximal8h Lebensdauer, zwei isolierten RAM-Kontexten und ohne Cookieexport.
-  Aktueller Log.local/audit-tests/bounded-controller-20261103.log; Steuerung
-  .local/bounded-live-command.json / Ergebnis .local/bounded-live-result.json.
-  Frisch ausgeführtes status und room sind bestätigt; bisher0Video-Uploads.
-- Gezielte strukturelle Proxy-Diagnose implementiert (keine Actor-Regel gelockert):
-  nur Formatkategorien und feste Fehlercodes für Schema, whoami-Ausfall,
-  Identitätswechsel oder echten Actor-Mismatch.31 native Tests sowie9 betroffene
-  App-Tests/Build bestanden. Saubere HF-Quelle8a1467627cf78078fd7a857f3341769dea62b88d
-  mit9 überprüften Dateien veröffentlicht. Kostenloser eigener Space per/restart
-  aus PAUSED aufgeweckt; Modell lädt derzeit ausschließlich extern in
-  preparation-only. Keine Aktivierung und kein GPU-Auftrag. App-Pin/DOCs werden
-  mit bestandener echter workerd-Regression als nächstes gesichert/veröffentlicht.
-- Anschließend bei tatsächlichem RUNNING/Modellvorbereitung die neue Kampagne
-  fürF815 anlegen, privaten festen Moderator starten, Scope konfigurieren und
-  exakt die beiden kostenlosen Nur-Lese-Proben ausführen. Diagnosekategorien
-  dürfen nicht als Inhalts-/Abrechnungsqualifikation ausgegeben werden.
+- Nutzerbestätigte neue HF-Sitzungen tatsächlich gültig: LiveA_825b2353 →
+  Manuel260702, LiveB_825b2353 → Manuel2607; owner/identityVerified=true,
+  beide300/300Sekunden. ControllerPID90780 hält zwei isolierte RAM-Kontexte,
+  maximal8h, keine Cookieexporte. KEINE erneuten Codes anfordern.
+- Neue LobbyF815: Anmeldung, Erstellen/Beitreten, synchroner Zustand, Reload
+  und Offline/Wiederverbindung produktiv bestanden. Kein Video hochgeladen,
+  keine GPU-Aufträge. Eigene Quota-GETs sind kein Belastungsnachweis.
+- Öffentlicher Gratis-Producer8a1467627cf78078fd7a857f3341769dea62b88d
+  ist RUNNING, offizielle20Dateien/34,2GB ausschließlich extern verifiziert und
+  Modell initialisiert; weiterhin preparation-only, generationAvailable=false.
+- Aktuelle Kampagne984a71be-7157-4b53-938d-9432109b883c fürF815, drei Stunden,
+  dedizierter SupervisorPID94906/Moderator3406, Scope122db6fe…, Health bestätigt.
+  Pointer.local/bounded-current-campaign.json; Steuerung ausschließlich
+  .local/bounded-live-command.json / bounded-live-result.json. Alte Abschnitte
+  darunter zu verlorenen Sitzungen/PAUSED sind historische Checkpoints.
+- Appfixd57270b: tatsächlicher HF-JWT-Vertrag hat token und abweichendes
+  legacy-accessToken; nur rohe kurzlebige JWT verwenden. Build,5gezielte Tests
+  und echter workerd-Integrationstest bestanden. 54be8e6 ergänzt offiziellen
+  Gradio-__sign-Transport als ausschließlich lesende Kampagnendiagnose.
+  Worker/Servicesc8e13f35-5902-4dba-b0a6-7d458e89d746 bestätigt.
+- Reale Resultate mit beiden persönlichen OAuth-Konten: Standard/Cookie/
+  offizieller signierter Transport HTTP200, whoami=true, Proxyactor jedoch
+  actor_mismatch/other-string; Ressource als X-HF-Authorization wird abgewiesen.
+  Zusätzlich bestehender persönlicher Read-Token (nur CPU-Diagnose, kein Job)
+  ebenfalls actor_mismatch. Daher NICHT einfach OAuth erneut autorisieren.
+- Vorheriger GET lief jeweils kurz nach Deployment im alten Service; Versionen
+  separat nachgewiesen, keine GPU-Wiederholungen. Eine automatische Prüfung
+  lehnte einen identischen GET ab; erst nach belegtem Service-Versionsunterschied
+  und unverändert0GPU wurde die neue Version gelesen.
+- Neue rein kategoriale Actor-Diagnose lokal implementiert: case-only-name,
+  namespaced-subject/name, contains-subject/name oder opaque-unrelated.
+  Keine Actor-/Freigaberegel gelockert.32native und12gezielte App-Tests sowie
+  Build erfolgreich. Nächster Schritt: dieses geprüfte Paket veröffentlichen,
+  neuen Producer exakt pinnen und einmal die Ursache am tatsächlichen HF-Actor
+  abgrenzen. Kontingentbelastung und echte Videos weiterhin NICHT nachgewiesen.
+- CI:f0c19b5 vollständig erfolgreich; neuere Runs durch nächste Pushes teilweise
+  ersetzt/abgebrochen, neuester Code noch in Prüfung. Vor Abschluss prüfen.
 
 ## Verifizierter Entwicklungs- und Produktionsstand vor dieser Fortsetzung
 
@@ -113,30 +128,16 @@ persistiert; bei Unklarheit nie einen GPU-Auftrag wiederholen.
 
 ## Nächster konkreter Schritt
 
-1. Aktiven Fortsetzungspunkt oben abarbeiten. GitHub37f89f2 ist vollständig grün;
-   neue sichere Diagnose mit exaktem8a14676-Producer-Pin geprüft veröffentlichen.
-2. Vor erneuter Kontofreigabe Testfenster so betreiben, dass eine Codex-Unterbrechung
-   nicht wieder die einzigen Zugriffe vernichtet. Weiterhin keine Token-Dateien
-   im Repository. Frische offizielle HF-Freigaben erst anfordern, wenn der Nutzer
-   für die reale Prüfung bereit ist; die Kosten-/Motivfreigabe gilt bereits.
-3. Zuerst die tatsächliche Proxy-user-Darstellung über strukturelle Diagnostik
-   klären, ohne JWT/Claims-Werte auszugeben. ID-/Namensgleichheit ist weiterhin
-   NICHT nachgewiesen; keine unbekannten Actor-Schemata akzeptieren und nicht
-   vorsorglich OAuth-Rechte erweitern. Eventuelle HF-Schnittstellenlücken offen
-   benennen, keine eigene Abrechnung aus erfolgreichem whoami ableiten.
-4. Nur bei verifiziertem persönlichen Proxy und exakten Modellpins den Gratis-
-   Producer kontrolliert aufwecken/vorbereiten und ein endliches Scope konfigurieren.
-   Beide Quotas unmittelbar vor/nach JEDEM der exakt zwei Aufträge erfassen.
-5. Originale scene-0/1.png aus.local/audit-tests/live-qualification-629bbb9f-
-   fc35-443a-b764-5cfc2021d926 nutzen; tatsächlichen UI-Preview-Pixelhash prüfen.
-   Nicht die normalisierten Fixtures nochmals JPEG-kodieren. Ausgabe vollständig
-   prüfen und dem Nutzer zeitnah zur tatsächlichen Sichtfreigabe vorlegen.
-6. Dieselben Videos über normale Spiel-UI abspielen, Reload/Wiederverbindung,
-   gegenseitige4/3-Bewertungen, Endstand, Archiv und Statistik bestätigen.
-   Quota-Deltas bleiben kontrollierte Verbrauchsbeobachtungen, keine jobgenauen
-   HF-Rechnungsbelege. Danach Scope entfernen und Producer sicher zurückstellen.
+1. Geprüfte kategoriale Producer-Diagnose bereitstellen, neuen Quellpin mit
+   tatsächlicher HF-Revision/Runtime abgleichen, keine Actor-Regel lockern.
+2. Bestehende zwei bestätigte Sitzungen verwenden; tatsächliche Zuordnung anhand
+   neuer Diagnose klären. Keine weiteren Codes/gleichartigen Blindproben.
+3. Erst bei verifizierter Zuordnung kontrolliertes Gratisfenster aktivieren;
+   exakt2genehmigte Originalmotive, persönliche Quotas vor/nach JEDEM Job,
+   volle Ausgabemoderation plus echte Betreiber-Sichtfreigabe vor Veröffentlichung.
+4. Dieselben Videos in normaler UI abspielen, abstimmen4/3, Endstand/Archiv/
+   Statistiken prüfen. Scope danach zurücknehmen, Producer sicher zurückstellen.
+5. CI-Ergebnisse und produktive Version dokumentieren. Quota-Deltas sind
+   Verbrauchsbeobachtungen, keine jobgenauen Rechnungen. Allgemeine Sperre bleibt.
 
-Details/Nachweise:docs/audits/2026-11-03-live-validation.json. Ältere Berichte sind
-historische Stände, nicht erneut offene Grundlagenanalysen. Die Automation wurde
-auf diesen Fortsetzungspunkt eingeschränkt; unveränderte externe Blocker lösen
-keine neuen Codes, Deployments oder GPU-Aufträge aus.
+Details/Nachweise:docs/audits/2026-11-03-live-validation.json.

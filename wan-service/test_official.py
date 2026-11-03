@@ -13,7 +13,7 @@ from unittest.mock import patch
 import official
 from jobs import JobLedger, validate_permit, media_capability, validate_media_capability
 from jobs import validation_window
-from jobs import validate_proxy_token, proxy_user_format
+from jobs import validate_proxy_token, proxy_user_format, proxy_actor_relation
 from app import input_path, hf_subject, validation_subjects, PUBLIC_VALIDATION_SPACE, personal_authorization
 
 SECRET='cpu-test-producer-key-not-for-production-1234'
@@ -28,6 +28,14 @@ def permit(**overrides):
 
 
 class OfficialTests(unittest.TestCase):
+    def test_proxy_actor_relation_is_finite_and_does_not_authorize_prefixes_or_fuzzy_names(self):
+        def token(user):return 'e30.'+base64.urlsafe_b64encode(json.dumps({'user':user}).encode()).decode().rstrip('=')+'.Zml4dHVyZQ'
+        for value,relation in [('canonical-a','case-only-name'),('user:account-a','namespaced-subject'),
+            ('user:Canonical-A','namespaced-name'),('owner:account-a','contains-subject'),
+            ('prefixCanonical-Aextra','contains-name'),('unrelated-private-value','opaque-unrelated')]:
+            self.assertEqual(proxy_actor_relation({'user':value},'account-a','Canonical-A'),relation)
+            with self.assertRaises(ValueError):validate_proxy_token(token(value),subject='account-a',verified_username='Canonical-A')
+
     def test_proxy_user_diagnostics_reveal_only_structural_categories(self):
         for value,kind in [('', 'empty'),('None','anonymous-label'),('pro','role-label'),
             ('hf_private-fixture-never-output','credential-like'),('a'*24,'hex-id'),
