@@ -57,6 +57,7 @@ const runtime = new Miniflare({ logRequests: false, telemetry: { enabled: false 
     assert.ok([authorization, `Bearer ${resourceTokens[index]}`].includes(request.headers.get('x-hf-authorization')!));
     assert.equal(request.headers.get('x-slop-hf-authorization'), authorization);
     if (request.headers.has('cookie')) assert.equal(request.headers.get('cookie'), `__sign=${resourceTokens[index]}`);
+    if (url.searchParams.has('__sign')) assert.equal(url.searchParams.get('__sign'), resourceTokens[index]);
     if (mode === 'redirect') return new Response(null, { status: 302, headers: { location: 'https://never-forward.test/collect' } });
     return Response.json({ personalIdentityVerified: true, proxySubjectMatches: mode !== 'unbound', proxyClaimKeys: ['sub'], billingVerified: false, gpuCalls: 0 });
 } } } }] });
@@ -67,7 +68,7 @@ try {
         const proof = await (await runtime.dispatchFetch('https://test/proxy/' + slot)).json() as { proxySubjectMatches: boolean; billingVerified: boolean; gpuCalls: number };
         assert.equal(proof.proxySubjectMatches, true, JSON.stringify(proof)); assert.equal(proof.billingVerified, false); assert.equal(proof.gpuCalls, 0);
     }
-    for (const transport of ['space-jwt', 'space-cookie']) for (const slot of ['a', 'b']) {
+    for (const transport of ['space-jwt', 'space-cookie', 'space-signed']) for (const slot of ['a', 'b']) {
         const result = await (await runtime.dispatchFetch(`https://test/proxy/${slot}?transport=${transport}`)).json() as { proxySubjectMatches: boolean; credentialRoute: string };
         assert.equal(result.proxySubjectMatches, true); assert.equal(result.credentialRoute, transport);
     }

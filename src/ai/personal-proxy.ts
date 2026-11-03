@@ -13,16 +13,23 @@ export function personalProxyFailure(error: unknown) {
 }
 export function proxyTransport(value: unknown) {
     if (value === undefined || value === null || value === 'personal') return 'personal';
-    if (value === 'space-jwt' || value === 'space-cookie') return value;
+    if (value === 'space-jwt' || value === 'space-cookie' || value === 'space-signed') return value;
     throw new Error('proxy_transport_invalid');
 }
 export async function probePersonalProxy(token: string, transport: ReturnType<typeof proxyTransport> = 'personal') {
-    const url = 'https://manuel2607-slopurself-wan22-validated.hf.space/identity';
+    let url = 'https://manuel2607-slopurself-wan22-validated.hf.space/identity';
     const headers = personalHfHeaders(url, token);
     if (transport !== 'personal') {
         const authorization = await personalSpaceAuthorization(token);
         if (transport === 'space-jwt') headers['X-HF-Authorization'] = authorization;
-        else headers.Cookie = `__sign=${authorization.slice('Bearer '.length)}`;
+        else if (transport === 'space-cookie') headers.Cookie = `__sign=${authorization.slice('Bearer '.length)}`;
+        else {
+            // Official Gradio client transport for signed Space requests.
+            // This short-lived URL stays server-side: never return/log it.
+            const signed = new URL(url);
+            signed.searchParams.set('__sign', authorization.slice('Bearer '.length));
+            url = signed.toString();
+        }
     }
     let response: Response;
     // Workers rejects redirect:'error' before sending anything. Manual mode plus

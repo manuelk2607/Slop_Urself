@@ -36,15 +36,18 @@ test('resource authorization rejects redirects, denied credentials, excessive li
 });
 test('experimental read-only resource routes retain the personal application credential and expose no resource secret', async t => {
     const expiry = Math.floor(Date.now() / 1000) + 240, jwt = token(expiry);
-    for (const transport of ['space-jwt', 'space-cookie'] as const) {
+    for (const transport of ['space-jwt', 'space-cookie', 'space-signed'] as const) {
         t.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
             if (url.startsWith('https://huggingface.co/')) return Response.json({ token: jwt, accessToken: `Bearer ${jwt}`, exp: expiry });
-            assert.equal(url, 'https://manuel2607-slopurself-wan22-validated.hf.space/identity');
+            const endpoint = new URL(url);
+            assert.equal(endpoint.origin + endpoint.pathname, 'https://manuel2607-slopurself-wan22-validated.hf.space/identity');
+            assert.equal(endpoint.searchParams.get('__sign'), transport === 'space-signed' ? jwt : null);
             const headers = new Headers(options.headers);
             assert.equal(headers.get('authorization'), 'Bearer personal-a');
             assert.equal(headers.get('x-slop-hf-authorization'), 'Bearer personal-a');
             if (transport === 'space-jwt') assert.equal(headers.get('x-hf-authorization'), `Bearer ${jwt}`);
-            else assert.equal(headers.get('cookie'), `__sign=${jwt}`);
+            else if (transport === 'space-cookie') assert.equal(headers.get('cookie'), `__sign=${jwt}`);
+            else assert.equal(headers.get('x-hf-authorization'), 'Bearer personal-a');
             return Response.json({ personalIdentityVerified: true, proxySubjectMatches: true, proxyClaimKeys: ['sub'], billingVerified: false, gpuCalls: 0 });
         });
         const result = await probePersonalProxy('personal-a', transport);
