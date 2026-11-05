@@ -1,4 +1,4 @@
-export const privatePath = (pathname: string) => /^\/(api|ws|socket\.io)(\/|$)/.test(pathname) || pathname.startsWith('/.well-known/');
+export const privatePath = (pathname: string) => /^\/(api|auth|ws|socket\.io)(\/|$)/.test(pathname) || pathname.startsWith('/.well-known/');
 
 export function indexingResponse(request: Request, response: Response) {
     // A WebSocket handshake must keep its original socket-bearing response.

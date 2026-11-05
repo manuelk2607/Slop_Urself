@@ -1,5 +1,7 @@
 import { authDisabled, requestAccount, sessionResponse, authFailureStatus } from '../../auth/session';
-import { getDatabase } from '../../database/neon';
+import { getDatabase, getSql } from '../../database/neon';
+import { WORLDS_PATHS, worldsConfig, worldsPilotTarget, worldsResponse } from '../../auth/worlds';
+import type { PgQuery } from '../../auth/worlds-shared/postgres-links.ts';
 import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
 import { DEFAULT_PROVIDER_CHAIN } from '../../ai/generation';
@@ -28,6 +30,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
         const seoResponse = publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
+        if (url.pathname.startsWith('/auth/') && (!WORLDS_PATHS.includes(url.pathname) || !worldsPilotTarget(env)))
+            return new Response(null, { status: 404 });
         const auth = cloudflareAuth(env);
         const rule = httpRateRule(url.pathname, request.method);
         if (rule) {
@@ -39,6 +43,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         }
 
         if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
+        if (WORLDS_PATHS.includes(url.pathname)) {
+            const query: PgQuery = async (text, values) => await getSql(env.DATABASE_URL)!.query(text, values);
+            return worldsResponse(request, worldsConfig(env, query), auth, serviceProfiles(env), query);
+        }
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
         if (url.pathname === '/api/session') return sessionResponse(request, auth, serviceProfiles(env));
         if (url.pathname.startsWith('/api/admin/')) return accountsResponse(request, auth, serviceProfiles(env));

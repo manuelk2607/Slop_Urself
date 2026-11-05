@@ -4,6 +4,7 @@ import http from 'http';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
+import { WORLDS_PATHS, worldsConfig, worldsPilotTarget, worldsResponse } from '../auth/worlds';
 import { accountsResponse } from './accounts';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
@@ -30,7 +31,7 @@ import {
     removePlayer, sanitizeUsername, sanitizeRoomId, sanitizeSessionId, roundLimit, maxRounds,
     DISCONNECT_GRACE_MS, startRounds, advanceTurn, remainingVideos, remainingVideosFor, extendRound, recordVote, judgeGuesses
 } from '../game/rules';
-import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom } from '../database/node';
+import { ensureDatabaseSchema, getProfiles, getDatabase, getStats, isDatabaseEnabled, markRoomStarted, markRoomFinished, saveRoom, saveScores, saveRound, roomExists, reopenRoom, queryWorlds } from '../database/node';
 import { roundInput } from '../game/persistence';
 import { participants, participantForConnection, isSpectator, resetReady, startProblem, checkJoin, prepareRematch } from '../game/participants';
 
@@ -91,6 +92,9 @@ function archive(url: string) {
 app.use(async (req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (privatePath(req.path)) { res.setHeader('X-Robots-Tag', 'noindex, nofollow, nosnippet'); res.setHeader('Cache-Control', 'no-store'); }
+    if (req.path.startsWith('/auth/') && (!WORLDS_PATHS.includes(req.path) || !worldsPilotTarget(process.env))) {
+        res.sendStatus(404); return;
+    }
     const rule = httpRateRule(req.path, req.method);
     if (rule) {
         const key = await rateKey(req.socket.remoteAddress || 'local', httpRateScope(req.path, req.method), config.AUTH_COOKIE_SECRET);
@@ -122,6 +126,8 @@ app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, r
     throw new Error('Unbekannte HF-Anfrage.');
 }), res));
 app.use('/api/auth', (_req, res) => res.sendStatus(404));
+app.all(WORLDS_PATHS, express.text({ type: '*/*', limit: '16kb' }), async (req, res) =>
+    webResponse(await worldsResponse(webRequest(req), worldsConfig(process.env, queryWorlds), config, getProfiles(), queryWorlds), res));
 app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await sessionResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/videos', async (req, res) => {

@@ -41,6 +41,9 @@ try {
     const metadata = await request('/.well-known/oauth-cimd');
     assert.equal(metadata.status, 200); assert.match(metadata.headers.get('content-type')!, /application\/json/);
     assert.deepEqual((await metadata.json()).redirect_uris, [`${base}/api/hf/callback`]);
+    const worldsDisabled = await request('/auth/worlds');
+    assert.equal(worldsDisabled.status, 404);
+    assert.match(worldsDisabled.headers.get('x-robots-tag')!, /noindex/);
     const login = await request('/api/session', 'POST', '', { mode: 'create', username: 'HfRuntime' });
     assert.equal(login.status, 200);
     const auth = login.headers.getSetCookie()[0].split(';')[0];

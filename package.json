@@ -10,6 +10,7 @@
     "test:ci": "npm run build && npm test && node --import tsx tests/run-ci.mts",
     "test:db": "node --import tsx tests/integration/db.integration.mts",
     "test:auth": "node --import tsx tests/e2e/auth.e2e.mts",
+    "worlds:schema": "node --import tsx tools/worlds-schema.ts",
     "dev": "npm run build && node dist/server/node.js",
     "start": "node dist/server/node.js",
     "cf:build": "npm run build",
@@ -22,6 +23,7 @@
     "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.2",
     "@types/pg": "^8.23.1",
@@ -49,6 +51,7 @@
     "image-size": "^2.0.4",
     "jose": "^6.2.12",
     "lucide": "^1.57.0",
+    "oauth4webapi": "^3.8.8",
     "pg": "^8.23.0",
     "socket.io": "^4.8.3"
   },

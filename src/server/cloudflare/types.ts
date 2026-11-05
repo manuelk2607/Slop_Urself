@@ -1,4 +1,5 @@
 import type { Account, AuthConfig } from '../../auth/session';
+import type { WorldsEnv } from '../../auth/worlds';
 import type { HfConfig } from '../../auth/huggingface';
 import type { AiConfig } from '../../ai/generation';
 import type { QuotaConfig } from '../../ai/quota';
@@ -31,7 +32,7 @@ export interface CloudflareWebSocket extends WebSocket {
     serializeAttachment(value: unknown): void;
     deserializeAttachment(): ConnectionMeta;
 }
-export interface Env extends AuthConfig, HfConfig, QuotaConfig, ArchiveConfig, AiConfig {
+export interface Env extends AuthConfig, HfConfig, QuotaConfig, ArchiveConfig, AiConfig, WorldsEnv {
     ASSETS: Fetcher;
     ROOMS: DurableObjectNamespace<RoomDurableObject>;
     SERVICES?: DurableObjectNamespace<ServiceDurableObject>;

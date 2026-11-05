@@ -41,6 +41,11 @@ export function getProfiles() {
         put: async (key, value) => { localProfiles.set(key, structuredClone(value)); }
     });
 }
+export const queryWorlds = async (text: string, values: unknown[]) => {
+    const database = getPool();
+    if (!database) throw new Error('Worlds pilot database unavailable');
+    return (await database.query(text, values)).rows as Record<string, unknown>[];
+};
 export const isDatabaseEnabled = () => Boolean(getPool());
 export const ensureDatabaseSchema = async () => { await getDatabase()?.ensureSchema(); };
 export const roomExists = async (code: string) => await getDatabase()?.roomExists(code) ?? false;
