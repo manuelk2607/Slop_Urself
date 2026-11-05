@@ -1,6 +1,7 @@
 import { authDisabled, requestAccount, sessionResponse, authFailureStatus } from '../../auth/session';
 import { getDatabase } from '../../database/neon';
-import { WORLDS_PATHS, worldsConfig, worldsPilotTarget, worldsResponse } from '../../auth/worlds';
+import { WORLDS_PATHS, isolatedWorldsTarget, worldsConfig, worldsPilotTarget, worldsResponse } from '../../auth/worlds';
+import { cleanupWorldsSessions } from '../../database/worlds-schema';
 import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
 import { DEFAULT_PROVIDER_CHAIN } from '../../ai/generation';
@@ -21,13 +22,28 @@ export type { Env } from './types';
 
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
-        return indexingResponse(request, await handleRequest(request, env));
+        const pilot = env.WORLDS_PILOT_DEPLOYMENT === 'true';
+        return indexingResponse(request, await handleRequest(request, env, pilot), pilot);
+    },
+    async scheduled(_event: unknown, env: Env): Promise<void> {
+        if (env.WORLDS_PILOT_DEPLOYMENT === 'true' && env.AI_PROVIDER === 'mock' && worldsPilotTarget(env))
+            await cleanupWorldsSessions(cloudflareWorldsQuery(env));
     }
 };
 
-async function handleRequest(request: Request, env: Env): Promise<Response> {
+async function handleRequest(request: Request, env: Env, pilot: boolean): Promise<Response> {
         const url = new URL(request.url);
-        const seoResponse = publicSeoResponse(url.pathname, request.method);
+        if (pilot) {
+            if (url.pathname === '/robots.txt' && ['GET', 'HEAD'].includes(request.method))
+                return new Response(request.method === 'HEAD' ? null : 'User-agent: *\nDisallow: /\n', {
+                    headers: {'content-type': 'text/plain; charset=utf-8'}
+                });
+            const target = isolatedWorldsTarget(env);
+            if (target?.origin !== url.origin || env.AI_PROVIDER !== 'mock' || authDisabled(env))
+                return new Response('Pilot-Konfiguration fehlt.', { status: 503 });
+            if (url.pathname === '/sitemap.xml') return new Response(null, { status: 404 });
+        }
+        const seoResponse = pilot ? undefined : publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
         if (url.pathname.startsWith('/auth/') && (!WORLDS_PATHS.includes(url.pathname) || !worldsPilotTarget(env)))
             return new Response(null, { status: 404 });

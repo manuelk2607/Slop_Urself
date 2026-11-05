@@ -5,6 +5,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
 import { WORLDS_PATHS, worldsAccounts, worldsConfig, worldsPilotTarget, worldsResponse } from '../auth/worlds';
+import { cleanupWorldsSessions } from '../database/worlds-schema';
 import { accountsResponse } from './accounts';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
@@ -87,6 +88,9 @@ if (isDatabaseEnabled()) scheduleVideoCleanup(Date.now() + 1000);
 function withBudget<T>(action: () => Promise<T>): Promise<T> { const result = budgetWork.then(action); budgetWork = result.catch(() => {}); return result; }
 const hfCleanupClock = setInterval(() => { void hf.cleanup().catch(() => {}); }, 60_000);
 hfCleanupClock.unref();
+if (worlds) setInterval(() => {
+    void cleanupWorldsSessions(queryWorlds).catch(() => console.error('Worlds-Sitzungsbereinigung fehlgeschlagen.'));
+}, 3_600_000).unref();
 function archive(url: string) {
     const result = archiveWork.then(async () => {
         const database = getDatabase();

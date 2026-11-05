@@ -1,3 +1,5 @@
+import type { PgQuery } from '../auth/worlds-shared/postgres-links.ts';
+
 // Installed only by the explicitly enabled Worlds pilot, after the profile schema.
 export const WORLDS_SCHEMA = [
     `CREATE TABLE IF NOT EXISTS worlds_auth_transactions (
@@ -30,3 +32,24 @@ export const WORLDS_SCHEMA = [
     `REVOKE ALL ON worlds_auth_transactions, worlds_auth_sessions, worlds_auth_replays,
         worlds_identity_links, worlds_link_audit FROM PUBLIC`
 ] as const;
+
+export async function cleanupWorldsSessions(query: PgQuery, now = Date.now()) {
+    // A fixed budget and the expiry indexes keep maintenance bounded even after downtime.
+    await query(`
+        WITH expired_transactions AS (
+            SELECT id FROM worlds_auth_transactions WHERE expires <= $1
+            ORDER BY expires, id LIMIT 250 FOR UPDATE SKIP LOCKED
+        ), removed_transactions AS (
+            DELETE FROM worlds_auth_transactions WHERE id IN (SELECT id FROM expired_transactions)
+        ), expired_sessions AS (
+            SELECT id FROM worlds_auth_sessions WHERE expires <= $1
+            ORDER BY expires, id LIMIT 250 FOR UPDATE SKIP LOCKED
+        ), removed_sessions AS (
+            DELETE FROM worlds_auth_sessions WHERE id IN (SELECT id FROM expired_sessions)
+        ), expired_replays AS (
+            SELECT id FROM worlds_auth_replays WHERE expires <= $1
+            ORDER BY expires, id LIMIT 250 FOR UPDATE SKIP LOCKED
+        )
+        DELETE FROM worlds_auth_replays WHERE id IN (SELECT id FROM expired_replays)
+    `, [now]);
+}

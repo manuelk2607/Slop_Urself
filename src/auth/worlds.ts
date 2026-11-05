@@ -23,7 +23,11 @@ const productionDatabase = 'ep-holy-voice-b1djk94x';
 export const WORLDS_PATHS = ['/auth/login', '/auth/callback', '/auth/logout', '/auth/backchannel-logout',
     '/auth/worlds', '/auth/worlds/link', '/auth/worlds/play'];
 export function worldsPilotTarget(env: WorldsEnv) {
-    if (env.WORLDS_PILOT_ENABLED !== 'true' || !env.WORLDS_PILOT_DATABASE_HOST || !env.DATABASE_URL) return;
+    return env.WORLDS_PILOT_ENABLED === 'true' ? isolatedWorldsTarget(env) : undefined;
+}
+
+export function isolatedWorldsTarget(env: WorldsEnv) {
+    if (!env.WORLDS_PILOT_DATABASE_HOST || !env.DATABASE_URL) return;
     try {
         const db = new URL(env.DATABASE_URL);
         const origin = new URL(env.WORLDS_PILOT_ORIGIN ?? '');

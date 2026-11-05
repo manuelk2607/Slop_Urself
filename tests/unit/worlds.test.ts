@@ -11,6 +11,8 @@ import { HfConnections, HfRequiredError, requirePlayerHf, type HfStorage } from 
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
 import { WORLDS_SCHEMA } from '../../src/database/worlds-schema';
+import worker from '../../src/server/cloudflare/worker';
+import type { Env } from '../../src/server/cloudflare/types';
 
 const origin = 'https://slop-pilot.test';
 const issuer = 'https://identity.test/auth';
@@ -29,6 +31,21 @@ test('the pilot fails closed without an exact isolated target and rejects the pr
     }
     const unexpected = async () => { throw new Error('Database must remain unused'); };
     assert.equal((await worldsResponse(new Request(origin + '/auth/worlds'), undefined, {}, {} as never, unexpected)).status, 404);
+});
+
+test('the dedicated Cloudflare pilot excludes indexing and refuses a real generator or disabled authentication', async () => {
+    const deployment = {...env, WORLDS_PILOT_DEPLOYMENT: 'true', AI_PROVIDER: 'mock'} as Env;
+    const robots = await worker.fetch(new Request(origin + '/robots.txt'), deployment);
+    assert.match(await robots.text(), /^User-agent: \*\nDisallow: \/\n$/);
+    assert.match(robots.headers.get('x-robots-tag')!, /noindex/);
+    const sitemap = await worker.fetch(new Request(origin + '/sitemap.xml'), deployment);
+    assert.equal(sitemap.status, 404);
+    for (const invalid of [{...deployment, AI_PROVIDER: 'wan22'}, {...deployment, AUTH_MODE: 'disabled'},
+        {...deployment, DATABASE_URL: 'postgres://another-db.test/test'}]) {
+        const response = await worker.fetch(new Request(origin + '/'), invalid);
+        assert.equal(response.status, 503);
+        assert.match(response.headers.get('x-robots-tag')!, /noindex/);
+    }
 });
 
 test('Slop Worlds linking checks both proofs and atomically keeps the local profile and separate HF credentials', async t => {
