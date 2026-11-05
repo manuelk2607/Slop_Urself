@@ -1,7 +1,6 @@
 import { authDisabled, requestAccount, sessionResponse, authFailureStatus } from '../../auth/session';
-import { getDatabase, getSql } from '../../database/neon';
+import { getDatabase } from '../../database/neon';
 import { WORLDS_PATHS, worldsConfig, worldsPilotTarget, worldsResponse } from '../../auth/worlds';
-import type { PgQuery } from '../../auth/worlds-shared/postgres-links.ts';
 import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
 import { DEFAULT_PROVIDER_CHAIN } from '../../ai/generation';
@@ -11,7 +10,7 @@ import { sanitizeRoomId } from '../../game/rules';
 import { service, json } from './runtime';
 import { historyResponse, historyListing, restoreHistoryResponse, HistoryError } from '../statistics';
 import { accountsResponse } from '../accounts';
-import { cloudflareAuth, serviceProfiles } from './profiles';
+import { cloudflareAuth, cloudflareWorldsQuery, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
 import { indexingResponse } from '../indexing';
 import { publicSeoResponse } from '../seo';
@@ -44,7 +43,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
         if (url.pathname === '/.well-known/oauth-cimd' || url.pathname === '/api/hf' || url.pathname.startsWith('/api/hf/')) return huggingFaceResponse(request, auth, (path, data) => service(env, path, data));
         if (WORLDS_PATHS.includes(url.pathname)) {
-            const query: PgQuery = async (text, values) => await getSql(env.DATABASE_URL)!.query(text, values);
+            const query = cloudflareWorldsQuery(env);
             return worldsResponse(request, worldsConfig(env, query), auth, serviceProfiles(env), query);
         }
         if (url.pathname.startsWith('/api/auth/')) return new Response(null, { status: 404 });
@@ -61,6 +60,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
             return json({
                 ...(signedIn ? await service(env, '/quota/display', { players, participants: account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined }) : { aiRoundLimit: 0, quotaMode: 'unavailable' }),
                 authEnabled: !authDisabled(env),
+                worldsEnabled: Boolean(auth.worlds),
                 aiProvider: env.AI_PROVIDER === 'mock' ? 'mock' : env.AI_PROVIDER_CHAIN || env.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN,
                 mockAi: env.AI_PROVIDER === 'mock',
                 hfRequired: env.AI_PROVIDER !== 'mock',

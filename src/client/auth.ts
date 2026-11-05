@@ -26,9 +26,9 @@ export async function initializeAccount(ui: AuthUI) {
     let pending: Promise<void> | undefined;
     async function session(mode: 'create' | 'login' | 'refresh') {
         const response = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode, ...(mode !== 'refresh' && password.value ? { password: password.value } : {}) }), signal: AbortSignal.timeout(15_000) });
-        const result = await response.json() as { account?: Account; token?: string; error?: string; code?: string };
-        if (!response.ok || !result.account || !result.token) throw new SessionError(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`, response.status, result.code);
-        ui.refreshToken(result.token);
+        const result = await response.json() as { account?: Account; token?: string; source?: 'worlds'; error?: string; code?: string };
+        if (!response.ok || !result.account || (!result.token && !(mode === 'refresh' && result.source === 'worlds'))) throw new SessionError(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`, response.status, result.code);
+        if (result.token) ui.refreshToken(result.token);
         return result.account;
     }
     async function signedIn(account: Account) {
@@ -80,7 +80,9 @@ export async function initializeAccount(ui: AuthUI) {
         if (location.protocol === 'file:') throw new Error('Bitte öffne das Spiel über den Server oder den Cloudflare-Link.');
         const response = await fetch('/api/config', { signal: AbortSignal.timeout(10_000) });
         if (!response.ok) throw new Error('Spielkonfiguration nicht erreichbar.');
-        const config = await response.json() as { authEnabled: boolean; hfRequired?: boolean; mockAi?: boolean };
+        const config = await response.json() as { authEnabled: boolean; hfRequired?: boolean; mockAi?: boolean; worldsEnabled?: boolean };
+        document.getElementById('worldsSignIn')!.hidden = !config.worldsEnabled;
+        document.getElementById('worldsAccount')!.hidden = !config.worldsEnabled;
         hfRequired = config.hfRequired ?? config.mockAi !== true;
         if (!config.authEnabled) { await ui.signedIn('', hfRequired); return; }
         const saved = await fetch('/api/session', { signal: AbortSignal.timeout(10_000) });

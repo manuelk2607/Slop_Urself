@@ -7,6 +7,8 @@ export const WORLDS_SCHEMA = [
         id text PRIMARY KEY, issuer text NOT NULL, subject text NOT NULL,
         sid text, payload jsonb NOT NULL, expires bigint NOT NULL
     )`,
+    `ALTER TABLE worlds_auth_sessions ADD COLUMN IF NOT EXISTS local_user_id text`,
+    `ALTER TABLE worlds_auth_sessions ADD COLUMN IF NOT EXISTS local_auth_version text`,
     `CREATE TABLE IF NOT EXISTS worlds_auth_replays (id text PRIMARY KEY, expires bigint NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS worlds_auth_sessions_identity ON worlds_auth_sessions(issuer, subject, sid)`,
     `CREATE INDEX IF NOT EXISTS worlds_auth_transactions_expiry ON worlds_auth_transactions(expires)`,

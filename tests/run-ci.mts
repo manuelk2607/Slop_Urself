@@ -38,6 +38,7 @@ try {
     await run(['tests/e2e/security.e2e.mts', 'http://127.0.0.1:3313']);
     await run(['tests/integration/cloudflare-runtime.mts']);
     await run(['tests/integration/hf-runtime.mts']);
+    await run(['tests/integration/worlds-runtime.mts']);
     cloudflare = await cloudflareRuntime({ port: 3311 });
     cloudflareProfiles = await cloudflareRuntime({ port: 3314, bindings: { AUTH_MODE: '' } });
     for (const engine of (process.env.TEST_BROWSER_ENGINE ? [process.env.TEST_BROWSER_ENGINE] : ['chromium', 'webkit'])) {

@@ -141,6 +141,7 @@ export class RoomDurableObject {
                 if (!meta) return;
                 if (takeRateLimit(this.messageBuckets, meta.account?.id || meta.playerId || meta.socketId, MESSAGE_RATE)) throw new Error(RATE_MESSAGE);
                 if (message.type === 'refreshAuth') {
+                    if (meta.account?.worldsSessionKey) return;
                     const account = await verifyAccountToken(payload.token, cloudflareAuth(this.env));
                     if (meta.account?.id !== account.id) throw new Error('Bitte verbinde dich erneut.');
                     meta.account = { ...account, hfConnectionId: meta.account?.hfConnectionId }; socket.serializeAttachment(meta); return;

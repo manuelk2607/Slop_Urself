@@ -7,14 +7,23 @@ export interface AuthConfig {
     AUTH_MODE?: string; AI_PROVIDER?: string; AUTH_COOKIE_SECRET?: string;
     ADMIN_ACCOUNT_ID?: string; ADMIN_ACCESS_KEY?: string;
     validateAccount?: (account: Account) => Promise<boolean>;
+    worlds?: {
+        read(request: Request): Promise<Account | undefined>;
+        current(account: Account): Promise<boolean>;
+        signOut(request: Request): Promise<string | undefined>;
+    };
 }
-export interface Account { id: string; name: string; expiresAt: number; authVersion?: string; hfConnectionId?: string }
+export interface Account { id: string; name: string; expiresAt: number; authVersion?: string; hfConnectionId?: string; worldsSessionKey?: string }
 class ProfileUnavailableError extends Error {}
 export const authFailureStatus = (error: unknown) => error instanceof ProfileUnavailableError ? 503 : 401;
 export const authDisabled = (config: AuthConfig) => config.AUTH_MODE === 'disabled' && config.AI_PROVIDER === 'mock';
 export function profileAuthConfig<T extends AuthConfig>(config: T, profiles: ProfileStore): T {
     return { ...config, validateAccount: async account => {
-        try { const profile = await profiles.find(account.name); return profile?.id === account.id && (profile.authVersion || '0') === (account.authVersion || '0'); }
+        try {
+            if (account.worldsSessionKey) return await config.worlds?.current(account) ?? false;
+            const profile = await profiles.find(account.name);
+            return profile?.id === account.id && (profile.authVersion || '0') === (account.authVersion || '0');
+        }
         catch { throw new ProfileUnavailableError('Deine Browsersitzung ist gerade nicht erreichbar. Bitte versuche es erneut.'); }
     } };
 }
@@ -36,10 +45,26 @@ export async function verifyAccountToken(token: unknown, config: AuthConfig): Pr
     return account;
 }
 
+const legacyToken = (request: Request) => request.headers.get('cookie')?.split(';').map(value => value.trim()).find(value => value.startsWith('slop_auth='))?.slice(10);
+export async function requestLegacyAccount(request: Request, config: AuthConfig) {
+    if (authDisabled(config)) return undefined;
+    return { ...await verifyAccountToken(legacyToken(request), config), hfConnectionId: hfCookie(request) };
+}
+
 export async function requestAccount(request: Request, config: AuthConfig) {
     if (authDisabled(config)) return undefined;
-    const token = request.headers.get('cookie')?.split(';').map(value => value.trim()).find(value => value.startsWith('slop_auth='))?.slice(10);
-    return { ...await verifyAccountToken(token, config), hfConnectionId: hfCookie(request) };
+    if (!legacyToken(request) && config.worlds) {
+        let account;
+        try { account = await config.worlds.read(request); }
+        catch { throw new ProfileUnavailableError('Deine Browsersitzung ist gerade nicht erreichbar. Bitte versuche es erneut.'); }
+        if (account) return { ...account, hfConnectionId: hfCookie(request) };
+    }
+    return requestLegacyAccount(request, config);
+}
+
+export function clearLocalLogin(headers: Headers, secure: string) {
+    headers.append('set-cookie', `slop_auth=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
+    headers.append('set-cookie', `slop_admin=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0${secure}`);
 }
 
 export async function sessionResponse(request: Request, config: AuthConfig, profiles: ProfileStore) {
@@ -57,8 +82,11 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
     if (request.headers.get('origin') !== new URL(request.url).origin) return respond({}, 403);
     const secure = request.url.startsWith('https:') ? '; Secure' : '';
     if (request.method === 'DELETE') {
-        headers.set('set-cookie', `slop_auth=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
-        headers.append('set-cookie', `slop_admin=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0${secure}`);
+        try {
+            const worldsCookie = await config.worlds?.signOut(request);
+            if (worldsCookie) headers.append('set-cookie', worldsCookie);
+        } catch { return respond({error: 'Abmelden ist gerade nicht erreichbar.'}, 503); }
+        clearLocalLogin(headers, secure);
         for (const name of [HF_COOKIE, HF_STATE_COOKIE]) headers.append('set-cookie', `${name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
         return respond({});
     }
@@ -75,6 +103,8 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         try { profile = await requestAccount(request, config); }
         catch (error) { if (authFailureStatus(error) === 503) return respond({ error: (error as Error).message }, 503); }
         if (!profile) return respond({ error: 'Bitte gib deinen Benutzernamen erneut ein.' }, 401);
+        if ('worldsSessionKey' in profile && profile.worldsSessionKey)
+            return respond({ account: { id: profile.id, name: profile.name, expiresAt: profile.expiresAt }, source: 'worlds' });
     } else {
         let name: string;
         try { name = profileName(data.username); } catch (error) { return respond({ error: (error as Error).message }, 422); }

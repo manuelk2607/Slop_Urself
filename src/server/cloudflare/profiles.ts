@@ -1,4 +1,7 @@
 import { profileAuthConfig } from '../../auth/session';
+import { worldsAccounts, worldsConfig } from '../../auth/worlds';
+import { getSql } from '../../database/neon';
+import type { PgQuery } from '../../auth/worlds-shared/postgres-links.ts';
 import type { ManagedProfileStore } from '../../auth/profiles';
 import { service } from './runtime';
 import type { Env } from './types';
@@ -12,4 +15,12 @@ export function serviceProfiles(env: Env): ManagedProfileStore {
         setPassword: async (id, passwordHash) => (await service(env, '/profiles/password', { id, passwordHash })).profile || undefined
     };
 }
-export const cloudflareAuth = (env: Env) => profileAuthConfig(env, serviceProfiles(env));
+export const cloudflareWorldsQuery = (env: Env): PgQuery => async (text, values) =>
+    await getSql(env.DATABASE_URL)!.query(text, values);
+
+export function cloudflareAuth(env: Env, profiles = serviceProfiles(env)) {
+    const query = cloudflareWorldsQuery(env);
+    return profileAuthConfig({
+        ...env, worlds: worldsAccounts(worldsConfig(env, query), query, env.ADMIN_ACCOUNT_ID)
+    }, profiles);
+}

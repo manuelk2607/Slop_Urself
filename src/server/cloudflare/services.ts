@@ -3,7 +3,8 @@ import { getSql, getDatabase } from '../../database/neon';
 import { purgeDeletedVideos, deleteStoredHistory, HistoryError, type HistoryDeletion } from '../statistics';
 import { PlayerQuotaBudget, type BudgetPlayer } from '../../ai/player-quota';
 import { HfConnections, HfOAuthError, HfRequiredError, requirePlayerHf } from '../../auth/huggingface';
-import { profileAuthConfig, type Account } from '../../auth/session';
+import type { Account } from '../../auth/session';
+import { cloudflareAuth } from './profiles';
 import { generationQuality } from '../../ai/providers';
 import { archiveVideo, deleteArchivedVideo } from '../../storage/archive';
 import { archiveStatus } from '../archive';
@@ -23,7 +24,7 @@ export class ServiceDurableObject {
     private hf: HfConnections;
     constructor(private state: DurableObjectState, private env: Env) {
         this.profiles = env.DATABASE_URL ? sqlProfiles(async (sql, values) => await getSql(env.DATABASE_URL)!.query(sql, values) as Profile[]) : storedProfiles(state.storage);
-        this.hf = new HfConnections(state.storage, profileAuthConfig(env, this.profiles));
+        this.hf = new HfConnections(state.storage, cloudflareAuth(env, this.profiles));
         this.budget = new PlayerQuotaBudget(state.storage, env, this.hf);
     }
     async fetch(request: Request) {

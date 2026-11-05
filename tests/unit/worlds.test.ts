@@ -5,8 +5,9 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { calculatePKCECodeChallenge } from 'oauth4webapi';
 import { hashPassword } from '../../src/auth/passwords';
 import { sqlProfiles } from '../../src/auth/profiles';
-import { sessionResponse } from '../../src/auth/session';
-import { worldsConfig, worldsPilotTarget, worldsResponse } from '../../src/auth/worlds';
+import { accountIsCurrent, profileAuthConfig, requestAccount, sessionResponse } from '../../src/auth/session';
+import { worldsAccounts, worldsConfig, worldsPilotTarget, worldsResponse } from '../../src/auth/worlds';
+import { HfConnections, HfRequiredError, requirePlayerHf, type HfStorage } from '../../src/auth/huggingface';
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
 import { WORLDS_SCHEMA } from '../../src/database/worlds-schema';
@@ -79,8 +80,21 @@ test('Slop Worlds linking checks both proofs and atomically keeps the local prof
         const {privateKey, publicKey} = await generateKeyPair('EdDSA', {extractable: true});
         const jwk = {...await exportJWK(publicKey), kid: 'fixture', alg: 'EdDSA'};
         let authorization: URL;
+        let hfExchanges = 0;
         t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-            const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+            const url = new URL(input instanceof Request ? input.url : String(input));
+            const path = url.pathname;
+            if (url.hostname === 'huggingface.co') {
+                if (path === '/oauth/token') {
+                    hfExchanges++;
+                    return Response.json({access_token: 'separate-hf-fixture', token_type: 'Bearer', expires_in: 600});
+                }
+                assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer separate-hf-fixture');
+                if (path === '/oauth/userinfo') return Response.json({sub: 'hf-owner', preferred_username: 'hf_owner'});
+                if (path === '/api/whoami-v2') return Response.json({id: 'hf-owner', name: 'hf_owner'});
+                if (path.endsWith('/zero-gpu/quota')) return Response.json({base: 300, current: 300, resetsAt: null, runs: {remaining: 8}});
+                assert.fail('Unexpected HF endpoint');
+            }
             if (path === '/auth/.well-known/openid-configuration') return Response.json({
                 issuer, authorization_endpoint: issuer + '/authorize', token_endpoint: issuer + '/token',
                 jwks_uri: issuer + '/keys', code_challenge_methods_supported: ['S256']
@@ -126,7 +140,70 @@ test('Slop Worlds linking checks both proofs and atomically keeps the local prof
         assert.equal((await profiles.find(protectedProfile.name))?.id, protectedProfile.id);
         const third = await central(Date.now());
         assert.equal((await post(third, renewed)).status, 403);
-        const centralOnly = await sessionResponse(new Request(origin + '/api/session', {headers: {cookie: second.cookie}}), local, profiles);
-        assert.equal(centralOnly.status, 401, 'Pilot linkage does not mint a game or HF credential');
+        const settings = { ...local, AI_PROVIDER: 'wan22', worlds: worldsAccounts(config, query, admin.id) };
+        const auth = profileAuthConfig(settings, profiles);
+        const sessionRequest = (cookie: string, method = 'GET') => new Request(origin + '/api/session', {
+            method, headers: {origin, cookie}, body: method === 'POST' ? '{"mode":"refresh"}' : undefined
+        });
+        const account = (await requestAccount(sessionRequest(second.cookie), auth))!;
+        assert.equal(account.id, protectedProfile.id);
+        assert.equal(account.hfConnectionId, undefined);
+        assert.equal(await accountIsCurrent(account, auth), true);
+        assert.equal((await requestAccount(sessionRequest(second.cookie + '; ' + openCookie), auth))?.id, open.id,
+            'An active legacy login does not switch accounts silently');
+        const switchAccount = (originHeader = origin) => worldsResponse(new Request(origin + '/auth/worlds/play', {method: 'POST',
+            headers: {origin: originHeader, cookie: second.cookie + '; ' + openCookie}, body: new URLSearchParams({csrf: second.csrf})
+        }), config, local, profiles, query);
+        assert.equal((await switchAccount('https://elsewhere.test')).status, 403);
+        assert.match((await switchAccount()).headers.get('set-cookie')!, /slop_auth=;/);
+        await assert.rejects(() => requestAccount(new Request('https://other-game.test/api/session', {headers: {cookie: second.cookie}}), auth));
+        for (const method of ['GET', 'POST']) {
+            const response = await sessionResponse(sessionRequest(second.cookie, method), auth, profiles);
+            assert.equal(response.status, 200);
+            const body = await response.json() as Record<string, unknown>;
+            assert.deepEqual(body.account, {id: account.id, name: account.name, expiresAt: account.expiresAt});
+            assert.equal(body.token, undefined);
+            assert.doesNotMatch(JSON.stringify(body), /worldsSessionKey|hfConnectionId/);
+        }
+
+        const encrypted = new Map<string, unknown>();
+        const storage: HfStorage = {get: async <T>(key: string) => encrypted.get(key) as T,
+            put: async (key, value) => { encrypted.set(key, value); }, delete: async key => encrypted.delete(key)};
+        const hf = new HfConnections(storage, auth);
+        await assert.rejects(() => requirePlayerHf(settings, account, hf), HfRequiredError);
+        const pending = await hf.start(account, origin);
+        const linkedHf = await hf.finish(new URL(pending.url).searchParams.get('state'), 'hf-code', pending.nonce, origin);
+        const bothCookies = second.cookie + '; slop_hf=' + linkedHf.connection;
+        const withHf = await requestAccount(sessionRequest(bothCookies), auth);
+        await requirePlayerHf(settings, withHf, hf);
+        await assert.rejects(() => requirePlayerHf(settings, {...withHf!, id: open.id}, hf), HfRequiredError);
+        assert.doesNotMatch(JSON.stringify([...encrypted.values()]), /separate-hf-fixture/);
+        await profiles.setPassword(protectedProfile.id, await hashPassword(password));
+        assert.equal(await accountIsCurrent(account, auth), false);
+        await assert.rejects(() => requestAccount(sessionRequest(second.cookie), auth));
+        const freshCookie = token(), freshKey = await hash(freshCookie);
+        await config.store.putSession(freshKey, {...verified!, expires: Date.now() + 600_000});
+        const newBrowser = SESSION_COOKIE + '=' + freshCookie;
+        const reconnected = (await requestAccount(sessionRequest(newBrowser), auth))!;
+        assert.equal(reconnected.id, protectedProfile.id);
+        const otherBrowser = token(), otherKey = await hash(otherBrowser);
+        await config.store.putSession(otherKey, {...verified!, sid: 'signed-backchannel-fixture', expires: Date.now() + 600_000});
+        const logoutToken = await new SignJWT({sid: 'signed-backchannel-fixture', sub: verified!.sub,
+            events: {'http://schemas.openid.net/event/backchannel-logout': {}}})
+            .setProtectedHeader({alg: 'EdDSA', kid: 'fixture'}).setIssuer(issuer).setAudience(env.WORLDS_CLIENT_ID)
+            .setIssuedAt().setJti(token()).sign(privateKey);
+        const backchannel = new Request(origin + '/auth/backchannel-logout', {method: 'POST',
+            body: new URLSearchParams({logout_token: logoutToken})});
+        assert.equal((await worldsResponse(backchannel, config, local, profiles, query)).status, 200);
+        assert.equal(await config.store.getSession(otherKey), null);
+        assert.equal(await accountIsCurrent(reconnected, auth), true);
+        const pendingLogout = await hf.start(reconnected, origin);
+        const logout = await sessionResponse(sessionRequest(newBrowser, 'DELETE'), auth, profiles);
+        assert.equal(logout.status, 200);
+        assert.match(logout.headers.get('set-cookie')!, /__Host-worlds-session=;/);
+        assert.equal(await accountIsCurrent(reconnected, auth), false);
+        assert.equal(await config.store.getSession(freshKey), null);
+        await assert.rejects(() => hf.finish(new URL(pendingLogout.url).searchParams.get('state'), 'new-code', pendingLogout.nonce, origin));
+        assert.equal(hfExchanges, 1, 'A revoked game session must not exchange an HF code');
     } finally { await db.close(); }
 });

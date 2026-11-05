@@ -50,6 +50,7 @@
     <div id="accountBar" class="account-bar" hidden>
         <span id="accountName"></span>
         <button id="hfAccountButton" class="btn-muted" type="button" title="Hugging-Face-Konto verwalten">KI-Konto</button>
+        <a id="worldsAccount" href="/auth/worlds" hidden>Worlds-Konto</a>
         <button id="signOutButton" class="btn-muted" type="button">Abmelden</button>
     </div>
     <dialog id="hfDialog" aria-labelledby="hfTitle">
@@ -85,6 +86,7 @@
             <button id="authSubmit" class="btn-primary" type="submit">Neuen Benutzer registrieren</button>
             <button id="existingNameButton" class="btn-muted" type="button">Vorhandenen Benutzer anmelden</button>
         </form>
+        <p id="worldsSignIn" hidden><a href="/auth/worlds">Mit Worlds anmelden</a></p>
     </section>
 
     <!-- HEADER (Immer sichtbar im Spiel) -->

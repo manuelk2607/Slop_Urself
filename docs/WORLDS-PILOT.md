@@ -14,8 +14,10 @@ aus `packages/auth/` in Worlds Hub, Revision `049279b`.
   bei Fehlern nicht aus.
 - Der isolierte Client benötigt `WORLDS_ISSUER`, `WORLDS_CLIENT_ID` und
   `WORLDS_RESOURCE`, einen beim Anbieter registrierten `/auth/callback`
-  und für Logout-Signale `/auth/backchannel-logout`. Die Node-Routen setzen
-  eine vertrauenswürdige HTTPS-Eingangsschicht voraus. Der Pilot wird auf
+  und für Logout-Signale `/auth/backchannel-logout`. Node unterstützt einen
+  lokalen HTTPS-Reverse-Proxy mit `WORLDS_TRUST_LOOPBACK_PROXY=true`. Der Proxy
+  setzt Host und Protokoll selbst und überschreibt eingehende Forwarded-Header.
+  Der Pilot wird auf
   einem separaten Cloudflare-Worker abgenommen.
 - `/auth/worlds` startet den Login. Die Verknüpfung verlangt die aktive
   lokale Sitzung, das aktuelle Passwort, frisches signiertes `auth_time`
@@ -26,11 +28,14 @@ aus `packages/auth/` in Worlds Hub, Revision `049279b`.
   vorhandene lokale ID, die auch HF-Anbindung, Kontingente und Jobs verwenden.
 
 `WORLDS_REAUTH_ENABLED` bleibt bis zur Abnahme mit dem echten Anbieter
-ausgeschaltet. Die Pilotzuordnung wird bisher nur auf der Pilotseite angezeigt.
-Vor Aktivierung folgen die Zuordnung zur HTTP- und WebSocket-Spielersitzung,
-eine Abmelde- und Widerrufsprüfung für beide Laufzeiten, begrenzte Bereinigung
-abgelaufener Sitzungen sowie eine erneute Prüfung der HF- und Moderationsgrenzen
-mit verknüpfter Anmeldung.
+ausgeschaltet. Die HTTP- und WebSocket-Spielersitzungen verwenden die lokale
+ID aus dem Mapping. Bei bereits aktiver lokaler Anmeldung entscheidet der
+Benutzer über den Wechsel. Es wird kein Worlds- oder HF-Token an das Spielskript
+ausgegeben. Jede Spielaktion prüft die Gültigkeit der Sitzung. Passwortwechsel,
+Profilverlust und Abmeldung beenden die betroffenen Spielersitzungen. Die
+persönliche HF-Verbindung bleibt an dieselbe lokale ID gebunden und muss
+separat gültig sein. Vor einem echten Pilotdeploy fehlen die begrenzte
+Bereinigung abgelaufener Sitzungen und die Abnahme beim echten Anbieter.
 
 Lokale Abnahme am 5. November 2026. Ein signierter Testanbieter lieferte
 Ed25519-ID-Tokens und bestätigte PKCE, Callback-Bindung und Replay-Schutz.
@@ -40,3 +45,11 @@ persönlichen HF-Device-/OAuth-Ablauf, die Einzelkontingente und Abmeldung mit
 Testantworten. 147 Tests, Node-/Worker-Typprüfung und Build, Node-Start und
 Worker-Trockenlauf bestanden. Der bestehende Produktionsaudit meldete sechs
 Befunde auf Basis und Featurebranch mit derselben Paketliste.
+
+Der nachfolgende workerd-Test bestätigte die lokale Profil-ID über die HTTP-API,
+den HF-Pflichtdialog über einen echten lokalen WebSocket und die Sperre derselben
+Verbindung nach Logout. Auch ein gültiger lokaler Spieltoken kann die
+Widerrufsprüfung einer Worlds-Verbindung nicht ersetzen. Der PostgreSQL-Test
+prüfte die separate HF-Verbindung, den Schutz vor fremden HF-Verbindungen und
+den ausstehenden HF-Codeaustausch nach Logout. Alle externen Antworten in diesen
+Tests stammen aus Fixtures.

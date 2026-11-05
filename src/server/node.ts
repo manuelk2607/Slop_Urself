@@ -4,7 +4,7 @@ import http from 'http';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
-import { WORLDS_PATHS, worldsConfig, worldsPilotTarget, worldsResponse } from '../auth/worlds';
+import { WORLDS_PATHS, worldsAccounts, worldsConfig, worldsPilotTarget, worldsResponse } from '../auth/worlds';
 import { accountsResponse } from './accounts';
 import { QuotaConfig, playerCount } from '../ai/quota';
 import { PlayerQuotaBudget } from '../ai/player-quota';
@@ -53,7 +53,12 @@ const pendingStarts = new Set<string>();
 const httpBuckets: RateBuckets = {};
 const messageBuckets: RateBuckets = {};
 const budgetData = new Map<string, unknown>();
-const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({ ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded' }, getProfiles());
+const worlds = worldsConfig(process.env, queryWorlds);
+if (worlds && process.env.WORLDS_TRUST_LOOPBACK_PROXY === 'true') app.set('trust proxy', 'loopback');
+const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({
+    ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded',
+    worlds: worldsAccounts(worlds, queryWorlds, process.env.ADMIN_ACCOUNT_ID)
+}, getProfiles());
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
 const imageData = new Map<string, unknown>();
 const imageStorage: ImageStorage = { get: async <T>(key: string) => imageData.get(key) as T | undefined,
@@ -127,7 +132,7 @@ app.all(['/.well-known/oauth-cimd', '/api/hf', '/api/hf/:action'], async (req, r
 }), res));
 app.use('/api/auth', (_req, res) => res.sendStatus(404));
 app.all(WORLDS_PATHS, express.text({ type: '*/*', limit: '16kb' }), async (req, res) =>
-    webResponse(await worldsResponse(webRequest(req), worldsConfig(process.env, queryWorlds), config, getProfiles(), queryWorlds), res));
+    webResponse(await worldsResponse(webRequest(req), worlds, config, getProfiles(), queryWorlds), res));
 app.all('/api/session', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await sessionResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/admin', express.text({ type: '*/*', limit: '2kb' }), async (req, res) => webResponse(await accountsResponse(webRequest(req), config, getProfiles()), res));
 app.use('/api/videos', async (req, res) => {
@@ -164,6 +169,7 @@ app.get('/api/config', async (req, res) => {
     res.json({
         ...(signedIn ? await budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
         aiProvider: AI_PROVIDER === 'mock' ? 'mock' : AI_PROVIDER_CHAIN,
+        worldsEnabled: Boolean(config.worlds),
         mockAi: AI_PROVIDER === 'mock', hfRequired: AI_PROVIDER !== 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
     });
 });
@@ -438,6 +444,7 @@ io.on('connection', (socket: Socket) => {
         });
     }
     socket.on('refreshAuth', (payload: { token: unknown }) => {
+        if (socket.data.account?.worldsSessionKey) return;
         if (takeRateLimit(messageBuckets, socket.data.account?.id || socket.id, MESSAGE_RATE)) { socket.emit('errorMsg', RATE_MESSAGE); return; }
         void verifyAccountToken(payload?.token, config).then(account => { if (account.id === socket.data.account?.id) socket.data.account = { ...account, hfConnectionId: socket.data.account?.hfConnectionId }; }).catch(() => socket.emit('authExpired'));
     });
@@ -699,7 +706,11 @@ io.on('connection', (socket: Socket) => {
 });
 
 io.use((socket, next) => {
-    const request = new Request('http://localhost/', { headers: { cookie: socket.handshake.headers.cookie || '' } });
+    const headers = socket.handshake.headers;
+    const trustedProxy = worlds && app.get('trust proxy fn')(socket.request.socket.remoteAddress || '', 0);
+    const secure = socket.handshake.secure || (trustedProxy && headers['x-forwarded-proto'] === 'https');
+    const sameHost = worlds && headers.host === new URL(worlds.origin).host && (!headers.origin || headers.origin === worlds.origin);
+    const request = new Request(secure && sameHost ? worlds.origin : 'http://localhost/', { headers: { cookie: headers.cookie || '' } });
     void requestAccount(request, config).then(account => { socket.data.account = account; next(); }).catch(() => next(new Error('Bitte melde dich an.')));
 });
 
