@@ -39,7 +39,7 @@ export async function startLogin(request:Request,config:AuthConfig) {
   const requestUrl=new URL(request.url);
   await config.store.putTransaction(await hash(binding),{verifier,state,nonce,next:safeNext(requestUrl.searchParams.get('next'),config.returnPaths),expires:Date.now()+600_000,reauth});
   authorization.search=new URLSearchParams({client_id:config.clientId,response_type:'code',redirect_uri:config.origin+'/auth/callback',scope:'openid profile email',code_challenge:await oauth.calculatePKCECodeChallenge(verifier),code_challenge_method:'S256',state,nonce}).toString();
-  if(reauth){authorization.searchParams.set('max_age','0');authorization.searchParams.set('prompt','login');}
+  if(reauth)authorization.searchParams.set('max_age','300');
   if(config.resource)authorization.searchParams.set('resource',config.resource);
   const uiLocale=requestUrl.searchParams.get('ui_locales');if(uiLocale==='de'||uiLocale==='en')authorization.searchParams.set('ui_locales',uiLocale);
   // Registration, verification and password recovery are handled by the IdP's login UI.
@@ -59,7 +59,7 @@ export async function callback(request:Request,config:AuthConfig) {
   const response=await oauth.authorizationCodeGrantRequest(as,cl,auth,params,config.origin+'/auth/callback',tx.verifier,{additionalParameters:config.resource?{resource:config.resource}:undefined});
   // process validates issuer, audience, azp, timestamps, nonce and token response structure.
   // Signature validation is explicit; it is NOT implicit in processing a TLS token response.
-  const result=await oauth.processAuthorizationCodeResponse(as,cl,response,{expectedNonce:tx.nonce,requireIdToken:true,maxAge:tx.reauth?0:undefined});
+  const result=await oauth.processAuthorizationCodeResponse(as,cl,response,{expectedNonce:tx.nonce,requireIdToken:true,maxAge:tx.reauth?300:undefined});
   await oauth.validateApplicationLevelSignature(as,response);
   const claims=oauth.getValidatedIdTokenClaims(result);
   if(!claims?.sub)throw new Error('Missing subject');

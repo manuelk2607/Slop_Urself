@@ -1,8 +1,11 @@
 # Worlds-Pilot für Slop Urself
 
 Der Pilot auf `feature/worlds-hub-sso` verwendet den OIDC-Codeflow mit PKCE
-aus Worlds Hub. Die Dateien in `src/auth/worlds-shared/` stammen unverändert
-aus `packages/auth/` in Worlds Hub, Revision `049279b`.
+aus Worlds Hub. Der OIDC-Client in `src/auth/worlds-shared/oidc.ts`
+entspricht `auth-v0.1.1` aus Worlds-Hub. Er fordert einen maximal fünf
+Minuten alten Login mit `max_age=300` an und prüft dessen signierten
+Anmeldezeitpunkt. Die übrigen gemeinsamen Dateien stammen aus der
+ursprünglichen Integration, Revision `049279b`.
 
 - Standardmäßig antworten die privaten Pilotrouten mit 404. Das Flag
   `WORLDS_PILOT_ENABLED=true` erfordert eine exakte separate HTTPS-Origin
@@ -68,6 +71,13 @@ Der Node-Test mit lokalem PostgreSQL 17 prüfte den Login mit den Headern des
 lokalen HTTPS-Proxys, die HF-Sperre über Socket.IO, den Widerruf nach Logout
 und die begrenzte Bereinigung einschließlich gültiger Sitzungen. Build,
 Pilot-Trockenlauf, 148 Unit-Tests und beide workerd-Integrationen bestanden.
+
+Am 07.11.2026 wurden die Migrationsnachweise und der gemeinsame Anmeldeclient
+erneut geprüft. 149 Unit-Tests, Node-/Worker-Typprüfung, Build sowie die
+workerd-HF-/Logout-Abnahme bestanden. Die CI von Commit `296e74d` ist für
+Chromium und WebKit erfolgreich. Der reale Hub-QA-Anbieter bestätigte
+frische ID-Tokens mit positivem `max_age` sowie die erneute Anmeldung
+einer gealterten Sitzung. Die vollständige Slop-Browserabnahme bleibt offen.
 
 ## Migrationsnachweis und Rücknahme
 
