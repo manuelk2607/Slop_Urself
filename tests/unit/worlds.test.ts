@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { calculatePKCECodeChallenge } from 'oauth4webapi';
 import { hashPassword } from '../../src/auth/passwords';
 import { sqlProfiles } from '../../src/auth/profiles';
 import { accountIsCurrent, profileAuthConfig, requestAccount, sessionResponse } from '../../src/auth/session';
 import { worldsAccounts, worldsConfig, worldsPilotTarget, worldsResponse } from '../../src/auth/worlds';
+import { reportWorldsLinks } from '../../src/auth/worlds-receipts';
 import { HfConnections, HfRequiredError, requirePlayerHf, type HfStorage } from '../../src/auth/huggingface';
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
@@ -46,6 +47,75 @@ test('the dedicated Cloudflare pilot excludes indexing and refuses a real genera
         assert.equal(response.status, 503);
         assert.match(response.headers.get('x-robots-tag')!, /noindex/);
     }
+});
+
+test('the migration outbox retries committed records and records rollback without changing the profile', async t => {
+    const db = new PGlite();
+    try {
+        const query = async (text: string, values?: unknown[]) => (await db.query<Record<string, unknown>>(text, values)).rows;
+        const profiles = sqlProfiles(async (text, values) => (await db.query<{id: string; name: string}>(text, values)).rows);
+        const profile = (await profiles.create('Receipt profile'))!;
+        for (const statement of WORLDS_SCHEMA) await query(statement);
+        const pair = await generateKeyPair('EdDSA', {extractable: true});
+        const audience = 'https://hub-pilot.test/api/migrations/receipts/slop-urself';
+        const delivery = {...env, WORLDS_RECEIPT_URL: audience, WORLDS_RECEIPT_KID: 'fixture',
+            WORLDS_RECEIPT_KEY: JSON.stringify(await exportJWK(pair.privateKey))};
+        const bindings = [issuer, 'subject', profile.id];
+        const unexpected = async () => { throw new Error('Database must remain unused'); };
+        await reportWorldsLinks(env, unexpected);
+        await assert.rejects(() => reportWorldsLinks({...delivery,
+            WORLDS_RECEIPT_URL: audience.replace('hub-pilot.test', 'worlds-hub.maki26.workers.dev')}, unexpected),
+        /Invalid Worlds receipt configuration/);
+
+        await query(`WITH linked AS (
+            INSERT INTO worlds_identity_links (issuer, subject, local_user_id) VALUES ($1,$2,$3) RETURNING *
+        ) INSERT INTO worlds_link_audit (issuer, subject, local_user_id, event)
+          SELECT issuer, subject, local_user_id, 'linked' FROM linked`, bindings);
+        const config = worldsConfig(env, query)!;
+        const session = {issuer, sub: 'subject', csrf: token(), expires: Date.now() + 60_000};
+        await config.store.putSession('linked-session', session);
+        await config.store.putSession('other-session', {...session, sub: 'other-subject'});
+        const unlink = 'DELETE FROM worlds_identity_links WHERE issuer=$1 AND subject=$2 AND local_user_id=$3';
+        await db.exec('BEGIN');
+        await query(unlink, bindings);
+        await db.exec('ROLLBACK');
+        assert.deepEqual(await query('SELECT event FROM worlds_link_audit'), [{event: 'linked'}]);
+        assert.ok(await config.store.getSession('linked-session'));
+
+        const receipts: {revision: unknown; state: unknown}[] = [];
+        t.mock.method(globalThis, 'fetch', async (url: string, request: RequestInit) => {
+            assert.equal(url, audience);
+            assert.equal(request.redirect, 'error');
+            assert.deepEqual(request.headers, {'content-type': 'application/jwt'});
+            const {payload} = await jwtVerify(String(request.body), pair.publicKey, {
+                algorithms: ['EdDSA'], issuer: 'https://slopurself.maki26.workers.dev',
+                audience, subject: 'subject', typ: 'worlds-migration-receipt+jwt'
+            });
+            assert.equal(payload.identity_issuer, issuer);
+            assert.equal(payload.account_ref, await hash('worlds:slop-urself:' + profile.id));
+            assert.doesNotMatch(JSON.stringify(payload), new RegExp(profile.id));
+            receipts.push({revision: payload.revision, state: payload.state});
+            if (receipts.length === 1) throw new Error('acknowledgement lost');
+            if (payload.state === 'revoked') return Response.json({error: 'RECEIPT_CONFLICT'}, {status: 409});
+            return Response.json({result: 'duplicate'});
+        });
+        await assert.rejects(() => reportWorldsLinks(delivery, query), /endpoint is unavailable/);
+        assert.deepEqual(await query('SELECT receipt_reported_at IS NULL AS pending FROM worlds_link_audit'), [{pending: true}]);
+        await reportWorldsLinks(delivery, query);
+        await query(unlink, bindings);
+        assert.equal((await profiles.find(profile.name))?.id, profile.id);
+        assert.equal(await config.store.getSession('linked-session'), null);
+        assert.ok(await config.store.getSession('other-session'));
+        await reportWorldsLinks(delivery, query);
+        await reportWorldsLinks(delivery, query);
+        assert.deepEqual(receipts, [
+            {revision: 1, state: 'confirmed'}, {revision: 1, state: 'confirmed'}, {revision: 3, state: 'revoked'}
+        ]);
+        assert.deepEqual(await query(`SELECT event, receipt_reported_at IS NOT NULL AS sent,
+            receipt_conflict_at IS NOT NULL AS conflict FROM worlds_link_audit ORDER BY id`), [
+            {event: 'linked', sent: true, conflict: false}, {event: 'unlinked', sent: false, conflict: true}
+        ]);
+    } finally { await db.close(); }
 });
 
 test('Slop Worlds linking checks both proofs and atomically keeps the local profile and separate HF credentials', async t => {

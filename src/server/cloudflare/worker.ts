@@ -1,6 +1,7 @@
 import { authDisabled, requestAccount, sessionResponse, authFailureStatus } from '../../auth/session';
 import { getDatabase } from '../../database/neon';
 import { WORLDS_PATHS, isolatedWorldsTarget, worldsConfig, worldsPilotTarget, worldsResponse } from '../../auth/worlds';
+import { reportWorldsLinks } from '../../auth/worlds-receipts';
 import { cleanupWorldsSessions } from '../../database/worlds-schema';
 import { emptyStats } from '../../database/types';
 import { playerCount } from '../../ai/quota';
@@ -26,8 +27,10 @@ export default {
         return indexingResponse(request, await handleRequest(request, env, pilot), pilot);
     },
     async scheduled(_event: unknown, env: Env): Promise<void> {
-        if (env.WORLDS_PILOT_DEPLOYMENT === 'true' && env.AI_PROVIDER === 'mock' && worldsPilotTarget(env))
-            await cleanupWorldsSessions(cloudflareWorldsQuery(env));
+        if (env.WORLDS_PILOT_DEPLOYMENT === 'true' && env.AI_PROVIDER === 'mock' && worldsPilotTarget(env)) {
+            const query = cloudflareWorldsQuery(env);
+            await Promise.all([cleanupWorldsSessions(query), reportWorldsLinks(env, query)]);
+        }
     }
 };
 

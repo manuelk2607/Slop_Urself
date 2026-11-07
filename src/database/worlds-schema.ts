@@ -29,6 +29,22 @@ export const WORLDS_SCHEMA = [
         event text NOT NULL CHECK (event IN ('linked', 'unlinked')),
         occurred_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `ALTER TABLE worlds_link_audit ADD COLUMN IF NOT EXISTS receipt_reported_at timestamptz`,
+    `ALTER TABLE worlds_link_audit ADD COLUMN IF NOT EXISTS receipt_conflict_at timestamptz`,
+    `CREATE INDEX IF NOT EXISTS worlds_link_audit_pending_receipt ON worlds_link_audit(issuer, id)
+        WHERE receipt_reported_at IS NULL AND receipt_conflict_at IS NULL`,
+    `CREATE OR REPLACE FUNCTION public.worlds_audit_unlink() RETURNS trigger
+        LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+        BEGIN
+            INSERT INTO public.worlds_link_audit (issuer, subject, local_user_id, event)
+            VALUES (OLD.issuer, OLD.subject, OLD.local_user_id, 'unlinked');
+            DELETE FROM public.worlds_auth_sessions WHERE issuer=OLD.issuer AND subject=OLD.subject;
+            RETURN OLD;
+        END;
+        $$`,
+    `CREATE OR REPLACE TRIGGER worlds_audit_unlink AFTER DELETE ON worlds_identity_links
+        FOR EACH ROW EXECUTE FUNCTION public.worlds_audit_unlink()`,
+    `REVOKE ALL ON FUNCTION public.worlds_audit_unlink() FROM PUBLIC`,
     `REVOKE ALL ON worlds_auth_transactions, worlds_auth_sessions, worlds_auth_replays,
         worlds_identity_links, worlds_link_audit FROM PUBLIC`
 ] as const;

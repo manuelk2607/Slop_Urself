@@ -15,6 +15,9 @@ export interface WorldsEnv {
     WORLDS_CLIENT_ID?: string;
     WORLDS_RESOURCE?: string;
     WORLDS_REAUTH_ENABLED?: string;
+    WORLDS_RECEIPT_URL?: string;
+    WORLDS_RECEIPT_KID?: string;
+    WORLDS_RECEIPT_KEY?: string;
     DATABASE_URL?: string;
 }
 
