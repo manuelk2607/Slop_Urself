@@ -1,0 +1,60 @@
+name: Deploy isolated Worlds pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: slopurself-worlds-pilot
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'manuelk2607/Slop_Urself' && github.ref == 'refs/heads/feature/worlds-hub-sso'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: worlds-pilot
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+      CLOUDFLARE_ACCOUNT_ID: ec3c070d8e4f88d2fc533d7d797f2daa
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require successful Chromium and WebKit CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          checked=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion --jq 'any(.[]; .status == "completed" and .conclusion == "success")')
+          test "$checked" = true || { echo 'The complete test workflow must pass for this commit first.'; exit 1; }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Deploy only slopurself-worlds-pilot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npx wrangler deploy --config cloudflare/wrangler.worlds-pilot.toml --name slopurself-worlds-pilot
+      - name: Verify private pilot and indexing guard
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const origin='https://slopurself-worlds-pilot.maki26.workers.dev';
+          const robots=await fetch(origin+'/robots.txt');
+          assert.equal(robots.status,200);
+          assert.match(await robots.text(),/Disallow: \//);
+          assert.match(robots.headers.get('x-robots-tag')??'',/noindex/);
+          const response=await fetch(origin+'/');
+          assert.ok([200,503].includes(response.status));
+          assert.equal(response.headers.get('cache-control'),'no-store');
+          assert.match(response.headers.get('x-robots-tag')??'',/noindex/);
+          console.log('PASS isolated pilot target and private response headers');
+          JS
