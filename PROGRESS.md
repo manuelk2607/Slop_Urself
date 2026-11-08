@@ -31,13 +31,20 @@ Stil und einen sichtbaren Tastaturfokus. 162 Tests und Build bestanden.
 Chromium/WebKit prüfen mit Testantworten den fünfminütigen Refresh, 401,
 lokalisierte Ablaufmeldung, ausgeblendete lokale Formulare und erhaltenen Link.
 Vollständige GitHub-CI für `35d26ad` ist erfolgreich (`42515091102`).
-Die separate Pilotveröffentlichung dieses exakten Stands wurde gestartet.
+Pilotveröffentlichung `42515687781` erfolgreich. Aktive Version
+`514bc3d9-e302-49f8-a6e0-b229152d6dc8`, Deployment
+`dfd89eff-6a83-4441-9ed7-4240bcad0db9`. Live werden beide Ablaufmeldungen
+ausgeliefert; echter Browser-Reload behält Manuel angemeldet.
 Zusätzliche read-only Diagnose prüft Feldnamen der neueren Cloudflare-
 Versionsmetadaten; weder Werte noch Geheimnisse werden protokolliert. Neun
 gezielte Prüfer-/Rücknahmetests und separate Typprüfung bestanden. Eine reine
 Inspektion benötigt keine neue vollständige Anwendungs-CI; jede Veröffentlichung
 und jeder tatsächliche Versionswechsel verlangen sie weiterhin für exakt ihren
-Commit. Der bestehende Rücknahmevergleich bleibt unverändert streng.
+Commit. Der bestehende Rücknahmevergleich bleibt unverändert streng. Diagnosecommit
+`fc4fc60` bestand auch die vollständige CI `42515706390` in Chromium und WebKit
+(163 Unit-Tests plus bestehende PostgreSQL-/Browserintegration). Reine Inspektion
+`42515850838` bestätigt auch in der neueren API ausschließlich Asset-Konfiguration,
+keinen Manifesthash; keine kompatiblen Kandidaten und kein Versionswechsel.
 
 ## Offen / nächster Schritt
 
