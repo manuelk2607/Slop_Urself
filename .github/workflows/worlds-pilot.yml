@@ -69,7 +69,14 @@ jobs:
           assert.equal(robots.status,200);
           assert.match(await robots.text(),/Disallow: \//);
           assert.match(robots.headers.get('x-robots-tag')??'',/noindex/);
-          const response=await fetch(origin+'/');
+          // A newly deployed secret can reach edge locations after the deploy API returns.
+          let response;
+          for(let attempt=0;attempt<12;attempt++){
+            response=await fetch(origin+'/');
+            if(response.status!==503)break;
+            await response.body?.cancel();
+            if(attempt<11)await new Promise(resolve=>setTimeout(resolve,3000));
+          }
           assert.equal(response.status,200);
           assert.equal(response.headers.get('cache-control'),'no-store');
           assert.match(response.headers.get('x-robots-tag')??'',/noindex/);
