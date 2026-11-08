@@ -1,6 +1,7 @@
 import type {de} from './de';
 export const en:Record<keyof typeof de,string>={
- title:'Worlds account · Slop Urself',heading:'Your Worlds account',eyebrow:'Slop Urself · Worlds pilot',
+ title:'Worlds account · Slop Urself',heading:'Your Worlds account',eyebrow:'Slop Urself · Test version',
+ testNote:'You are using a separate test version. The regular game and its data are unchanged.',
  intro:'One central sign-in. Your game profile and progress stay with Slop Urself.',
  signIn:'Sign in with Worlds',signedOut:'Sign in with your verified Worlds account.',
  signedIn:'Signed in to Worlds',pending:'Game profile not linked yet',linked:'Game profile linked',

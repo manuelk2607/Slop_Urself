@@ -1,5 +1,6 @@
 export const de={
- title:'Worlds-Konto · Slop Urself',heading:'Dein Worlds-Konto',eyebrow:'Slop Urself · Worlds-Pilot',
+ title:'Worlds-Konto · Slop Urself',heading:'Dein Worlds-Konto',eyebrow:'Slop Urself · Testversion',
+ testNote:'Du bist in einer getrennten Testversion. Das reguläre Spiel und seine Daten bleiben unverändert.',
  intro:'Eine zentrale Anmeldung. Dein Spielprofil und deine Fortschritte bleiben bei Slop Urself.',
  signIn:'Mit Worlds anmelden',signedOut:'Melde dich mit deinem bestätigten Worlds-Konto an.',
  signedIn:'Bei Worlds angemeldet',pending:'Spielprofil noch nicht verknüpft',linked:'Spielprofil verknüpft',
