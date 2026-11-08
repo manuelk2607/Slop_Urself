@@ -154,3 +154,34 @@ Bestätige genau eine gelöschte Zuordnung. Der Trigger protokolliert dabei
 den Widerruf und löscht die Slop-Worlds-Sitzungen dieses zentralen Kontos.
 Die lokale Profil-ID bleibt erhalten. Prüfe anschließend die lokale
 Anmeldung und den widerrufenen Nachweis im isolierten Hub.
+
+
+## Kontrollierte Deployment-Rücknahme
+
+Der manuelle Pilot-Workflow bietet `inspect-rollback` und `exercise-rollback`.
+Beide verwenden nur die vorhandene Umgebung `worlds-pilot`, denselben
+Branchschutz und dieselbe Deployment-Sperre wie die Bereitstellung. Vorher
+muss die vollständige CI für genau diesen Commit erfolgreich sein.
+
+`inspect-rollback` liest ausschließlich die Versionen des fest vorgegebenen
+Pilot-Workers und prüft seine private Erreichbarkeit. Ausgegeben werden nur
+Versionskennungen, Code-Prüfsumme und Feldnamen der Bindungen. Keine Werte
+von Secrets oder Verbindungen erscheinen in den Protokollen.
+
+`exercise-rollback` verlangt eine ausdrückliche andere Versions-UUID und
+identischen Code, identische Assets, Ressourcenbindungen, Variablen und
+Laufzeiteinstellungen. Ein fehlender Asset-Nachweis sperrt die Übung.
+Es gibt keine `force`-Option. Die Cloudflare-Kompatibilitätsprüfung für
+undurchsichtige Secret-Versionen bleibt zusätzlich wirksam.
+
+Nach dem Versionswechsel wird die private Seite geprüft und die ursprüngliche
+Version auch bei fehlgeschlagener Kandidatenprüfung wiederhergestellt.
+Ein möglicherweise bereits wirksamer, aber zeitlich abgebrochener Schreibaufruf
+wird erst durch erneutes Lesen geklärt. Zwischenzeitlich von anderen Stellen
+bereitgestellte Versionen werden nicht überschrieben. Abschließend werden
+Ausgangsversion und private Erreichbarkeit geprüft. Datenbanken, Zuordnungen
+und gespeicherte Durable-Object-Daten werden dabei nicht zurückgesetzt.
+
+Sieben Regressionstests prüfen Kompatibilität, Fehlerbehandlung, Wiederherstellung,
+unklare Schreibantworten, konkurrierende Deployments und den festen Worker.
+Die tatsächliche Cloudflare-Übung steht bis zur Metadatenprüfung noch aus.

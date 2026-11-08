@@ -2,6 +2,16 @@ name: Deploy isolated Worlds pilot
 
 on:
   workflow_dispatch:
+    inputs:
+      operation:
+        description: Pilot operation
+        type: choice
+        options: [deploy, inspect-rollback, exercise-rollback]
+        default: deploy
+      rollback_version:
+        description: Explicit compatible candidate UUID for rollback exercise
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -13,7 +23,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'manuelk2607/Slop_Urself' && github.ref == 'refs/heads/feature/worlds-hub-sso'
+    if: github.repository == 'manuelk2607/Slop_Urself' && github.ref == 'refs/heads/feature/worlds-hub-sso' && (inputs.operation == 'deploy' || inputs.operation == '')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: worlds-pilot
@@ -82,3 +92,37 @@ jobs:
           assert.match(response.headers.get('x-robots-tag')??'',/noindex/);
           console.log('PASS isolated pilot target and private response headers');
           JS
+
+  rollback:
+    if: github.repository == 'manuelk2607/Slop_Urself' && github.ref == 'refs/heads/feature/worlds-hub-sso' && (inputs.operation == 'inspect-rollback' || inputs.operation == 'exercise-rollback')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: worlds-pilot
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require successful complete CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          checked=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion --jq 'any(.[]; .status == "completed" and .conclusion == "success")')
+          test "$checked" = true || { echo 'Complete CI must pass for this commit first.'; exit 1; }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Inspect the fixed pilot only
+        if: inputs.operation == 'inspect-rollback'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node --import tsx tools/worlds-pilot-rollback.mts inspect
+      - name: Exercise compatible version and restore original
+        if: inputs.operation == 'exercise-rollback'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PILOT_ROLLBACK_VERSION: ${{ inputs.rollback_version }}
+        run: node --import tsx tools/worlds-pilot-rollback.mts exercise
