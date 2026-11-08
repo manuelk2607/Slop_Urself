@@ -37,3 +37,12 @@ test('API fixes worker/account and never sends force or leaks provider failures'
  const payload=JSON.parse(calls[0].body!);assert.equal(payload.versions[0].version_id,candidate);assert.ok(!('force' in payload));
  await assert.rejects(cloudflareApi('fixture-only-secret',(async()=>new Response('sensitive provider body',{status:403})) as typeof fetch).deploy(candidate),{message:'Pilot management request failed (HTTP 403)'});
 });
+
+test('live smoke consumes robots once and checks private root, sitemap and anonymous session',async()=>{
+ const paths:string[]=[];
+ const transport=(async(input)=>{const path=new URL(String(input)).pathname;paths.push(path);const status=path==='/sitemap.xml'?404:path==='/api/session'?401:200;
+ return new Response(path==='/robots.txt'?'User-agent: *\nDisallow: /\n':'fixture',{status,headers:{'cache-control':'no-store','x-robots-tag':'noindex, nofollow, nosnippet'}})}) as typeof fetch;
+ await cloudflareApi('fixture-only-secret',transport).smoke();assert.deepEqual(paths,['/','/robots.txt','/sitemap.xml','/api/session']);
+ const indexed=(async()=>new Response('private',{headers:{'cache-control':'no-store'}})) as typeof fetch;
+ await assert.rejects(cloudflareApi('fixture-only-secret',indexed).smoke(),/Private pilot smoke/);
+});

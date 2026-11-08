@@ -9,7 +9,8 @@ type Binding={type:string;name:string;[key:string]:unknown};
 export type Version={id:string;resources:{bindings:Binding[];script:{etag:string};script_runtime:Record<string,unknown>}};
 type Deployment={id:string;versions:{version_id:string;percentage:number}[]};
 export interface PilotApi {current():Promise<Deployment>;version(id:string):Promise<Version>;deploy(id:string):Promise<void>;smoke():Promise<void>}
-function fail(message:string):never{throw new Error(message);}
+class PilotCheckError extends Error {}
+function fail(message:string):never{throw new PilotCheckError(message);}
 function canonical(value:unknown):string {
  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
  if(value&&typeof value==='object')return '{'+Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>JSON.stringify(k)+':'+canonical(v)).join(',')+'}';
@@ -84,7 +85,7 @@ export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotAp
      await response.body?.cancel();if(attempt<11)await new Promise(resolve=>setTimeout(resolve,3000));
     }
     if(response?.status!==status||!response.headers.get('x-robots-tag')?.includes('noindex')||response.headers.get('cache-control')!=='no-store')fail('Private pilot smoke check failed');
-    if(path==='/robots.txt'&&!/Disallow: \//.test(await response.text()))fail('Pilot robots protection missing');
+    if(path==='/robots.txt'){if(!/Disallow: \//.test(await response.text()))fail('Pilot robots protection missing');}
     else await response.body?.cancel();
    }
   }
@@ -94,10 +95,12 @@ async function main(){
  const mode=process.argv[2]??'inspect',api=cloudflareApi(process.env.CLOUDFLARE_API_TOKEN??'');
  if(mode==='exercise'){await exerciseRollback(api,process.env.PILOT_ROLLBACK_VERSION??'');return;}
  if(mode!=='inspect')fail('Unknown pilot rollback operation');
- const current=await api.current(),id=activeVersion(current),version=await api.version(id);validatePilot(version);await api.smoke();
+ const current=await api.current(),id=activeVersion(current),version=await api.version(id);
+ console.log(JSON.stringify({phase:'metadata-read',version:id,resourceFields:Object.keys(version.resources??{}),bindings:version.resources?.bindings?.map(b=>({name:b.name,type:b.type,fields:Object.keys(b)}))}));
+ validatePilot(version);await api.smoke();
  // Output IDs and field names only. Binding values and provider envelopes stay private.
  const recent=(await api.versions()).slice(0,10),compatible:string[]=[];
  for(const row of recent){if(row.id===id)continue;try{if(equivalentVersions(version,await api.version(row.id)))compatible.push(row.id);}catch{/* Old versions may predate pilot guards. */}}
  console.log(JSON.stringify({worker:WORKER,deployment:current.id,version:id,codeEtag:version.resources.script.etag,resourceFields:Object.keys(version.resources),bindings:version.resources.bindings.map(b=>({name:b.name,type:b.type,fields:Object.keys(b)})),compatibleCandidates:compatible}));
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(()=>{console.error('Pilot rollback operation failed. Inspect verified state before retrying; no force override is used.');process.exitCode=1;});
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(error=>{console.error(error instanceof PilotCheckError?error.message:'Pilot request could not be verified');console.error('Pilot rollback operation failed. Inspect verified state before retrying; no force override is used.');process.exitCode=1;});

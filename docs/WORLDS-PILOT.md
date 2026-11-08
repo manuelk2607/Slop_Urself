@@ -182,6 +182,10 @@ bereitgestellte Versionen werden nicht überschrieben. Abschließend werden
 Ausgangsversion und private Erreichbarkeit geprüft. Datenbanken, Zuordnungen
 und gespeicherte Durable-Object-Daten werden dabei nicht zurückgesetzt.
 
-Sieben Regressionstests prüfen Kompatibilität, Fehlerbehandlung, Wiederherstellung,
+Acht Regressionstests prüfen Kompatibilität, Fehlerbehandlung, Wiederherstellung,
 unklare Schreibantworten, konkurrierende Deployments und den festen Worker.
-Die tatsächliche Cloudflare-Übung steht bis zur Metadatenprüfung noch aus.
+Vollständige CI `42489252839` bestand beide Browser und PostgreSQL. Der erste
+lesende Prüflauf `42489823444` scheiterte ohne Deploymentänderung. Ein zusätzlicher
+Test prüft die vollständige private Erreichbarkeitsprüfung einschließlich des
+nur einmal gelesenen robots-Inhalts. Die tatsächliche Cloudflare-Übung steht bis
+zur erfolgreichen Metadatenprüfung noch aus.
