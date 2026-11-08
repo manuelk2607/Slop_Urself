@@ -29,6 +29,16 @@ export const WORLDS_SCHEMA = [
         event text NOT NULL CHECK (event IN ('linked', 'unlinked')),
         occurred_at timestamptz NOT NULL DEFAULT now()
     )`,
+    `CREATE TABLE IF NOT EXISTS worlds_migration_approvals (
+        id uuid PRIMARY KEY, issuer text NOT NULL, subject text NOT NULL,
+        local_user_id text NOT NULL UNIQUE REFERENCES user_profiles(id),
+        source_auth_version text NOT NULL,
+        approved_by text NOT NULL CHECK(length(approved_by) BETWEEN 1 AND 200),
+        approval_ref text NOT NULL CHECK(length(approval_ref) BETWEEN 1 AND 200),
+        approved_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL,
+        consumed_at timestamptz, UNIQUE(issuer,subject), CHECK(expires_at>approved_at)
+    )`,
+    `REVOKE ALL ON worlds_migration_approvals FROM PUBLIC`,
     `ALTER TABLE worlds_link_audit ADD COLUMN IF NOT EXISTS receipt_reported_at timestamptz`,
     `ALTER TABLE worlds_link_audit ADD COLUMN IF NOT EXISTS receipt_conflict_at timestamptz`,
     `CREATE INDEX IF NOT EXISTS worlds_link_audit_pending_receipt ON worlds_link_audit(issuer, id)

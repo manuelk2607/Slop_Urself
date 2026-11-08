@@ -14,5 +14,6 @@ test('account pages load existing styling and their own script with restrictive 
  const page=worldsPage('<p>'+escapeWorlds('<script>alert("x")</script>')+'</p>','en');const html=await page.text();
  assert.match(html,/<html lang="en"/);assert.match(html,/href="\/style.css"/);assert.match(html,/src="\/assets\/worlds-account.js"/);
  assert.doesNotMatch(html,/<script>alert/);assert.equal(page.headers.get('cache-control'),'no-store');assert.match(page.headers.get('x-robots-tag')!,/noindex/);
+ assert.match(page.headers.get('content-security-policy')!,/form-action 'self' https:;/);
  assert.doesNotMatch(page.headers.get('content-security-policy')!,/unsafe-inline|unsafe-eval/);assert.equal(page.headers.get('referrer-policy'),'same-origin');
 });

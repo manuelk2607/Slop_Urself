@@ -1,10 +1,12 @@
 export const de={
+ approvedTitle:'Dein bisheriges Profil übernehmen',approvedBody:'Die Übernahme dieses Profils wurde gezielt für dein bestätigtes Worlds-Konto freigegeben. Du brauchst kein zusätzliches Slop-Passwort. Neue Anmeldungen für dieses Profil erfolgen anschließend ausschließlich über Worlds Hub. Bereits gültige Anmeldungen können bis zu ihrem bisherigen Ablauf weiterlaufen.',claim:'Profil übernehmen und mit Worlds spielen',
+ centralOnly:'Melde dich zentral über Worlds Hub an. Dein Slop-Profil und deine persönliche HF-Verbindung bleiben erhalten.',
  title:'Worlds-Konto · Slop Urself',heading:'Dein Worlds-Konto',eyebrow:'Slop Urself · Testversion',
  testNote:'Du bist in einer getrennten Testversion. Das reguläre Spiel und seine Daten bleiben unverändert.',
  intro:'Eine zentrale Anmeldung. Dein Spielprofil und deine Fortschritte bleiben bei Slop Urself.',
  signIn:'Mit Worlds anmelden',signedOut:'Melde dich mit deinem bestätigten Worlds-Konto an.',
  signedIn:'Bei Worlds angemeldet',pending:'Spielprofil noch nicht verknüpft',linked:'Spielprofil verknüpft',
- localFirst:'Öffne zuerst das Spiel und melde dich mit deinem bisherigen Slop-Urself-Profil an. Kehre danach über „Worlds-Konto“ hierher zurück.',
+ localFirst:'Deine Worlds-Anmeldung ist aktiv. Für dieses Konto ist in der Testversion noch kein Spielprofil zugeordnet. Die Übernahme wird anhand des bestehenden Profils vorbereitet; ein zusätzliches Slop-Passwort ist nicht nötig.',
  openProfile:'Vorhandenes Spielprofil öffnen',localProfile:'Dein aktives Spielprofil',
  ownership:'Bestätige das Passwort dieses Spielprofils, um es mit deiner Worlds-Identität zu verknüpfen.',
  keepData:'Deine bisherige Profil-ID, Spielstände und persönliche HF-Anbindung bleiben erhalten. Es wird kein zweites Spielprofil angelegt.',

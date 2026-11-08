@@ -8,12 +8,14 @@ export interface AuthConfig {
     ADMIN_ACCOUNT_ID?: string; ADMIN_ACCESS_KEY?: string;
     validateAccount?: (account: Account) => Promise<boolean>;
     worlds?: {
+        requiresCentral?(id:string):Promise<boolean>;
+        legacyAllowed?(account:Account):Promise<boolean>;
         read(request: Request): Promise<Account | undefined>;
         current(account: Account): Promise<boolean>;
         signOut(request: Request): Promise<string | undefined>;
     };
 }
-export interface Account { id: string; name: string; expiresAt: number; authVersion?: string; hfConnectionId?: string; worldsSessionKey?: string }
+export interface Account { id: string; name: string; expiresAt: number; issuedAt?:number; authVersion?: string; hfConnectionId?: string; worldsSessionKey?: string }
 class ProfileUnavailableError extends Error {}
 export const authFailureStatus = (error: unknown) => error instanceof ProfileUnavailableError ? 503 : 401;
 export const authDisabled = (config: AuthConfig) => config.AUTH_MODE === 'disabled' && config.AI_PROVIDER === 'mock';
@@ -21,6 +23,7 @@ export function profileAuthConfig<T extends AuthConfig>(config: T, profiles: Pro
     return { ...config, validateAccount: async account => {
         try {
             if (account.worldsSessionKey) return await config.worlds?.current(account) ?? false;
+            if(config.worlds?.legacyAllowed&&!await config.worlds.legacyAllowed(account))return false;
             const profile = await profiles.find(account.name);
             return profile?.id === account.id && (profile.authVersion || '0') === (account.authVersion || '0');
         }
@@ -40,7 +43,7 @@ export async function verifyAccountToken(token: unknown, config: AuthConfig): Pr
     if (typeof token !== 'string' || token.length > 4000) throw new Error('Bitte gib deinen Benutzernamen ein.');
     const { payload } = await jwtVerify(token, signingKey(config), { issuer: 'slopurself', audience: 'game', algorithms: ['HS256'] });
     if (!payload.sub || !payload.exp || payload.role !== 'player') throw new Error('Ungültige Browsersitzung.');
-    const account = { id: payload.sub, name: profileName(payload.name), expiresAt: payload.exp * 1000, authVersion: typeof payload.av === 'string' ? payload.av : '0' };
+    const account = { id: payload.sub, name: profileName(payload.name), expiresAt: payload.exp * 1000, issuedAt:typeof payload.iat==='number'?payload.iat*1000:undefined, authVersion: typeof payload.av === 'string' ? payload.av : '0' };
     if (!await accountIsCurrent(account, config)) throw new Error('Dieses Benutzerkonto wurde gelöscht.');
     return account;
 }
@@ -105,6 +108,8 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         if (!profile) return respond({ error: 'Bitte gib deinen Benutzernamen erneut ein.' }, 401);
         if ('worldsSessionKey' in profile && profile.worldsSessionKey)
             return respond({ account: { id: profile.id, name: profile.name, expiresAt: profile.expiresAt }, source: 'worlds' });
+        // Preserve a pre-migration legacy session, but never extend its original lifetime.
+        if(await config.worlds?.requiresCentral?.(profile.id))return respond({account:profile,token:legacyToken(request)});
     } else {
         let name: string;
         try { name = profileName(data.username); } catch (error) { return respond({ error: (error as Error).message }, 422); }
@@ -115,6 +120,8 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         if (!profile) return respond({ error: data.mode === 'create'
             ? 'Dieser Benutzername ist bereits vergeben. Melde dich mit dem vorhandenen Benutzer an oder verwende einen anderen Namen.'
             : 'Dieser Benutzername existiert noch nicht. Erstelle ihn mit "Neuen Benutzer registrieren".' }, data.mode === 'create' ? 409 : 404);
+        try { if(await config.worlds?.requiresCentral?.(profile.id))return respond({error:'Bitte melde dich für dieses Profil über Worlds Hub an.',code:'worlds_required'},409); }
+        catch { return respond({error:'Die Profilanmeldung ist gerade nicht erreichbar.'},503); }
         if (data.mode === 'login' && profile.passwordHash) {
             if (!data.password) return respond({ error: 'Dieses Profil ist geschützt. Bitte gib dein Passwort ein.', code: 'password_required' }, 401);
             if (!await checkPassword(data.password, profile.passwordHash)) return respond({ error: 'Das Passwort stimmt nicht.', code: 'password_required' }, 401);

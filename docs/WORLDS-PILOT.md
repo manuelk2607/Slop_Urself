@@ -2,7 +2,8 @@
 
 Der Pilot auf `feature/worlds-hub-sso` verwendet den OIDC-Codeflow mit PKCE
 aus Worlds Hub. Der OIDC-Client in `src/auth/worlds-shared/oidc.ts`
-entspricht `auth-v0.1.1` aus Worlds-Hub. Er fordert einen maximal fünf
+entspricht `auth-v0.1.2` aus Worlds-Hub, Revision
+`5a4a3e5dcec51fc40ca80d0f210af7cbddd4a42b`. Er fordert einen maximal fünf
 Minuten alten Login mit `max_age=300` an und prüft dessen signierten
 Anmeldezeitpunkt. Die übrigen gemeinsamen Dateien stammen aus der
 ursprünglichen Integration, Revision `049279b`.
@@ -30,10 +31,16 @@ ursprünglichen Integration, Revision `049279b`.
   Die Konfiguration lässt sich mit `npm run build` und
   `npx wrangler deploy --dry-run --config cloudflare/wrangler.worlds-pilot.toml`
   prüfen.
-- `/auth/worlds` startet den Login. Die Verknüpfung verlangt die aktive
-  lokale Sitzung, das aktuelle Passwort, frisches signiertes `auth_time`
-  und eine ausdrückliche Bestätigung mit CSRF-Schutz. Profile ohne Passwort
-  und das Administrationskonto sind im Pilot ausgenommen.
+- `/auth/start` beginnt den OIDC-Login durch einen gewöhnlichen Link ohne
+  lokales Formular. Die Route akzeptiert nur die eigene Origin und eine
+  Top-Level-Dokumentnavigation. Der bisherige POST-Start bleibt geschützt.
+  `/auth/worlds` zeigt Konto- und Migrationsstatus. Der geschützte
+  Selbstbedienungsnachweis für alte Passwortprofile ist nur ein zusätzlicher
+  Migrationsweg, kein Bestandteil der normalen zentralen Anmeldung.
+- Passwortlose Bestandsprofile werden nach gezielter Betreiberprüfung einer
+  exakten zentralen Identität zugeordnet. Namen allein sind kein öffentlicher
+  Übernahmenachweis. Administrationsprofile bleiben von öffentlichen
+  Selbstbedienungswegen ausgeschlossen.
 - Die SQL-Transaktion prüft nochmals Sitzung, Ablauf und Passwortversion.
   Zuordnung und Audit schreiben gemeinsam. Das Mapping referenziert die
   vorhandene lokale ID, die auch HF-Anbindung, Kontingente und Jobs verwenden.
@@ -227,3 +234,47 @@ Deployment `7d6c3681-d2ae-42c1-b6fd-2bf908af741e`. Cloudflare liefert für
 Version als sicher identisch eingestuft und keine Rücknahme ausgeführt.
 Die vollständige CI `42489938907` bestand beide Browser und PostgreSQL.
 Die Veröffentlichung der neuen Kontodarstellung folgt erst nach ihrer eigenen CI.
+
+
+## Passwortlose Übernahme und bestehende Sitzungen
+
+Die präzisierten Nutzervorgaben gelten für alle vier Welten: normale Anmeldung
+nur zentral, kein zusätzliches Projektpasswort. Das Slop-Spiel zeigt bei aktivem
+Worlds-Modus nur den zentralen Anmeldelink. Alte Felder sind ausgeblendet;
+bestehende gültige lokale Sitzungen können im Übergang weiterlaufen.
+
+`worlds_migration_approvals` enthält ausschließlich betreibergeprüfte Freigaben:
+exakte lokale ID, exakter zentraler Aussteller/Subject, Quellversion, Prüfer,
+Referenz, Ablauf und einmalige Verwendung. Kein HTTP-Endpunkt erstellt diese
+Freigaben. Die privilegierte Migration verknüpft und protokolliert atomar und
+aktiviert vorhandene zentrale Sitzungen für dieselbe lokale Profil-ID. Weder
+ein Namensgleichstand noch ein vom Browser eingesendetes Zielkonto reichen aus.
+
+Nach der Zuordnung werden neue lokale Username-Logins abgewiesen. Bereits vor
+der Zuordnung ausgestellte, noch gültige signierte Sitzungen bleiben bis zu
+ihrem bisherigen Ablauf verwendbar. Der Refresh gibt denselben alten Token
+zurück und verlängert die Frist nicht. Profilversion und normale Widerrufregeln
+bleiben wirksam. Laufende HF-Autorisierungen speichern denselben ursprünglichen
+Kontonachweis; HF-Konten, Tokens, Kontingente und Jobs werden nicht kopiert.
+
+Die zusätzliche optionale Bestätigungsroute prüft Origin, CSRF, frisches
+signiertes `auth_time`, die genaue Freigabe und Replay. Die privilegierte
+Offline-Migration benötigt keine neue persönliche Passwortabfrage und kann
+vorhandene zentrale Sitzungen ohne neue Cookie-Werte aktivieren.
+
+`tools/worlds-migrate-reviewed.mts` ist auf den wiederhergestellten QA-Host und
+den eingerichteten zentralen Aussteller begrenzt. Eingabe erfolgt per Standard-
+eingabe, ohne Verbindungsdaten in Dateien/Argumenten. Standardvorschau und
+Anwendung sind getrennte Modi. Die Vorschau für das vom Betreiber benannte
+passwortlose Profil bestand mit echtem PostgreSQL: eine einmalige Zuordnung,
+anschließender vollständiger Rollback und unveränderte Zahlen/Prüfsummen aller
+sechs Quelltabellen. Es wurde noch keine dauerhafte Zuordnung geschrieben.
+
+162 Unit-Tests, Build und beide Typprüfungen bestanden; das Migrationstool wurde
+separat typgeprüft. Tests decken Sitzungsfortführung ohne Verlängerung,
+Verhinderung neuer lokaler Anmeldungen, fremde/abgelaufene/geänderte Freigaben,
+CSRF, Origin, parallele Identitätsgrenzen, Replay, Admin-Ausschluss, HF-Pending
+und Rücknahme ab. Chromium/WebKit bestätigten direkte Links, private Styling-
+Auslieferung, DE/EN und unveränderten Schutz nativer POST-Formulare.
+Die tatsächliche Anwendung im QA-Ziel und die abschließende Browserabnahme
+folgen erst nach der vollständigen CI für diesen Implementierungsstand.

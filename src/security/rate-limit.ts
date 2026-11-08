@@ -17,7 +17,7 @@ export function takeRateLimit(buckets: RateBuckets, key: string, rule: RateRule,
 }
 
 export function httpRateRule(path: string, method: string): RateRule | undefined {
-    if (path === '/auth/worlds/link') return { limit: 5, windowMs: 60_000 };
+    if (path === '/auth/worlds/link' || path === '/auth/worlds/claim') return { limit: 5, windowMs: 60_000 };
     if (path.startsWith('/auth/')) return { limit: 30, windowMs: 60_000 };
     if (path === '/api/hf/connect' || path === '/api/hf/callback' || (path === '/api/hf/device' && method === 'POST')) return { limit: 12, windowMs: 60_000 };
     if (path === '/api/hf/device-poll') return { limit: 240, windowMs: 60_000 };

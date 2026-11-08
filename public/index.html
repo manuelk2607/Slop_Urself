@@ -82,11 +82,11 @@
                 <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" maxlength="200" aria-describedby="authPasswordHint authError"></label>
                 <p id="authPasswordHint" class="hint-text">Neue Profile: freiwillig 12 bis 200 Zeichen. Geschützte Profile: bisheriges Passwort eingeben.</p>
             </details>
-            <p id="authError" class="error-msg" role="alert"></p>
             <button id="authSubmit" class="btn-primary" type="submit">Neuen Benutzer registrieren</button>
             <button id="existingNameButton" class="btn-muted" type="button">Vorhandenen Benutzer anmelden</button>
         </form>
-        <p id="worldsSignIn" hidden><a href="/auth/worlds">Mit Worlds anmelden</a></p>
+        <p id="authError" class="error-msg" role="alert"></p>
+        <p id="worldsSignIn" hidden><a class="worlds-auth-link" href="/auth/start">Mit Worlds anmelden</a></p>
     </section>
 
     <!-- HEADER (Immer sichtbar im Spiel) -->

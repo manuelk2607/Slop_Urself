@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 import { worldsConfig } from '../../src/auth/worlds';
+import {applyApprovedMigration} from '../../src/auth/worlds-approved';
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
 import { PROFILE_SCHEMA, PROFILE_MIGRATIONS } from '../../src/database/schema';
@@ -50,6 +51,26 @@ try {
     assert.equal((await query('SELECT id FROM worlds_auth_replays')).length, 2);
     await cleanupWorldsSessions(query, now);
     assert.deepEqual(await query('SELECT id FROM worlds_auth_replays'), [{id: 'active'}]);
+
+    // Two independent PostgreSQL connections must consume one reviewed approval once.
+    const approval=crypto.randomUUID();
+    await query("INSERT INTO user_profiles(id,name,username_key) VALUES('reviewed-id','Reviewed','reviewed')");
+    await query(`INSERT INTO worlds_migration_approvals(id,issuer,subject,local_user_id,source_auth_version,approved_by,approval_ref,expires_at)
+        VALUES($1,$2,'reviewed-subject','reviewed-id','0','project-owner','concurrent-fixture',now()+interval '1 hour')`,[approval,issuer]);
+    const competing=new Client({connectionString:connection.href});await competing.connect();
+    try{
+        const other=async(sql:string,values?:unknown[])=>(await competing.query(sql,values)).rows;
+        const results=await Promise.all([applyApprovedMigration(query,approval),applyApprovedMigration(other,approval)]);
+        assert.deepEqual(results.sort(),[false,true]);
+        assert.deepEqual(await query("SELECT local_user_id FROM worlds_identity_links WHERE subject='reviewed-subject'"),[{local_user_id:'reviewed-id'}]);
+        assert.equal((await query("SELECT count(*)::int AS n FROM worlds_link_audit WHERE subject='reviewed-subject'"))[0].n,1);
+        assert.equal((await query("SELECT auth_version FROM user_profiles WHERE id='reviewed-id'"))[0].auth_version,'0');
+        await query("DELETE FROM worlds_identity_links WHERE subject='reviewed-subject'");
+        await query('DELETE FROM worlds_migration_approvals WHERE id=$1',[approval]);
+        await query("DELETE FROM worlds_link_audit WHERE subject='reviewed-subject'");
+        await query("DELETE FROM user_profiles WHERE id='reviewed-id'");
+        console.log('PASS PostgreSQL concurrent reviewed passwordless migration is one-use and rollback preserves the source profile');
+    }finally{await competing.end();}
 
     const probe = createServer().listen(0, '127.0.0.1');
     await once(probe, 'listening');

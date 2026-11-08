@@ -1,11 +1,13 @@
 import type {de} from './de';
 export const en:Record<keyof typeof de,string>={
+ approvedTitle:'Keep your existing profile',approvedBody:'This profile has been specifically approved for migration to your verified Worlds account. No additional Slop password is needed. After migration, new sign-ins for this profile use Worlds Hub exclusively. Existing valid sessions can continue until their original expiry.',claim:'Keep this profile and play with Worlds',
+ centralOnly:'Sign in centrally through Worlds Hub. Your Slop profile and personal HF connection are preserved.',
  title:'Worlds account · Slop Urself',heading:'Your Worlds account',eyebrow:'Slop Urself · Test version',
  testNote:'You are using a separate test version. The regular game and its data are unchanged.',
  intro:'One central sign-in. Your game profile and progress stay with Slop Urself.',
  signIn:'Sign in with Worlds',signedOut:'Sign in with your verified Worlds account.',
  signedIn:'Signed in to Worlds',pending:'Game profile not linked yet',linked:'Game profile linked',
- localFirst:'Open the game and sign in with your existing Slop Urself profile first. Then return here using “Worlds account”.',
+ localFirst:'Your Worlds sign-in is active. No game profile has been assigned to this account in the test version yet. Migration is prepared from the existing profile; no additional Slop password is needed.',
  openProfile:'Open existing game profile',localProfile:'Your active game profile',
  ownership:'Confirm this game profile’s password to link it to your Worlds identity.',
  keepData:'Your existing profile ID, game progress and personal HF connection are preserved. No second game profile is created.',

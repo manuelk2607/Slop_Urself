@@ -943,3 +943,5 @@ body.worlds-page { justify-content: flex-start; padding: clamp(12px, 4vw, 32px);
 .worlds-account .btn-primary:hover { background: #b72137; }
 .worlds-languages button { appearance: none; transition: none; flex: 0 0 44px; font-family: inherit; font-size: .8rem; }
 .worlds-test-note { padding: 12px 14px; border: 1px solid #46515f; border-radius: 8px; font-size: .82rem; }
+.worlds-auth-link { display: block; padding: 14px 20px; background: #cf2940; color: #fff; font-weight: 700; text-decoration: none; border-radius: 8px; }
+.worlds-auth-link:focus-visible { outline: 2px solid #2ed573; outline-offset: 4px; }

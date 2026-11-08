@@ -148,10 +148,10 @@ test('Slop Worlds linking checks both proofs and atomically keeps the local prof
         const fresh = await central(Date.now()), stale = await central(Date.now() - 300_001);
         const accountPage=(cookie:string,locale='de')=>worldsResponse(new Request(origin+'/auth/worlds?ui_locales='+locale,{headers:{cookie}}),config,local,profiles,query);
         const centralOnly=await accountPage(fresh.cookie);const centralHtml=await centralOnly.text();
-        assert.match(centralHtml,/Bei Worlds angemeldet/);assert.match(centralHtml,/Vorhandenes Spielprofil öffnen/);
+        assert.match(centralHtml,/Bei Worlds angemeldet/);assert.match(centralHtml,/Für dieses Konto ist in der Testversion noch kein Spielprofil zugeordnet/);
         assert.doesNotMatch(centralHtml,/name="password"/);assert.match(centralHtml,/href="\/style.css"/);
         assert.match(centralOnly.headers.get('content-security-policy')!,/style-src 'self'/);
-        assert.match(centralOnly.headers.get('content-security-policy')!,/form-action 'self';/);
+        assert.match(centralOnly.headers.get('content-security-policy')!,/form-action 'self' https:;/);
         const ownedHtml=await(await accountPage(fresh.cookie+'; '+localCookie,'en')).text();
         assert.match(ownedHtml,/<html lang="en"/);assert.match(ownedHtml,/Your active game profile/);
         assert.match(ownedHtml,/name="password"/);assert.match(ownedHtml,/Link this profile to Worlds/);

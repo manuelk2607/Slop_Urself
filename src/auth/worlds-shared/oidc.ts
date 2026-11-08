@@ -29,6 +29,17 @@ const redirect = (location:string,cookies:string[]=[]) => { const h=new Headers(
 export async function startLogin(request:Request,config:AuthConfig) {
   if (request.method!=='POST') return new Response(null,{status:405});
   if (!sameOrigin(request,config.origin)) return new Response(null,{status:403});
+  return beginLogin(request,config);
+}
+/** A normal top-level link can start OIDC without a local login form. It only
+ * creates a short-lived PKCE transaction; callback state still binds the browser. */
+export async function startLoginLink(request:Request,config:AuthConfig) {
+  if(request.method!=='GET')return new Response(null,{status:405});
+  if(new URL(request.url).origin!==config.origin)return new Response(null,{status:421});
+  if(request.headers.get('sec-fetch-mode')!=='navigate'||request.headers.get('sec-fetch-dest')!=='document')return new Response(null,{status:403});
+  return beginLogin(request,config);
+}
+async function beginLogin(request:Request,config:AuthConfig) {
   const reauth=new URL(request.url).searchParams.get('reauth')==='1';
   if(reauth&&!config.reauthEnabled)return new Response('Erneute Anmeldung ist für diesen Anbieter noch nicht freigegeben.',{status:503});
   const as=await metadata(config);

@@ -39,5 +39,12 @@ try {
     assert.equal(configRequests, 1, 'The homepage must not fetch or poll a separate round limit.');
     assert.equal(await quota.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await quota.screenshot({ path: artifactPath('slopurself-quota-mobile.png'), fullPage: true });
+    const central=await browser.newPage({viewport:{width:320,height:740}});
+    await central.route('**/api/config',route=>route.fulfill({json:{authEnabled:true,worldsEnabled:true,mockAi:true,hfRequired:false,quotaMode:'unavailable',aiRoundLimit:0}}));
+    await central.route('**/api/session',route=>route.fulfill({status:401,json:{}}));
+    await central.goto(base);await central.locator('#screenAuth').waitFor({state:'visible'});
+    assert.equal(await central.locator('#authForm').isVisible(),false,'Worlds mode must not offer local username or password authentication');
+    const link=central.locator('#worldsSignIn a');assert.equal(await link.isVisible(),true);assert.match(await link.getAttribute('href')??'',/^\/auth\/start\?/);
+    assert.ok(await central.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     console.log('PASS: missing bundle/backend show errors; round selection exists only inside the room, defaults to one and clamps to the server limit; homepage does not poll quota; mobile layout fits.');
 } finally { await browser.close(); }

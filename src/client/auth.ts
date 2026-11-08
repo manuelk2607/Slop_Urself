@@ -1,3 +1,4 @@
+import {messages,normalizeLocale,localeKey} from '../i18n/worlds';
 interface Account { id: string; name: string }
 interface AuthUI {
     signedIn(name: string, hfRequired: boolean): Promise<void>;
@@ -83,6 +84,11 @@ export async function initializeAccount(ui: AuthUI) {
         const config = await response.json() as { authEnabled: boolean; hfRequired?: boolean; mockAi?: boolean; worldsEnabled?: boolean };
         document.getElementById('worldsSignIn')!.hidden = !config.worldsEnabled;
         document.getElementById('worldsAccount')!.hidden = !config.worldsEnabled;
+        if(config.worldsEnabled){
+            let locale=normalizeLocale(navigator.language)??'de';try{locale=normalizeLocale(localStorage.getItem(localeKey))??locale;}catch{}
+            form.hidden=true;document.getElementById('authHint')!.textContent=messages[locale].centralOnly;
+            const link=document.querySelector<HTMLAnchorElement>('#worldsSignIn a')!;link.href='/auth/start?ui_locales='+locale;link.textContent=messages[locale].signIn;
+        }
         hfRequired = config.hfRequired ?? config.mockAi !== true;
         if (!config.authEnabled) { await ui.signedIn('', hfRequired); return; }
         const saved = await fetch('/api/session', { signal: AbortSignal.timeout(10_000) });

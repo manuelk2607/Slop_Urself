@@ -20,6 +20,10 @@ const server=createServer(async(incoming,outgoing)=>{
   const fixture=url.searchParams.get('fixture'),headers={...incoming.headers} as Record<string,string>;
   if(fixture)headers.cookie=SESSION_COOKIE+'='+'A'.repeat(43)+(fixture==='profile'?'; slop_auth='+legacy:'');
   const request=new Request(url,{method:incoming.method,headers});
+  if(url.pathname==='/auth/start'){
+   const ok=incoming.method==='GET'&&incoming.headers['sec-fetch-mode']==='navigate'&&incoming.headers['sec-fetch-dest']==='document';
+   outgoing.writeHead(ok?200:403,{'content-type':'application/json'});outgoing.end(JSON.stringify({mode:incoming.headers['sec-fetch-mode'],destination:incoming.headers['sec-fetch-dest']}));return;
+  }
   if(incoming.method==='POST'){
    outgoing.writeHead(sameOrigin(request,origin)?200:403,{'content-type':'application/json'});outgoing.end(JSON.stringify({origin:incoming.headers.origin,site:incoming.headers['sec-fetch-site']}));return;
   }
@@ -39,12 +43,12 @@ try{
  await page.goto(origin+'/auth/worlds');
  assert.equal(await page.locator('body').evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(18, 20, 26)');
  assert.equal(await page.locator('main').evaluate(node=>getComputedStyle(node).borderRadius),'18px');
- const posted=page.waitForResponse(response=>response.request().method()==='POST');
- await page.getByRole('button',{name:'Mit Worlds anmelden',exact:true}).click();const response=await posted;
- assert.equal(response.status(),200);assert.deepEqual(await response.json(),{origin,site:'same-origin'});
+ const started=page.waitForResponse(response=>new URL(response.url()).pathname==='/auth/start');
+ await page.getByRole('link',{name:'Mit Worlds anmelden',exact:true}).click();const initial=await started;
+ assert.equal(initial.status(),200);assert.deepEqual(await initial.json(),{mode:'navigate',destination:'document'});
  for(const forged of ['null','https://untrusted.test'])assert.equal((await fetch(origin+'/auth/login',{method:'POST',headers:{origin:forged}})).status,403);
  await page.goto(origin+'/auth/worlds?fixture=central');
- assert.equal(await page.locator('input[name=password]').count(),0);await page.getByRole('link',{name:'Vorhandenes Spielprofil öffnen'}).waitFor();
+ assert.equal(await page.locator('input[name=password]').count(),0);await page.getByText('Deine Worlds-Anmeldung ist aktiv.',{exact:false}).waitFor();
  await page.goto(origin+'/auth/worlds?fixture=profile');
  const password=page.locator('input[name=password]'),value='synthetic form preservation';await password.fill(value);
  const csrf=await page.locator('[name=csrf]').first().getAttribute('value');
@@ -54,6 +58,11 @@ try{
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  assert.equal(await page.getByRole('button',{name:'English',exact:true}).getAttribute('aria-pressed'),'true');
  assert.equal(await page.getByRole('button',{name:'English',exact:true}).evaluate(node=>getComputedStyle(node).backgroundColor),'rgb(241, 242, 246)');
+ const posted=page.waitForResponse(response=>response.request().method()==='POST');
+ await page.getByRole('button',{name:'Link this profile to Worlds',exact:true}).click();const postResult=await posted;
+ assert.equal(postResult.status(),200);assert.deepEqual(await postResult.json(),{origin,site:'same-origin'});
+ await page.goto(origin+'/auth/worlds?fixture=central');
+
  if(process.env.TEST_ARTIFACT_DIR){await page.goto(origin+'/auth/worlds?fixture=central');await page.screenshot({path:join(process.env.TEST_ARTIFACT_DIR,'slop-worlds-account-'+engine.name()+'.png'),fullPage:true});}
  await page.getByRole('button',{name:'Deutsch',exact:true}).click();assert.equal(await page.locator('html').getAttribute('lang'),'de');
  await page.reload();await page.getByRole('button',{name:'English',exact:true}).click();await page.reload();assert.equal(await page.locator('html').getAttribute('lang'),'en');
