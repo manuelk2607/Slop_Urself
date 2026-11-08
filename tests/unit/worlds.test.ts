@@ -80,6 +80,7 @@ test('the migration outbox retries committed records and records rollback withou
         await query(unlink, bindings);
         await db.exec('ROLLBACK');
         assert.deepEqual(await query('SELECT event FROM worlds_link_audit'), [{event: 'linked'}]);
+
         assert.ok(await config.store.getSession('linked-session'));
 
         const receipts: {revision: unknown; state: unknown}[] = [];
@@ -145,6 +146,19 @@ test('Slop Worlds linking checks both proofs and atomically keeps the local prof
             return {key, csrf, sub, cookie: SESSION_COOKIE + '=' + raw};
         }
         const fresh = await central(Date.now()), stale = await central(Date.now() - 300_001);
+        const accountPage=(cookie:string,locale='de')=>worldsResponse(new Request(origin+'/auth/worlds?ui_locales='+locale,{headers:{cookie}}),config,local,profiles,query);
+        const centralOnly=await accountPage(fresh.cookie);const centralHtml=await centralOnly.text();
+        assert.match(centralHtml,/Bei Worlds angemeldet/);assert.match(centralHtml,/Vorhandenes Spielprofil öffnen/);
+        assert.doesNotMatch(centralHtml,/name="password"/);assert.match(centralHtml,/href="\/style.css"/);
+        assert.match(centralOnly.headers.get('content-security-policy')!,/style-src 'self'/);
+        assert.match(centralOnly.headers.get('content-security-policy')!,/form-action 'self';/);
+        const ownedHtml=await(await accountPage(fresh.cookie+'; '+localCookie,'en')).text();
+        assert.match(ownedHtml,/<html lang="en"/);assert.match(ownedHtml,/Your active game profile/);
+        assert.match(ownedHtml,/name="password"/);assert.match(ownedHtml,/Link this profile to Worlds/);
+        for(const notEligible of [openCookie,adminCookie])assert.doesNotMatch(await(await accountPage(fresh.cookie+'; '+notEligible)).text(),/name="password"/);
+        const staleHtml=await(await accountPage(stale.cookie+'; '+localCookie)).text();
+        assert.doesNotMatch(staleHtml,/name="password"/);assert.match(staleHtml,/erneut bestätigen/);
+
         const post = (binding: typeof fresh, cookie: string, options: {password?: string; csrf?: string; origin?: string} = {},
             execute = query, reauthEnabled = true) => worldsResponse(new Request(origin + '/auth/worlds/link', {
             method: 'POST', headers: {origin: options.origin ?? origin, cookie: binding.cookie + '; ' + cookie},
@@ -224,6 +238,8 @@ test('Slop Worlds linking checks both proofs and atomically keeps the local prof
         const [link] = await query('SELECT issuer, subject, local_user_id FROM worlds_identity_links');
         assert.deepEqual(link, {issuer, subject: second.sub, local_user_id: protectedProfile.id});
         assert.deepEqual(await query('SELECT event FROM worlds_link_audit'), [{event: 'linked'}]);
+        const linkedPage=await(await accountPage(second.cookie,'en')).text();assert.match(linkedPage,/Game profile linked/);assert.match(linkedPage,/Play with this profile/);assert.doesNotMatch(linkedPage,/name="password"/);
+
         assert.equal((await profiles.find(protectedProfile.name))?.id, protectedProfile.id);
         const third = await central(Date.now());
         assert.equal((await post(third, renewed)).status, 403);

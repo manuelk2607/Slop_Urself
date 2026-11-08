@@ -11,6 +11,7 @@ async function main() {
     }
     await build({ entryPoints: { script: 'src/client/app.ts', startup: 'src/client/startup.ts' },
         bundle: true, minify: true, platform: 'browser', format: 'iife', outdir: 'public' });
+    await build({ entryPoints: ['src/client/worlds-account.ts'], bundle: true, minify: true, platform: 'browser', format: 'iife', outfile: 'public/assets/worlds-account.js' });
     for (const [source, target] of [
         ['public/favicon.ico', 'public/assets/slopurself-favicon-v4.ico'],
         ['public/assets/favicon-32.png', 'public/assets/slopurself-favicon-v4.png'],

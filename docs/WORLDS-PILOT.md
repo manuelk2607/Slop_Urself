@@ -189,3 +189,41 @@ lesende Prüflauf `42489823444` scheiterte ohne Deploymentänderung. Ein zusätz
 Test prüft die vollständige private Erreichbarkeitsprüfung einschließlich des
 nur einmal gelesenen robots-Inhalts. Die tatsächliche Cloudflare-Übung steht bis
 zur erfolgreichen Metadatenprüfung noch aus.
+
+
+## Echte Anmeldung und Kontodarstellung am 08.11.
+
+Der Nutzer bestätigte die persönliche Anmeldung und Freigabe für Slop Urself
+Pilot. Der Browser kehrte nach `/auth/worlds` zurück und zeigte eine aktive
+Worlds-Sitzung. Das ist noch keine Verknüpfung eines lokalen Spielprofils.
+Die bisherige Kontoseite war ungestaltetes HTML ohne Stylesheet und bot das
+Passwortformular auch ohne vorhandene lokale Anmeldung an.
+
+Die Kontoseite lädt jetzt die vorhandene Slop-Gestaltung und einen eigenen
+kleinen Sprachclient ohne Initialisierung des Spiels. Status, nächster Schritt,
+Profilname und HF-Pflicht sind deutlich sichtbar. Ohne lokale Anmeldung führt
+sie zuerst zum vorhandenen Spielprofil. Das Verknüpfungsformular erscheint nur
+für ein aktives, passwortgeschütztes Nicht-Admin-Profil und einen frischen
+zentralen Nachweis. Die POST-Route prüft dieselben Voraussetzungen weiterhin
+unabhängig von der Anzeige. Es wird kein Profil automatisch angelegt/verknüpft.
+
+Getrennte DE/EN-Kataloge verwenden `de`/`en`, den lokalen Schlüssel
+`worlds.locale` und einen sicheren hostgebundenen Locale-Cookie. `ui_locales`
+reicht die Auswahl beim Login an den Hub weiter. Der Sprachwechsel erhält
+Passworteingabe und CSRF-Feld. Die zentrale Profilübernahme durch alle
+Anwendungen bleibt ein eigener Integrationsschritt; das übrige Slop-Spiel
+ist dadurch nicht vollständig zweisprachig geworden.
+
+Build und beide Typprüfungen, 159 Unit-Tests sowie Chromium und WebKit lokal
+bestanden. Die Browser prüften 320 px und Desktop, echte CSS-/Script-Auslieferung
+unter der CSP, beide Sprachen, Sprachspeicherung, Voraussetzungen und den
+unverändert strengen nativen POST-Origin-Schutz. Der lokale Browserzustand war
+synthetisch; persönliche Zugangsdaten wurden nicht im Test verwendet.
+
+Die lesende Cloudflare-Abnahme `42490657075` für `6ff0153` ist erfolgreich.
+Sie bestätigt die aktive Version `82cd43c1-82d0-4515-a83a-bb99f3acee90` und
+Deployment `7d6c3681-d2ae-42c1-b6fd-2bf908af741e`. Cloudflare liefert für
+`ASSETS` nur Name und Typ, keinen Inhaltsnachweis. Deshalb wurde keine ältere
+Version als sicher identisch eingestuft und keine Rücknahme ausgeführt.
+Die vollständige CI `42489938907` bestand beide Browser und PostgreSQL.
+Die Veröffentlichung der neuen Kontodarstellung folgt erst nach ihrer eigenen CI.

@@ -1,0 +1,22 @@
+import type {de} from './de';
+export const en:Record<keyof typeof de,string>={
+ title:'Worlds account · Slop Urself',heading:'Your Worlds account',eyebrow:'Slop Urself · Worlds pilot',
+ intro:'One central sign-in. Your game profile and progress stay with Slop Urself.',
+ signIn:'Sign in with Worlds',signedOut:'Sign in with your verified Worlds account.',
+ signedIn:'Signed in to Worlds',pending:'Game profile not linked yet',linked:'Game profile linked',
+ localFirst:'Open the game and sign in with your existing Slop Urself profile first. Then return here using “Worlds account”.',
+ openProfile:'Open existing game profile',localProfile:'Your active game profile',
+ ownership:'Confirm this game profile’s password to link it to your Worlds identity.',
+ keepData:'Your existing profile ID, game progress and personal HF connection are preserved. No second game profile is created.',
+ password:'Password of your active Slop Urself profile',link:'Link this profile to Worlds',
+ freshNeeded:'Confirm your Worlds sign-in again first. You can then link this game profile.',
+ reauth:'Confirm Worlds sign-in again',unavailable:'This profile cannot be linked in the pilot. It needs password protection and must not be an administrator profile.',
+ locked:'Profile linking has not been enabled for this pilot yet.',
+ linkedBody:'Continue with your existing game profile.',play:'Play with this profile',
+ renew:'Your profile is already linked. Sign in with Worlds again to play.',renewAction:'Sign in with Worlds again',
+ logout:'Sign out of Worlds in Slop Urself',logoutHint:'This ends your Worlds session in Slop Urself. Your central Worlds sign-in remains active.',
+ hf:'Real AI generation still requires your own valid Hugging Face connection.',
+ back:'Back to the game',hub:'Go to Worlds Hub',privacy:'Privacy',language:'Choose language',skip:'Skip to content',
+ refused:'The profile could not be linked. Check your sessions and password. Your existing links have not been changed.',
+ failed:'Worlds sign-in could not be completed. Please start again.',retry:'Return to account overview',
+};

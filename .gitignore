@@ -14,3 +14,5 @@ cloudflare/.wrangler/
 cloudflare/.dev.vars
 cloudflare/public/*
 !cloudflare/public/README.md
+
+public/assets/worlds-account.js
