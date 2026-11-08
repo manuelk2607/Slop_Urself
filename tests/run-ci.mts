@@ -43,6 +43,7 @@ try {
     cloudflareProfiles = await cloudflareRuntime({ port: 3314, bindings: { AUTH_MODE: '' } });
     for (const engine of (process.env.TEST_BROWSER_ENGINE ? [process.env.TEST_BROWSER_ENGINE] : ['chromium', 'webkit'])) {
         const browserEnv = { TEST_BROWSER_ENGINE: engine, TEST_BROWSER_PATH: engine === 'webkit' ? '' : process.env.TEST_BROWSER_PATH || '' };
+        await run(['tests/e2e/worlds-form.e2e.mts'], browserEnv);
         for (const port of [3310, 3311]) await run(['tests/e2e/seo.e2e.mts', `http://127.0.0.1:${port}`], browserEnv);
         await run(['tests/e2e/browser.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);
         await run(['tests/e2e/video.e2e.mts', 'http://127.0.0.1:3310'], browserEnv);

@@ -38,8 +38,10 @@ ursprünglichen Integration, Revision `049279b`.
   Zuordnung und Audit schreiben gemeinsam. Das Mapping referenziert die
   vorhandene lokale ID, die auch HF-Anbindung, Kontingente und Jobs verwenden.
 
-`WORLDS_REAUTH_ENABLED` bleibt bis zur Abnahme mit dem echten Anbieter
-ausgeschaltet. Die HTTP- und WebSocket-Spielersitzungen verwenden die lokale
+`WORLDS_REAUTH_ENABLED` ist grundsätzlich ausgeschaltet. Die separate
+Pilotkonfiguration aktiviert es nach dem realen positiven `max_age`-Nachweis
+für die noch ausstehende vollständige Browserabnahme. Die produktive
+Slop-Konfiguration bleibt unverändert. Die HTTP- und WebSocket-Spielersitzungen verwenden die lokale
 ID aus dem Mapping. Bei bereits aktiver lokaler Anmeldung entscheidet der
 Benutzer über den Wechsel. Es wird kein Worlds- oder HF-Token an das Spielskript
 ausgegeben. Jede Spielaktion prüft die Gültigkeit der Sitzung. Passwortwechsel,
@@ -110,8 +112,23 @@ Pilotseite und den privaten Indexierungs- und Cache-Schutz.
 
 Der WebKit-Fehler aus Lauf `42409781590` trat bei einer Spiel-Checkbox auf.
 Drei lokale Wiederholungen desselben Worker-Tests mit der passenden
-WebKit-Version bestanden. Der erneute vollständige CI-Lauf bleibt vor
-dem Deployment erforderlich.
+WebKit-Version bestanden. Der vollständige Lauf `42464544452` für
+`290f36a` bestand danach beide Browser und die PostgreSQL-Integrationen.
+
+Deploylauf `42465065850` legte den separaten Worker samt Secrets an.
+Seine unmittelbare Root-Prüfung traf noch die Verteilung der Secrets
+und erhielt 503; der nachfolgende Liveabruf bestätigte 200 samt
+`no-store` und `noindex`. Der Workflow wartet jetzt bei 503 begrenzt
+bis zu 33 Sekunden, ohne die abschließenden Bedingungen zu lockern.
+
+Die echte Formularnavigation offenbarte außerdem ein Origin-Problem:
+`Referrer-Policy: no-referrer` unterdrückte den für native POST-Formulare
+benötigten Herkunftsnachweis. Die Pilot-Kontoseite verwendet nun
+`same-origin`. An fremde Ziele wird weiterhin kein Referrer gesendet.
+Der neue Browser-Regressionstest reproduzierte zunächst 403 und bestätigte
+nach der Korrektur den nativen Formularstart. Anfragen mit `Origin: null`
+oder fremder Origin bleiben abgewiesen. Beide Browser prüfen dies in der CI.
+149 Unit-Tests und der Node-/Worker-Build bestanden lokal erneut.
 
 ## Migrationsnachweis und Rücknahme
 

@@ -110,7 +110,7 @@ export function worldsAccounts(config: AuthConfig | undefined, query: PgQuery, a
 
 const html = (body: string, status = 200) => new Response(
     `<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Worlds-Anmeldung · Slop Urself</title><main><h1>Worlds-Anmeldung</h1>${body}<p><a href="/">Zurück zum Spiel</a></p></main></html>`,
-    { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer',
+    { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'same-origin',
         'content-security-policy': "default-src 'none'; form-action 'self' https:; base-uri 'none'; frame-ancestors 'none'" } }
 );
 const redirect = (path: string) => new Response(null, {status: 303, headers: {location: path, 'cache-control': 'no-store'}});
