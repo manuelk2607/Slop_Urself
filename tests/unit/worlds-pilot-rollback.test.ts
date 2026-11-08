@@ -1,7 +1,18 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {activeVersion,cloudflareApi,equivalentVersions,exerciseRollback,validatePilot,type PilotApi,type Version} from '../../tools/worlds-pilot-rollback.mts';
+import {activeVersion,cloudflareApi,equivalentVersions,exerciseRollback,metadataFields,validatePilot,type PilotApi,type Version} from '../../tools/worlds-pilot-rollback.mts';
 const baseline='00000000-0000-4000-8000-000000000001',candidate='00000000-0000-4000-8000-000000000002',foreign='00000000-0000-4000-8000-000000000003';
+test('modern metadata diagnostic reads only the fixed pilot and returns field names, never values',async()=>{
+ const shape={assets:{config:{html_handling:'sensitive-placeholder'},jwt:'private-placeholder'},env:[{name:'private-placeholder',text:'private-placeholder'}]};
+ assert.doesNotMatch(JSON.stringify(metadataFields(shape)),/private-placeholder|sensitive-placeholder/);
+ const transport=(async(input,init)=>{
+  assert.equal(String(input),'https://api.cloudflare.com/client/v4/accounts/ec3c070d8e4f88d2fc533d7d797f2daa/workers/workers/slopurself-worlds-pilot/versions/'+baseline);
+  assert.equal(init?.method,undefined);assert.equal(init?.body,undefined);
+  return Response.json({success:true,result:shape});
+ }) as typeof fetch;
+ assert.ok((await cloudflareApi('fixture-only-secret',transport).modernMetadataShape(baseline)).includes('assets.config.html_handling'));
+ await assert.rejects(cloudflareApi('fixture-only-secret',transport).modernMetadataShape('foreign/path'));
+});
 function version(id:string):Version{return {id,resources:{script:{etag:'same-code-hash'},script_runtime:{compatibility_date:'2026-10-03'},bindings:[
  ...Object.entries({AI_PROVIDER:'mock',WORLDS_PILOT_DEPLOYMENT:'true',WORLDS_PILOT_ENABLED:'true',WORLDS_PILOT_ORIGIN:'https://slopurself-worlds-pilot.maki26.workers.dev',WORLDS_PILOT_DATABASE_HOST:'ep-muddy-dawn-b1fl6foa-pooler.c-5.eu-central-1.aws.neon.tech'}).map(([name,text])=>({type:'plain_text',name,text})),
  {type:'secret_text',name:'DATABASE_URL'},{type:'secret_text',name:'AUTH_COOKIE_SECRET'},

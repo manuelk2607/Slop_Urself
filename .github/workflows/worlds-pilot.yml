@@ -105,6 +105,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Require successful complete CI for this commit
+        if: inputs.operation == 'exercise-rollback'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

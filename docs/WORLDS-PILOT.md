@@ -167,8 +167,11 @@ Anmeldung und den widerrufenen Nachweis im isolierten Hub.
 
 Der manuelle Pilot-Workflow bietet `inspect-rollback` und `exercise-rollback`.
 Beide verwenden nur die vorhandene Umgebung `worlds-pilot`, denselben
-Branchschutz und dieselbe Deployment-Sperre wie die Bereitstellung. Vorher
-muss die vollständige CI für genau diesen Commit erfolgreich sein.
+Branchschutz und dieselbe Deployment-Sperre wie die Bereitstellung. Vor einer
+Veröffentlichung oder tatsächlichen Rücknahme muss die vollständige CI für genau
+diesen Commit erfolgreich sein. Eine reine Metadaten-/HTTP-Inspektion ist read-only
+und kann unabhängig davon erfolgen; die neuere Versions-API wird ausschließlich
+auf Feldnamen geprüft. Metadatenwerte oder Geheimnisse werden nicht ausgegeben.
 
 `inspect-rollback` liest ausschließlich die Versionen des fest vorgegebenen
 Pilot-Workers und prüft seine private Erreichbarkeit. Ausgegeben werden nur

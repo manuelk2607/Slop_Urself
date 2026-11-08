@@ -30,7 +30,14 @@ keinen lokalen Benutzernamen mehr. Der Worlds-Kontolink übernimmt den vorhanden
 Stil und einen sichtbaren Tastaturfokus. 162 Tests und Build bestanden.
 Chromium/WebKit prüfen mit Testantworten den fünfminütigen Refresh, 401,
 lokalisierte Ablaufmeldung, ausgeblendete lokale Formulare und erhaltenen Link.
-Neue vollständige GitHub-CI und Pilotveröffentlichung stehen nach dem Commit an.
+Vollständige GitHub-CI für `35d26ad` ist erfolgreich (`42515091102`).
+Die separate Pilotveröffentlichung dieses exakten Stands wurde gestartet.
+Zusätzliche read-only Diagnose prüft Feldnamen der neueren Cloudflare-
+Versionsmetadaten; weder Werte noch Geheimnisse werden protokolliert. Neun
+gezielte Prüfer-/Rücknahmetests und separate Typprüfung bestanden. Eine reine
+Inspektion benötigt keine neue vollständige Anwendungs-CI; jede Veröffentlichung
+und jeder tatsächliche Versionswechsel verlangen sie weiterhin für exakt ihren
+Commit. Der bestehende Rücknahmevergleich bleibt unverändert streng.
 
 ## Offen / nächster Schritt
 
