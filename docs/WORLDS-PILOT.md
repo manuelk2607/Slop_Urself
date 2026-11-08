@@ -268,7 +268,9 @@ eingabe, ohne Verbindungsdaten in Dateien/Argumenten. Standardvorschau und
 Anwendung sind getrennte Modi. Die Vorschau für das vom Betreiber benannte
 passwortlose Profil bestand mit echtem PostgreSQL: eine einmalige Zuordnung,
 anschließender vollständiger Rollback und unveränderte Zahlen/Prüfsummen aller
-sechs Quelltabellen. Es wurde noch keine dauerhafte Zuordnung geschrieben.
+sechs Quelltabellen. Die Vorschau schrieb keine dauerhafte Zuordnung. Nach erfolgreicher vollständiger CI
+wurde die exakt geprüfte Zuordnung für Manuel ausschließlich in QA angewendet;
+alle sechs Quelltabellen blieben nach Zahl und Prüfsumme unverändert.
 
 162 Unit-Tests, Build und beide Typprüfungen bestanden; das Migrationstool wurde
 separat typgeprüft. Tests decken Sitzungsfortführung ohne Verlängerung,
@@ -276,5 +278,8 @@ Verhinderung neuer lokaler Anmeldungen, fremde/abgelaufene/geänderte Freigaben,
 CSRF, Origin, parallele Identitätsgrenzen, Replay, Admin-Ausschluss, HF-Pending
 und Rücknahme ab. Chromium/WebKit bestätigten direkte Links, private Styling-
 Auslieferung, DE/EN und unveränderten Schutz nativer POST-Formulare.
-Die tatsächliche Anwendung im QA-Ziel und die abschließende Browserabnahme
-folgen erst nach der vollständigen CI für diesen Implementierungsstand.
+Die vollständige CI für `7ec02df` und Deploy `42496881577` bestanden. Anschließend
+wurden Anwendung und echter Browserablauf bestätigt: bestehendes Profil Manuel,
+kein zusätzliches Passwort, lokale Abmeldung und automatische SSO-Wiederkehr
+ohne Passwort/Code/Freigabe. Dies ist keine produktive Migration und kein globaler
+Logout. Aktueller kompakter Checkpoint: `PROGRESS.md`.

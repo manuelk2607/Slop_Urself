@@ -1,5 +1,6 @@
 import type {de} from './de';
 export const en:Record<keyof typeof de,string>={
+ sessionExpired:'Your Slop Urself session has expired. Sign in again through Worlds Hub.',
  approvedTitle:'Keep your existing profile',approvedBody:'This profile has been specifically approved for migration to your verified Worlds account. No additional Slop password is needed. After migration, new sign-ins for this profile use Worlds Hub exclusively. Existing valid sessions can continue until their original expiry.',claim:'Keep this profile and play with Worlds',
  centralOnly:'Sign in centrally through Worlds Hub. Your Slop profile and personal HF connection are preserved.',
  title:'Worlds account · Slop Urself',heading:'Your Worlds account',eyebrow:'Slop Urself · Test version',

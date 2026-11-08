@@ -46,5 +46,21 @@ try {
     assert.equal(await central.locator('#authForm').isVisible(),false,'Worlds mode must not offer local username or password authentication');
     const link=central.locator('#worldsSignIn a');assert.equal(await link.isVisible(),true);assert.match(await link.getAttribute('href')??'',/^\/auth\/start\?/);
     assert.ok(await central.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    for(const locale of ['de-DE','en-GB']){
+        const expiry=await browser.newPage({locale,viewport:{width:320,height:740}});
+        await expiry.clock.install();
+        await expiry.route('**/api/config',route=>route.fulfill({json:{authEnabled:true,worldsEnabled:true,mockAi:true,hfRequired:false}}));
+        await expiry.route('**/api/session',route=>route.fulfill(route.request().method()==='GET'
+            ?{json:{account:{id:'synthetic-expiry-only',name:'Existing profile'}}}
+            :{status:401,json:{error:'Bitte gib deinen Benutzernamen erneut ein.'}}));
+        await expiry.goto(base);await expiry.locator('#screenLobby').waitFor({state:'visible'});
+        assert.equal(await expiry.locator('#worldsAccount').isVisible(),true);
+        assert.equal(await expiry.locator('#worldsAccount').evaluate(element=>getComputedStyle(element).textDecorationLine),'none');
+        await expiry.clock.fastForward(300_001);
+        await expiry.locator('#screenAuth').waitFor({state:'visible'});
+        assert.match(await expiry.locator('#authError').innerText(),locale==='de-DE'?/Sitzung.*abgelaufen.*Worlds Hub/:/session has expired.*Worlds Hub/);
+        assert.equal(await expiry.locator('#authForm').isVisible(),false);
+        await expiry.close();
+    }
     console.log('PASS: missing bundle/backend show errors; round selection exists only inside the room, defaults to one and clamps to the server limit; homepage does not poll quota; mobile layout fits.');
 } finally { await browser.close(); }

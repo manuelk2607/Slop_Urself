@@ -23,6 +23,8 @@ export async function initializeAccount(ui: AuthUI) {
     const error = document.getElementById('authError')!;
     const bar = document.getElementById('accountBar')!;
     let ready = false;
+    let worldsEnabled=false;
+    let worldsLocale=normalizeLocale(navigator.language)??'de';
     let hfRequired = true;
     let pending: Promise<void> | undefined;
     async function session(mode: 'create' | 'login' | 'refresh') {
@@ -62,7 +64,7 @@ export async function initializeAccount(ui: AuthUI) {
         if (!ready) return;
         if (!pending) pending = session('refresh').then(() => {}).catch(async reason => {
             if (reason instanceof SessionError && reason.status === 401) {
-                ready = false; await ui.signedOut(); bar.hidden = true; ui.showAuth(); error.innerText = reason.message;
+                ready = false; await ui.signedOut(); bar.hidden = true; ui.showAuth(); error.innerText = worldsEnabled?messages[worldsLocale].sessionExpired:reason.message;
             }
         }).finally(() => { pending = undefined; });
         await pending;
@@ -86,6 +88,7 @@ export async function initializeAccount(ui: AuthUI) {
         document.getElementById('worldsAccount')!.hidden = !config.worldsEnabled;
         if(config.worldsEnabled){
             let locale=normalizeLocale(navigator.language)??'de';try{locale=normalizeLocale(localStorage.getItem(localeKey))??locale;}catch{}
+            worldsEnabled=true;worldsLocale=locale;
             form.hidden=true;document.getElementById('authHint')!.textContent=messages[locale].centralOnly;
             const link=document.querySelector<HTMLAnchorElement>('#worldsSignIn a')!;link.href='/auth/start?ui_locales='+locale;link.textContent=messages[locale].signIn;
         }

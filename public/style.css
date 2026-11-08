@@ -869,6 +869,8 @@ body.statistics-open {
 #archiveRanking li { display: block; overflow-wrap: anywhere; }
 .account-bar span { overflow-wrap: anywhere; min-width: 0; }
 .account-bar button { width: auto; margin: 0; padding: 8px 12px; }
+#worldsAccount { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; border-radius: 8px; background: #2f3542; color: #f1f2f6; font: inherit; font-weight: 700; text-decoration: none; }
+#worldsAccount:focus-visible { outline: 2px solid #2ed573; outline-offset: 3px; }
 .account-bar { flex-wrap: wrap; }
 .account-bar #accountName { flex: 1; }
 #hfAccountButton { display: inline-flex; align-items: center; gap: 6px; }
