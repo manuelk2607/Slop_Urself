@@ -79,6 +79,40 @@ Chromium und WebKit erfolgreich. Der reale Hub-QA-Anbieter bestätigte
 frische ID-Tokens mit positivem `max_age` sowie die erneute Anmeldung
 einer gealterten Sitzung. Die vollständige Slop-Browserabnahme bleibt offen.
 
+## Bereitstellung am 08.11.2026
+
+Die Sicherung `br-empty-mouse-b1uodoxw` hält die Produktion
+`br-soft-math-b1efy5s0` bei LSN `0/3A99470` ohne eigenen Compute fest.
+Die Wiederherstellung `br-sparkling-firefly-b1pssf1o` wurde separat geprüft.
+Alle sechs Datentabellen hatten dieselben Zeilenzahlen und Prüfsummen wie
+die Quelle. Die 13 Profile blieben nach der additiven Schemaeinrichtung
+und dem transaktional zurückgerollten Verknüpfungstest erhalten.
+
+Der eigene öffentliche Client `xHmQeQbWdDlBfOasyyBysjtNwInTdpuG`
+verwendet ausschließlich
+`https://slopurself-worlds-pilot.maki26.workers.dev/auth/callback`
+und die Ressource derselben Pilot-Origin mit `/api`.
+Die kostenlose zentrale Identity-Pilotinstanz bleibt der Aussteller.
+Die Konfiguration bindet ausschließlich den wiederhergestellten Datenbankhost.
+
+Der ausdrücklich freigegebene Token `slop-worlds-pilot deploy` hat nur
+`Workers Scripts Write` und endet am 08.12.2026. Er liegt als
+`CLOUDFLARE_API_TOKEN` in der GitHub-Umgebung `worlds-pilot`.
+Diese Umgebung akzeptiert ausschließlich den Branch
+`feature/worlds-hub-sso`. Die Datenbankverbindung und der separate
+Cookie-Schlüssel liegen dort ebenfalls als verschlüsselte Secrets.
+
+Der manuelle Workflow `worlds-pilot.yml` verlangt zunächst die vollständige
+erfolgreiche Chromium-/WebKit-CI für seinen Commit. Danach baut und testet
+er erneut, deployt den fest vorgegebenen Pilot-Worker und konfiguriert
+seine beiden Runtime-Secrets. Der abschließende Smoke prüft die erreichbare
+Pilotseite und den privaten Indexierungs- und Cache-Schutz.
+
+Der WebKit-Fehler aus Lauf `42409781590` trat bei einer Spiel-Checkbox auf.
+Drei lokale Wiederholungen desselben Worker-Tests mit der passenden
+WebKit-Version bestanden. Der erneute vollständige CI-Lauf bleibt vor
+dem Deployment erforderlich.
+
 ## Migrationsnachweis und Rücknahme
 
 Das Pilot-Schema verwendet das vorhandene Audit als Versandwarteschlange.

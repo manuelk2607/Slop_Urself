@@ -43,6 +43,23 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           npx wrangler deploy --config cloudflare/wrangler.worlds-pilot.toml --name slopurself-worlds-pilot
+      - name: Configure secrets only for the isolated pilot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_COOKIE_SECRET: ${{ secrets.AUTH_COOKIE_SECRET }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {spawnSync} from 'node:child_process';
+          const {DATABASE_URL,AUTH_COOKIE_SECRET}=process.env;
+          assert.equal(new URL(DATABASE_URL).hostname,'ep-muddy-dawn-b1fl6foa-pooler.c-5.eu-central-1.aws.neon.tech');
+          assert.ok(AUTH_COOKIE_SECRET?.length>=32);
+          const result=spawnSync('npx',['wrangler','secret','bulk','--config','cloudflare/wrangler.worlds-pilot.toml','--name','slopurself-worlds-pilot'],
+            {input:JSON.stringify({DATABASE_URL,AUTH_COOKIE_SECRET}),encoding:'utf8'});
+          if(result.status!==0)throw new Error('Pilot secret configuration failed');
+          console.log('Configured the isolated pilot secrets');
+          JS
       - name: Verify private pilot and indexing guard
         run: |
           node --input-type=module <<'JS'
@@ -53,7 +70,7 @@ jobs:
           assert.match(await robots.text(),/Disallow: \//);
           assert.match(robots.headers.get('x-robots-tag')??'',/noindex/);
           const response=await fetch(origin+'/');
-          assert.ok([200,503].includes(response.status));
+          assert.equal(response.status,200);
           assert.equal(response.headers.get('cache-control'),'no-store');
           assert.match(response.headers.get('x-robots-tag')??'',/noindex/);
           console.log('PASS isolated pilot target and private response headers');
