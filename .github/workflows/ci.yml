@@ -38,6 +38,8 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Pilot rollback tooling types
+        run: node node_modules/typescript/bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution Bundler --allowImportingTsExtensions --skipLibCheck tools/worlds-pilot-rollback.mts tools/worlds-pilot-assets.mts tools/worlds-pilot-verified-rollback.mts tests/unit/worlds-pilot-verified-rollback.test.ts
       - name: Isolated PostgreSQL 17 regressions
         run: |
           node --import tsx tests/integration/features-db.mts

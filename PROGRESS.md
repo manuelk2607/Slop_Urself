@@ -64,6 +64,25 @@ beweist keine durchgeführte Deployment-Rücknahme. Nächster Schritt ist die
 Versionsabnahme im Testworker, danach ein Kandidat mit 0 Prozent Normalverkehr
 und tatsächlich verifizierten Asset-Prüfsummen.
 
+## Kontrollierte Rücknahme mit vollständigem Dateinachweis
+
+Zusätzlich vorbereitet: Ein vollständiger Build bindet Commit und SHA-256-
+Dateiliste als öffentliche Metadaten an die Testversion. Das Werkzeug lädt aus
+demselben geprüften Build einen Kandidaten hoch und stellt ihn zuerst auf
+**0 Prozent normalen Verkehr**. Jeder Abruf muss durch die Laufzeit-ID die
+richtige Version beweisen; alle statisch ausgelieferten Dateien müssen mit dem
+geprüften Build übereinstimmen. Code, Runtime, sämtliche Bindings, Secrets-
+Metadaten und Konfiguration müssen ebenfalls identisch sein. Der bisherige
+Vergleich mit Anbieter-Manifesthash bleibt unverändert.
+
+Erst danach ist der kurze vollständige Wechsel zum identischen Kandidaten mit
+anschließender garantierter Rückstellung vorgesehen. Fehler und nachträgliche
+fremde Deployments stoppen den Ablauf; kein `force`, keine Änderung gebundener
+Daten. Tests prüfen Prüfsummenfehler, stillen Versionsrückfall, konkurrierende
+Deployments sowie unklare Antworten nach bereits ausgeführten Änderungen.
+Dies ist noch kein tatsächlicher Rücknahmenachweis. Die neue vollständige CI,
+Veröffentlichung mit Versions-/Buildnachweis und der externe Ablauf stehen aus.
+
 ## Offen / nächster Schritt
 
 Die reale Deployment-Rücknahme fehlt: Cloudflare liefert beim Versionsvergleich

@@ -6,7 +6,7 @@ on:
       operation:
         description: Pilot operation
         type: choice
-        options: [deploy, inspect-rollback, exercise-rollback]
+        options: [deploy, inspect-rollback, exercise-rollback, verify-artifact-rollback]
         default: deploy
       rollback_version:
         description: Explicit compatible candidate UUID for rollback exercise
@@ -52,7 +52,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
-          npx wrangler deploy --config cloudflare/wrangler.worlds-pilot.toml --name slopurself-worlds-pilot
+          digest=$(node --import tsx tools/worlds-pilot-assets.mts)
+          npx wrangler deploy --config cloudflare/wrangler.worlds-pilot.toml --name slopurself-worlds-pilot --var "WORLDS_PILOT_COMMIT_SHA:$GITHUB_SHA" --var "WORLDS_PILOT_ASSET_SHA256:$digest"
       - name: Configure secrets only for the isolated pilot
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -95,7 +96,7 @@ jobs:
           JS
 
   rollback:
-    if: github.repository == 'manuelk2607/Slop_Urself' && github.ref == 'refs/heads/feature/worlds-hub-sso' && (inputs.operation == 'inspect-rollback' || inputs.operation == 'exercise-rollback')
+    if: github.repository == 'manuelk2607/Slop_Urself' && github.ref == 'refs/heads/feature/worlds-hub-sso' && (inputs.operation == 'inspect-rollback' || inputs.operation == 'exercise-rollback' || inputs.operation == 'verify-artifact-rollback')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: worlds-pilot
@@ -106,7 +107,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Require successful complete CI for this commit
-        if: inputs.operation == 'exercise-rollback'
+        if: inputs.operation == 'exercise-rollback' || inputs.operation == 'verify-artifact-rollback'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -128,3 +129,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PILOT_ROLLBACK_VERSION: ${{ inputs.rollback_version }}
         run: node --import tsx tools/worlds-pilot-rollback.mts exercise
+
+      - name: Build the reviewed artifact for zero-percent verification
+        if: inputs.operation == 'verify-artifact-rollback'
+        run: npm run build
+      - name: Verify all artifact bytes at zero percent, exercise and restore original
+        if: inputs.operation == 'verify-artifact-rollback'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node --import tsx tools/worlds-pilot-verified-rollback.mts

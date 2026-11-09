@@ -286,3 +286,29 @@ wurden Anwendung und echter Browserablauf bestätigt: bestehendes Profil Manuel,
 kein zusätzliches Passwort, lokale Abmeldung und automatische SSO-Wiederkehr
 ohne Passwort/Code/Freigabe. Dies ist keine produktive Migration und kein globaler
 Logout. Aktueller kompakter Checkpoint: `PROGRESS.md`.
+
+
+## Versions- und Dateinachweis vor der Deployment-Rücknahme
+
+Die offizielle Versionsmetadaten-Bindung liefert ausschließlich auf dem
+Testworker die tatsächliche Versions-ID. Ein angeforderter Override gilt erst
+bei übereinstimmender Antwort als nachgewiesen. Das zusätzliche Werkzeug
+`tools/worlds-pilot-verified-rollback.mts` verlangt den exakten geprüften Commit
+und die vollständige SHA-256-Liste des Builds in den Versionsmetadaten. Symlinks,
+zusätzliche HTML-Dokumente und private/dynamische Dateien werden abgewiesen.
+Worker-eigene robots-/Sitemap-Routen werden gesondert auf noindex/no-store und
+ihren vorgesehenen Status geprüft, statt als statische Dateien verglichen.
+
+Die Workflow-Operation `verify-artifact-rollback` setzt einen zuvor veröffentlichten
+Build desselben Commits voraus und lädt einen identischen Kandidaten hoch. Der
+Kandidat erhält zunächst null Prozent normalen Verkehr. Erst nach tatsächlichem
+Dateivergleich beider nachgewiesener Versionen darf er kurz übernehmen; danach
+wird die Ausgangsversion wiederhergestellt. Das Werkzeug schreibt ausschließlich
+Deployments des festen Testworkers, nie Produktion, Datenbank, HF-Vault oder
+Durable-Object-Inhalte. Derselbe Workflow-Lock und die vollständige CI bleiben
+Voraussetzung. Bestehende Prüfungen mit Anbieter-Manifesthash werden nicht
+abgeschwächt. Eine echte erfolgreiche Ausführung muss separat protokolliert
+werden; Implementierung und Unit-Tests ersetzen diese Abnahme nicht.
+
+Quellen: [Cloudflare Versions-Overrides](https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/),
+[Versionsmetadaten](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/).
