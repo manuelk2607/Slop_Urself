@@ -312,3 +312,25 @@ werden; Implementierung und Unit-Tests ersetzen diese Abnahme nicht.
 
 Quellen: [Cloudflare Versions-Overrides](https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/),
 [Versionsmetadaten](https://developers.cloudflare.com/workers/runtime-apis/bindings/version-metadata/).
+
+
+## Abschließende externe Rücknahmeabnahme
+
+Code `6bf3740`: vollständige CI `42592633591` erfolgreich (178 Unit-Tests ohne
+Skips, beide Browser, PostgreSQL 17, Anwendungs- und Werkzeugtypen).
+Veröffentlichung `42593695422` und tatsächlicher Rücknahmelauf `42593917604`
+**beide erfolgreich**. Ausgangsversion
+`fc844a11-1d66-40d6-b7e1-99b6981922f9`, Kandidat
+`5f7c87d4-585a-4319-b892-e768815c24e1`. 15 Dateien beider über Laufzeit-ID
+bestätigter Versionen entsprachen bei null Prozent Kandidatenverkehr dem exakt
+geprüften Build. Danach Kandidat bei 100 Prozent, Smoke- und Versionsnachweis,
+anschließend bestätigte Rückkehr zur Ausgangsversion. Keine erzwungene
+Kompatibilität und keine wiederholten Schreibaufrufe. Alle sechs Quelltabellen
+nach Zahl und Prüfsumme identisch; Produktion und HF-Vault unverändert.
+
+Der frühere Abbruch bei der sofortigen Nachkontrolle ist im Werkzeug durch
+begrenztes Warten auf bekannte Zwischenzustände und sichere Phasenmeldungen
+behoben. Andere Deployments stoppen weiterhin sofort. Dies bestätigt den
+kontrollierten Deployment-Rückweg und den Erhalt der Daten in diesem Ablauf;
+globaler Logout, die übrigen Kontoübernahmen und Produktionsabnahme bleiben
+separate offene Anforderungen.
