@@ -4,6 +4,9 @@ compatibility_date = "2026-10-03"
 workers_dev = true
 preview_urls = false
 
+[version_metadata]
+binding = "WORLDS_PILOT_VERSION"
+
 [observability]
 enabled = true
 

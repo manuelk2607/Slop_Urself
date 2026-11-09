@@ -46,6 +46,24 @@ Commit. Der bestehende Rücknahmevergleich bleibt unverändert streng. Diagnosec
 `42515850838` bestätigt auch in der neueren API ausschließlich Asset-Konfiguration,
 keinen Manifesthash; keine kompatiblen Kandidaten und kein Versionswechsel.
 
+## Tatsächlich ausgelieferte Testversion nachweisen
+
+Die isolierte Worker-Konfiguration ergänzt die offizielle Versionsmetadaten-
+Bindung. Ausschließlich der Testworker liefert daraus eine öffentliche Versions-ID
+im Antwortheader. Eingesendete Header werden dafür nicht verwendet; produktive
+Antworten und WebSocket-Handshakes bleiben erhalten. Die lesende Pilotprüfung
+kann eine angeforderte Version gegen die tatsächliche Laufzeit-ID prüfen und
+weist einen stillen Rückfall auf die bisherige Version ab.
+
+166 Unit-Tests, Node-/Worker-Typprüfungen, Build und die separate Typprüfung des
+Rücknahmewerkzeugs bestanden. Elf gezielte Rücknahme-/Diagnosetests prüfen auch
+fehlende/falsche IDs, manipulierte Requestheader und WebSocket-Erhalt.
+Vollständige GitHub-CI und Veröffentlichung dieses Pakets sind noch ausstehend.
+Der bestehende Asset-Manifestvergleich bleibt streng; dieses Paket allein
+beweist keine durchgeführte Deployment-Rücknahme. Nächster Schritt ist die
+Versionsabnahme im Testworker, danach ein Kandidat mit 0 Prozent Normalverkehr
+und tatsächlich verifizierten Asset-Prüfsummen.
+
 ## Offen / nächster Schritt
 
 Die reale Deployment-Rücknahme fehlt: Cloudflare liefert beim Versionsvergleich

@@ -49,6 +49,23 @@ test('the dedicated Cloudflare pilot excludes indexing and refuses a real genera
     }
 });
 
+test('the isolated pilot reports its real binding version and never trusts the requested override', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const deployment = {...env, WORLDS_PILOT_DEPLOYMENT: 'true', AI_PROVIDER: 'mock', WORLDS_PILOT_VERSION: {id}} as Env;
+    const response = await worker.fetch(new Request(origin + '/robots.txt', {headers: {
+        'Cloudflare-Workers-Version-Overrides': 'slopurself-worlds-pilot="00000000-0000-4000-8000-000000000002"',
+        'X-Worlds-Pilot-Version': 'untrusted'
+    }}), deployment);
+    assert.equal(response.headers.get('x-worlds-pilot-version'), id);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.match(response.headers.get('x-robots-tag')!, /noindex/);
+    for (const config of [{...deployment, WORLDS_PILOT_DEPLOYMENT: undefined},
+        {...deployment, WORLDS_PILOT_VERSION: undefined}, {...deployment, WORLDS_PILOT_VERSION: {id: 'invalid'}}]) {
+        const ordinary = await worker.fetch(new Request(origin + '/robots.txt'), config);
+        assert.equal(ordinary.headers.get('x-worlds-pilot-version'), null);
+    }
+});
+
 test('the migration outbox retries committed records and records rollback without changing the profile', async t => {
     const db = new PGlite();
     try {

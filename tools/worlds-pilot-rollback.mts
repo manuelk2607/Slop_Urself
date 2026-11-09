@@ -28,7 +28,7 @@ export function validatePilot(version:Version):void {
  const expected={AI_PROVIDER:'mock',WORLDS_PILOT_DEPLOYMENT:'true',WORLDS_PILOT_ENABLED:'true',WORLDS_PILOT_ORIGIN:ORIGIN,WORLDS_PILOT_DATABASE_HOST:'ep-muddy-dawn-b1fl6foa-pooler.c-5.eu-central-1.aws.neon.tech'};
  for(const [name,value] of Object.entries(expected))if(!bindings.some(b=>b.type==='plain_text'&&b.name===name&&b.text===value))fail('Version is not the isolated mock-only pilot');
  for(const name of ['DATABASE_URL','AUTH_COOKIE_SECRET'])if(!bindings.some(b=>b.name===name&&b.type==='secret_text'))fail('Pilot runtime secrets missing');
- if(bindings.some(b=>!['plain_text','secret_text','assets','durable_object_namespace'].includes(b.type)))fail('Unexpected pilot resource binding');
+ if(bindings.some(b=>!['plain_text','secret_text','assets','durable_object_namespace','version_metadata'].includes(b.type)))fail('Unexpected pilot resource binding');
 }
 export function equivalentVersions(baseline:Version,candidate:Version):boolean {
  validatePilot(baseline);validatePilot(candidate);
@@ -70,7 +70,7 @@ export async function exerciseRollback(api:PilotApi,candidateId:string,report:(v
   }
  }
 }
-export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotApi & {versions():Promise<Version[]>;modernMetadataShape(id:string):Promise<string[]>} {
+export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotApi & {versions():Promise<Version[]>;modernMetadataShape(id:string):Promise<string[]>;versionProof(id:string):Promise<void>} {
  if(!token)fail('Pilot deployment secret missing');
  async function request(path:string,body?:unknown){
   const response=await transport(API+path,{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
@@ -79,6 +79,16 @@ export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotAp
   if(envelope.success!==true)fail('Pilot management request was rejected');return envelope.result;
  }
  return {
+  async versionProof(id){
+   if(!UUID.test(id))fail('Invalid version UUID');
+   const response=await transport(ORIGIN+'/robots.txt',{redirect:'manual',
+    headers:{'Cloudflare-Workers-Version-Overrides':WORKER+'="'+id+'"'},signal:AbortSignal.timeout(15000)});
+   if(response.status!==200||response.headers.get('x-worlds-pilot-version')!==id||
+    response.headers.get('cache-control')!=='no-store'||!response.headers.get('x-robots-tag')?.includes('noindex')){
+    await response.body?.cancel();fail('Requested pilot version was not proven by its runtime binding');
+   }
+   if(!/Disallow: \//.test(await response.text()))fail('Pilot robots protection missing');
+  },
   async modernMetadataShape(id){
    if(!UUID.test(id))fail('Invalid version UUID');
    const response=await transport(API.replace('/workers/scripts/','/workers/workers/')+'/versions/'+id,
@@ -114,6 +124,9 @@ async function main(){
  const current=await api.current(),id=activeVersion(current),version=await api.version(id);
  console.log(JSON.stringify({phase:'metadata-read',version:id,resourceFields:Object.keys(version.resources??{}),bindings:version.resources?.bindings?.map(b=>({name:b.name,type:b.type,fields:Object.keys(b)}))}));
  validatePilot(version);await api.smoke();
+ if(version.resources.bindings.some(b=>b.type==='version_metadata'&&b.name==='WORLDS_PILOT_VERSION')){
+  await api.versionProof(id);console.log(JSON.stringify({phase:'runtime-version-proven',version:id}));
+ }
  try{console.log(JSON.stringify({phase:'modern-metadata-fields',fields:await api.modernMetadataShape(id)}));}
  catch{console.log(JSON.stringify({phase:'modern-metadata-unavailable'}));}
  // Output IDs and field names only. Binding values and provider envelopes stay private.

@@ -14,7 +14,7 @@ import { historyResponse, historyListing, restoreHistoryResponse, HistoryError }
 import { accountsResponse } from '../accounts';
 import { cloudflareAuth, cloudflareWorldsQuery, serviceProfiles } from './profiles';
 import { huggingFaceResponse } from '../huggingface';
-import { indexingResponse } from '../indexing';
+import { indexingResponse, pilotVersionResponse } from '../indexing';
 import { publicSeoResponse } from '../seo';
 import type { Env } from './types';
 export { RoomDurableObject } from './room';
@@ -24,7 +24,7 @@ export type { Env } from './types';
 export default {
     async fetch(request: Request, env: Env): Promise<Response> {
         const pilot = env.WORLDS_PILOT_DEPLOYMENT === 'true';
-        return indexingResponse(request, await handleRequest(request, env, pilot), pilot);
+        return pilotVersionResponse(indexingResponse(request, await handleRequest(request, env, pilot), pilot), pilot, env.WORLDS_PILOT_VERSION?.id);
     },
     async scheduled(_event: unknown, env: Env): Promise<void> {
         if (env.WORLDS_PILOT_DEPLOYMENT === 'true' && env.AI_PROVIDER === 'mock' && worldsPilotTarget(env)) {

@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {pilotVersionResponse} from '../../src/server/indexing';
 import {activeVersion,cloudflareApi,equivalentVersions,exerciseRollback,metadataFields,validatePilot,type PilotApi,type Version} from '../../tools/worlds-pilot-rollback.mts';
 const baseline='00000000-0000-4000-8000-000000000001',candidate='00000000-0000-4000-8000-000000000002',foreign='00000000-0000-4000-8000-000000000003';
 test('modern metadata diagnostic reads only the fixed pilot and returns field names, never values',async()=>{
@@ -56,4 +57,25 @@ test('live smoke consumes robots once and checks private root, sitemap and anony
  await cloudflareApi('fixture-only-secret',transport).smoke();assert.deepEqual(paths,['/','/robots.txt','/sitemap.xml','/api/session']);
  const indexed=(async()=>new Response('private',{headers:{'cache-control':'no-store'}})) as typeof fetch;
  await assert.rejects(cloudflareApi('fixture-only-secret',indexed).smoke(),/Private pilot smoke/);
+});
+
+test('pilot version proof preserves ordinary and socket responses and rejects invalid metadata',()=>{
+ const ordinary=new Response('unchanged',{status:201,headers:{'set-cookie':'fixture'}});
+ assert.equal(pilotVersionResponse(ordinary,false,baseline),ordinary);
+ assert.equal(pilotVersionResponse(ordinary,true,'invalid'),ordinary);
+ const socket={status:101} as Response;assert.equal(pilotVersionResponse(socket,true,baseline),socket);
+ const proof=pilotVersionResponse(ordinary,true,baseline);assert.equal(proof.status,201);
+ assert.equal(proof.headers.get('set-cookie'),'fixture');assert.equal(proof.headers.get('x-worlds-pilot-version'),baseline);
+});
+
+test('runtime version proof refuses a silent override fallback and never follows redirects',async()=>{
+ const transport=(async(input,init)=>{
+  assert.equal(String(input),'https://slopurself-worlds-pilot.maki26.workers.dev/robots.txt');
+  assert.equal(init?.redirect,'manual');assert.equal(new Headers(init?.headers).get('Cloudflare-Workers-Version-Overrides'),'slopurself-worlds-pilot="'+candidate+'"');
+  return new Response('User-agent: *\nDisallow: /\n',{headers:{'x-worlds-pilot-version':candidate,'cache-control':'no-store','x-robots-tag':'noindex'}});
+ }) as typeof fetch;
+ await cloudflareApi('fixture-only-secret',transport).versionProof(candidate);
+ const fallback=(async()=>new Response('User-agent: *\nDisallow: /\n',{headers:{'x-worlds-pilot-version':baseline,'cache-control':'no-store','x-robots-tag':'noindex'}})) as typeof fetch;
+ await assert.rejects(cloudflareApi('fixture-only-secret',fallback).versionProof(candidate),/not proven/);
+ await assert.rejects(cloudflareApi('fixture-only-secret',transport).versionProof('foreign/path'),/Invalid version/);
 });

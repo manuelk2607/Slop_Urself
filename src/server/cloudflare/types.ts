@@ -34,6 +34,7 @@ export interface CloudflareWebSocket extends WebSocket {
 }
 export interface Env extends AuthConfig, HfConfig, QuotaConfig, ArchiveConfig, AiConfig, WorldsEnv {
     WORLDS_PILOT_DEPLOYMENT?: string;
+    WORLDS_PILOT_VERSION?: { id: string };
     ASSETS: Fetcher;
     ROOMS: DurableObjectNamespace<RoomDurableObject>;
     SERVICES?: DurableObjectNamespace<ServiceDurableObject>;

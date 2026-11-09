@@ -83,12 +83,13 @@ jobs:
           let response;
           for(let attempt=0;attempt<12;attempt++){
             response=await fetch(origin+'/');
-            if(response.status!==503)break;
+            if(response.status===200 && /^[0-9a-f-]{36}$/.test(response.headers.get('x-worlds-pilot-version')??''))break;
             await response.body?.cancel();
             if(attempt<11)await new Promise(resolve=>setTimeout(resolve,3000));
           }
           assert.equal(response.status,200);
           assert.equal(response.headers.get('cache-control'),'no-store');
+          assert.match(response.headers.get('x-worlds-pilot-version')??'',/^[0-9a-f-]{36}$/);
           assert.match(response.headers.get('x-robots-tag')??'',/noindex/);
           console.log('PASS isolated pilot target and private response headers');
           JS
