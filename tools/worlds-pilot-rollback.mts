@@ -9,7 +9,7 @@ type Binding={type:string;name:string;[key:string]:unknown};
 export type Version={id:string;resources:{bindings:Binding[];script:{etag:string};script_runtime:Record<string,unknown>}};
 type Deployment={id:string;versions:{version_id:string;percentage:number}[]};
 export interface PilotApi {current():Promise<Deployment>;version(id:string):Promise<Version>;deploy(id:string):Promise<void>;smoke():Promise<void>}
-class PilotCheckError extends Error {}
+export class PilotCheckError extends Error {}
 function fail(message:string):never{throw new PilotCheckError(message);}
 function canonical(value:unknown):string {
  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
@@ -70,7 +70,7 @@ export async function exerciseRollback(api:PilotApi,candidateId:string,report:(v
   }
  }
 }
-export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotApi & {versions():Promise<Version[]>;modernMetadataShape(id:string):Promise<string[]>;versionProof(id:string):Promise<void>} {
+export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotApi & {versions():Promise<Version[]>;modernMetadataShape(id:string):Promise<string[]>;versionProof(id:string):Promise<void>;history():Promise<Deployment[]>} {
  if(!token)fail('Pilot deployment secret missing');
  async function request(path:string,body?:unknown){
   const response=await transport(API+path,{method:body?'POST':'GET',headers:{authorization:'Bearer '+token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
@@ -98,6 +98,7 @@ export function cloudflareApi(token:string,transport:typeof fetch=fetch):PilotAp
    if(envelope.success!==true)fail('Pilot modern metadata unavailable');
    return metadataFields(envelope.result);
   },
+  async history(){const result=await request('/deployments') as {deployments:Deployment[]};if(!Array.isArray(result.deployments))fail('Invalid pilot deployment history');return result.deployments;},
   async versions(){const result=await request('/versions?deployable=true') as {items:Version[]};if(!Array.isArray(result.items))fail('Invalid pilot versions response');return result.items;},
   async current(){const result=await request('/deployments') as {deployments:Deployment[]};return result.deployments?.[0]??fail('No current pilot deployment');},
   async version(id){if(!UUID.test(id))fail('Invalid version UUID');return await request('/versions/'+id) as Version;},
@@ -124,6 +125,7 @@ async function main(){
  const current=await api.current(),id=activeVersion(current),version=await api.version(id);
  console.log(JSON.stringify({phase:'metadata-read',version:id,resourceFields:Object.keys(version.resources??{}),bindings:version.resources?.bindings?.map(b=>({name:b.name,type:b.type,fields:Object.keys(b)}))}));
  validatePilot(version);await api.smoke();
+ console.log(JSON.stringify({phase:'recent-deployments',deployments:(await api.history()).slice(0,5).map(d=>({id:d.id,versions:d.versions}))}));
  if(version.resources.bindings.some(b=>b.type==='version_metadata'&&b.name==='WORLDS_PILOT_VERSION')){
   await api.versionProof(id);console.log(JSON.stringify({phase:'runtime-version-proven',version:id}));
  }

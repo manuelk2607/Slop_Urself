@@ -1,7 +1,7 @@
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {activeVersion,cloudflareApi,validatePilot,type Version,type PilotApi} from './worlds-pilot-rollback.mts';
+import {activeVersion,cloudflareApi,validatePilot,PilotCheckError,type Version,type PilotApi} from './worlds-pilot-rollback.mts';
 import {pilotArtifact,type PilotArtifact} from './worlds-pilot-assets.mts';
 class VerifiedPilotError extends Error {}
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -88,4 +88,4 @@ async function main(){
  const candidate=matches[0][1];console.log(JSON.stringify({phase:'candidate-uploaded',version:candidate}));
  await verifiedRollback(api,candidate,artifact);
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(error=>{if(error instanceof VerifiedPilotError)console.error(error.message);console.error('Verified pilot rollback stopped. Inspect the fixed pilot state before retrying; no force is used.');process.exitCode=1;});
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)main().catch(error=>{if(error instanceof VerifiedPilotError||error instanceof PilotCheckError)console.error(error.message);console.error('Verified pilot rollback stopped. Inspect the fixed pilot state before retrying; no force is used.');process.exitCode=1;});

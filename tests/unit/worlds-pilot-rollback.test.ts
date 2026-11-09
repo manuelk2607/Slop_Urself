@@ -79,3 +79,12 @@ test('runtime version proof refuses a silent override fallback and never follows
  await assert.rejects(cloudflareApi('fixture-only-secret',fallback).versionProof(candidate),/not proven/);
  await assert.rejects(cloudflareApi('fixture-only-secret',transport).versionProof('foreign/path'),/Invalid version/);
 });
+
+test('read-only deployment history reports fixed-pilot deployment IDs and percentages',async()=>{
+ const deployment={id:'fixture-deployment',versions:[{version_id:baseline,percentage:100},{version_id:candidate,percentage:0}]};
+ const transport=(async(input,init)=>{
+  assert.equal(String(input),'https://api.cloudflare.com/client/v4/accounts/ec3c070d8e4f88d2fc533d7d797f2daa/workers/scripts/slopurself-worlds-pilot/deployments');
+  assert.equal(init?.method,'GET');assert.equal(init?.body,undefined);return Response.json({success:true,result:{deployments:[deployment]}});
+ }) as typeof fetch;
+ assert.deepEqual(await cloudflareApi('fixture-only',transport).history(),[deployment]);
+});
