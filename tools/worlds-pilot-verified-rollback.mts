@@ -31,7 +31,19 @@ export function verifiedCompatibility(baseline:Version,candidate:Version,artifac
 function staged(deployment:Awaited<ReturnType<PilotApi['current']>>,baseline:string,candidate:string){
  return deployment.versions.length===2&&deployment.versions.some(v=>v.version_id===baseline&&v.percentage===100)&&deployment.versions.some(v=>v.version_id===candidate&&v.percentage===0);
 }
-export async function verifiedRollback(api:VerifiedPilotApi,candidate:string,artifact:PilotArtifact,report:(value:unknown)=>void=console.log){
+function single(deployment:Awaited<ReturnType<PilotApi['current']>>,id:string){
+ return deployment.versions.length===1&&deployment.versions[0].version_id===id&&deployment.versions[0].percentage===100;
+}
+async function confirmedDeployment(api:VerifiedPilotApi,expected:(d:Awaited<ReturnType<PilotApi['current']>>)=>boolean,
+ pending:(d:Awaited<ReturnType<PilotApi['current']>>)=>boolean,pause:()=>Promise<void>){
+ for(let attempt=0;attempt<12;attempt++){
+  const current=await api.current();if(expected(current))return current;
+  if(!pending(current))throw new VerifiedPilotError('Concurrent deployment detected during confirmation; refusing to overwrite');
+  if(attempt<11)await pause();
+ }
+ throw new VerifiedPilotError('Deployment confirmation timed out; inspect verified state before retrying');
+}
+export async function verifiedRollback(api:VerifiedPilotApi,candidate:string,artifact:PilotArtifact,report:(value:unknown)=>void=console.log,pause:()=>Promise<void>=()=>new Promise(resolve=>setTimeout(resolve,500))){
  if(!UUID.test(candidate))throw new VerifiedPilotError('Explicit candidate UUID required');
  const initial=await api.current(),baseline=activeVersion(initial);if(candidate===baseline)throw new VerifiedPilotError('Candidate is already active');
  verifiedCompatibility(await api.version(baseline),await api.version(candidate),artifact);
@@ -40,18 +52,19 @@ export async function verifiedRollback(api:VerifiedPilotApi,candidate:string,art
  let attempted=false;
  try{
   attempted=true;await api.stage(baseline,candidate);
-  const staging=await api.current();if(!staged(staging,baseline,candidate))throw new VerifiedPilotError('Candidate is not isolated at zero percent');
+  const staging=await confirmedDeployment(api,d=>staged(d,baseline,candidate),d=>single(d,baseline),pause);
   await api.assetProof(baseline,artifact);await api.assetProof(candidate,artifact);
   if((await api.current()).id!==staging.id)throw new VerifiedPilotError('Deployment changed during byte verification');
   report({phase:'zero-percent-assets-verified',baseline,candidate,assets:artifact.assets.length,digest:artifact.digest});
-  await api.deploy(candidate);if(activeVersion(await api.current())!==candidate)throw new VerifiedPilotError('Candidate promotion not confirmed');
+  await api.deploy(candidate);const promoted=await confirmedDeployment(api,d=>single(d,candidate),d=>staged(d,baseline,candidate)||single(d,baseline),pause);
+  report({phase:'candidate-promoted',version:candidate,deployment:promoted.id});
   await api.smoke();await api.versionProof(candidate);report({phase:'candidate-verified',version:candidate});
  }finally{
   if(attempted){
    const current=await api.current();
    if(staged(current,baseline,candidate)||current.versions.length===1&&current.versions[0].percentage===100&&current.versions[0].version_id===candidate)await api.deploy(baseline);
    else if(activeVersion(current)!==baseline)throw new VerifiedPilotError('Concurrent deployment detected; refusing to overwrite');
-   if(activeVersion(await api.current())!==baseline)throw new VerifiedPilotError('Original pilot version was not restored');
+   await confirmedDeployment(api,d=>single(d,baseline),d=>single(d,candidate)||staged(d,baseline,candidate),pause);
    await api.smoke();await api.versionProof(baseline);report({phase:'original-restored',version:baseline});
   }
  }

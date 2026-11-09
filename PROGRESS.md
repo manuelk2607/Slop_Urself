@@ -93,3 +93,28 @@ HF-Zuordnungen und produktiver Cutover bleiben offen. Produktionsinventar:
 keine produktiven Worlds-Zuordnungen. Kein allgemeiner Fremd-Session-/Hashimport
 in die zentrale Managed-Auth-Instanz nachgewiesen. Nur die geprüfte QA-Zuordnung
 ist abgeschlossen; niemandem werden Namen oder E-Mails automatisch zugeordnet.
+
+## Externer Rücknahmetest: Dateinachweis bestanden, Bestätigung nachschärfen
+
+Code `2c96971` bestand vollständige CI `42590222784`: **176/176 Unit-Tests**,
+Node-/Worker- und Werkzeugtypen, echter PostgreSQL-17-Test sowie vollständige
+Chromium-/WebKit-Integration. Veröffentlichung `42591477378` erfolgreich,
+Ausgangsversion `8a83dc9c-c0aa-4511-80e9-b115ae555e35`.
+
+Der externe Ablauf `42591696625` verifizierte tatsächlich **15 Dateien** beider
+Laufzeitversionen bei 0 Prozent Kandidatenverkehr. Digest
+`4a092c26ab07e0f1dd20768361c15cbcc1d1a5e815f186fd0ba83b3a672ad3aa`.
+Danach erfolgten Kandidatenwechsel und Rückstellung; die sofortige Nachprüfung
+brach jedoch ab, daher kein vollständig erfolgreicher Workflow. Die lesende
+Diagnose `42592201712` bestätigt unabhängig die Reihenfolge: Kandidat
+`93829760-9493-4bfb-9c7b-60fa952ba609` bei 0 Prozent, dann 100 Prozent,
+anschließend Ausgangsversion wieder 100 Prozent. Ihre Laufzeit-ID, private
+Header und Erreichbarkeit sind bestätigt. Alle sechs Quelltabellen sind nach
+Anzahl und Prüfsumme unverändert. Keine Produktionsänderung.
+
+Die Bestätigung wartet nun begrenzt auf bekannte Zwischenzustände, ohne einen
+Schreibaufruf zu wiederholen. Unbekannte Deployments stoppen weiterhin sofort.
+Zusätzliche Phasen und ausschließlich sichere Fehlermeldungen grenzen einen
+weiteren Abbruch genauer ein. Erneute vollständige CI und abschließender
+externer Erfolg stehen noch aus; vorhandene erfolgreiche Nachweise werden
+nicht als kompletter Produktions-Cutover ausgegeben.

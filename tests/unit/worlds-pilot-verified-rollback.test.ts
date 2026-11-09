@@ -53,7 +53,7 @@ test('all bytes of both proven versions are checked at zero percent before promo
  const f=fixture(),reports:unknown[]=[];await verifiedRollback(f.api,candidate,artifact,r=>reports.push(r));
  assert.deepEqual(f.actions,['smoke','stage','deploy:'+candidate,'smoke','deploy:'+baseline,'smoke']);
  assert.deepEqual(f.proofs,['version:'+baseline,'assets:'+baseline,'assets:'+candidate,'version:'+candidate,'version:'+baseline]);
- assert.deepEqual(f.versions,[{version_id:baseline,percentage:100}]);assert.equal(reports.length,3);
+ assert.deepEqual(f.versions,[{version_id:baseline,percentage:100}]);assert.equal(reports.length,4);
 });
 test('failed asset proof never promotes the candidate and removes its zero-percent staging',async()=>{
  const f=fixture();f.api.assetProof=async()=>{throw new Error('asset mismatch')};
@@ -102,4 +102,15 @@ test('the complete clean CI build produces an attested artifact before any deplo
  const built=await pilotArtifact('cloudflare/public',process.env.GITHUB_SHA??'');
  for(const path of ['/','/script.js','/startup.js','/style.css','/assets/worlds-account.js','/favicon.ico'])assert.ok(built.assets.some(a=>a.path===path));
  assert.match(built.digest,/^[0-9a-f]{64}$/);
+});
+
+test('eventually consistent deployment reads are awaited without repeating any mutation',async()=>{
+ const f=fixture(),read=f.api.current,stage=f.api.stage,deploy=f.api.deploy;
+ let queue:Awaited<ReturnType<VerifiedPilotApi['current']>>[]=[];
+ f.api.current=async()=>queue.shift()??await read();
+ f.api.stage=async(...args)=>{const before=await read();await stage(...args);queue=[before,before]};
+ f.api.deploy=async id=>{const before=await read();await deploy(id);queue=[before,before]};
+ let pauses=0;await verifiedRollback(f.api,candidate,artifact,()=>{},async()=>{pauses++});
+ assert.equal(pauses,6);assert.deepEqual(f.actions.filter(a=>a==='stage'||a.startsWith('deploy:')),['stage','deploy:'+candidate,'deploy:'+baseline]);
+ assert.equal(f.versions[0].version_id,baseline);
 });
