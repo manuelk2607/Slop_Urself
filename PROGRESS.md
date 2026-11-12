@@ -36,6 +36,9 @@ HF-Pflicht prüfen. Bei Rücknahme den gespeicherten Worker-Stand aktivieren.
 Die produktive Schaltung steht aus. Der vorhandene Cloudflare-
 Deployment-Zugang gilt für den Testworker. Wrangler hat aktuell keinen
 Zugang zum Produktionsworker. Die Produktionsdatenbank wurde nur gelesen.
+Der produktive Schalter und der weiter nutzbare Administrationszugang
+in `191501e` sind lokal typgeprüft. GitHub **43204100289** bestätigte
+Chromium, WebKit und die PostgreSQL-Integration.
 
 Der Sender für Migrationsnachweise verwendet die gemeinsame, exakt
 referenzierte Implementierung aus `@worlds-hub/auth` 0.1.6. Zustellziel,
