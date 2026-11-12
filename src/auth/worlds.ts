@@ -4,6 +4,7 @@ import type { ProfileStore } from './profiles';
 import { boundedBody, backchannelLogout, callback, cookie, logout, readCookie, sameOrigin, session, SESSION_COOKIE, startLogin, startLoginLink, type AuthConfig } from './worlds-shared/oidc.ts';
 import { centralProof } from './worlds-shared/linking.ts';
 import { PostgresAuthStore } from './worlds-shared/postgres-store.ts';
+import { receiveSessionRevocation, sessionEventPublicKey, sessionRevocationPath } from './worlds-shared/session-revocation.ts';
 import type { PgQuery } from './worlds-shared/postgres-links.ts';
 import { hash, type Session } from './worlds-shared/store.ts';
 import {requestLocale,tr} from '../i18n/worlds';
@@ -18,6 +19,7 @@ export interface WorldsEnv {
     WORLDS_CLIENT_ID?: string;
     WORLDS_RESOURCE?: string;
     WORLDS_REAUTH_ENABLED?: string;
+    WORLDS_HUB_SESSION_EVENT_JWK?: string;
     WORLDS_RECEIPT_URL?: string;
     WORLDS_RECEIPT_KID?: string;
     WORLDS_RECEIPT_KEY?: string;
@@ -27,7 +29,8 @@ export interface WorldsEnv {
 const production = 'slopurself.maki26.workers.dev';
 const productionDatabase = 'ep-holy-voice-b1djk94x';
 export const WORLDS_PATHS = ['/auth/login', '/auth/start', '/auth/callback', '/auth/logout', '/auth/backchannel-logout',
-    '/auth/worlds', '/auth/worlds/link', '/auth/worlds/claim', '/auth/worlds/play'];
+    '/auth/worlds', '/auth/worlds/link', '/auth/worlds/claim', '/auth/worlds/play', sessionRevocationPath];
+type SlopWorldsConfig = AuthConfig & { sessionEventKey?: ReturnType<typeof sessionEventPublicKey> };
 export function worldsPilotTarget(env: WorldsEnv) {
     return env.WORLDS_PILOT_ENABLED === 'true' ? isolatedWorldsTarget(env) : undefined;
 }
@@ -45,27 +48,35 @@ export function isolatedWorldsTarget(env: WorldsEnv) {
 }
 
 class SlopWorldsStore extends PostgresAuthStore {
-    constructor(private readonly execute: PgQuery) { super(execute); }
+    constructor(private readonly execute: PgQuery, private readonly sessionEvents: boolean) { super(execute, sessionEvents); }
     override async putSession(key: string, value: Session) {
         // The version snapshot is minted only at a verified callback or explicit
         // profile link. A password reset cannot be bypassed by reading the old cookie again.
-        await this.execute(`
+        const fence = this.sessionEvents ? `WHERE NOT EXISTS (
+            SELECT 1 FROM public.worlds_session_revocations WHERE issuer=$2 AND subject=$3
+              AND revoked_through >= COALESCE($7::bigint,0)
+        )` : '';
+        const written = await this.execute(`
             INSERT INTO worlds_auth_sessions
                 (id, issuer, subject, sid, payload, expires, local_user_id, local_auth_version)
             SELECT $1,$2,$3,$4,$5::jsonb,$6,p.id,p.auth_version
             FROM (SELECT 1) seed
             LEFT JOIN worlds_identity_links l ON l.issuer=$2 AND l.subject=$3
             LEFT JOIN user_profiles p ON p.id=l.local_user_id
-        `, [key, value.issuer, value.sub, value.sid ?? null, JSON.stringify(value), value.expires]);
+            ${fence} RETURNING id
+        `, [key, value.issuer, value.sub, value.sid ?? null, JSON.stringify(value), value.expires,
+            ...(this.sessionEvents ? [value.authenticatedAt ?? null] : [])]);
+        if (this.sessionEvents && !written.length) throw new Error('Worlds session predates sign-out');
     }
 }
 
-export function worldsConfig(env: WorldsEnv, query: PgQuery): AuthConfig | undefined {
+export function worldsConfig(env: WorldsEnv, query: PgQuery): SlopWorldsConfig | undefined {
     const target = worldsPilotTarget(env);
     if (!target || !env.WORLDS_ISSUER || !env.WORLDS_CLIENT_ID || !env.WORLDS_RESOURCE) return;
+    const sessionEventKey = sessionEventPublicKey(env.WORLDS_HUB_SESSION_EVENT_JWK);
     return {
         origin: target.origin, issuer: env.WORLDS_ISSUER, clientId: env.WORLDS_CLIENT_ID,
-        algorithm: 'EdDSA', resource: env.WORLDS_RESOURCE, store: new SlopWorldsStore(query),
+        algorithm: 'EdDSA', resource: env.WORLDS_RESOURCE, store: new SlopWorldsStore(query, !!sessionEventKey), sessionEventKey,
         returnPaths: ['/auth/worlds'], signedOutPaths: {de: '/', en: '/'},
         reauthEnabled: env.WORLDS_REAUTH_ENABLED === 'true'
     };
@@ -77,9 +88,15 @@ async function browserSessionKey(request: Request, config: AuthConfig) {
     if (raw && /^[A-Za-z0-9_-]{32,128}$/.test(raw)) return hash(raw);
 }
 
-export function worldsAccounts(config: AuthConfig | undefined, query: PgQuery, adminId?: string): LocalAuthConfig['worlds'] {
+export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQuery, adminId?: string): LocalAuthConfig['worlds'] {
     if (!config) return;
     const { issuer } = config;
+    const fence = config.sessionEventKey ? ` AND NOT EXISTS (
+        SELECT 1 FROM public.worlds_session_revocations r
+        WHERE r.issuer=s.issuer AND r.subject=s.subject
+          AND r.revoked_through >= CASE WHEN jsonb_typeof(s.payload->'authenticatedAt')='number'
+            THEN (s.payload->>'authenticatedAt')::numeric ELSE 0 END
+    )` : '';
     async function readKey(key: string): Promise<Account | undefined> {
         const [row] = await query(`
             SELECT p.id,p.name,p.auth_version,s.expires
@@ -88,14 +105,23 @@ export function worldsAccounts(config: AuthConfig | undefined, query: PgQuery, a
             JOIN user_profiles p ON p.id=s.local_user_id AND p.auth_version=s.local_auth_version
             WHERE s.id=$1 AND s.issuer=$2 AND s.expires>extract(epoch FROM now())*1000
               AND p.id IS DISTINCT FROM $3
+              ${fence}
         `, [key, issuer, adminId ?? null]);
         if (!row || typeof row.id !== 'string' || typeof row.name !== 'string' || typeof row.auth_version !== 'string') return;
         return { id: row.id, name: row.name, expiresAt: Number(row.expires), authVersion: row.auth_version, worldsSessionKey: key };
     }
     return {
         async legacyAllowed(account){
-            const [link]=await query('SELECT extract(epoch FROM linked_at)*1000 AS linked_at FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',[issuer,account.id]);
-            return !link||typeof account.issuedAt==='number'&&Number.isFinite(account.issuedAt)&&account.issuedAt<=Number(link.linked_at);
+            const [link] = await query(config.sessionEventKey ? `
+                SELECT extract(epoch FROM l.linked_at)*1000 AS linked_at,r.revoked_through
+                FROM worlds_identity_links l LEFT JOIN public.worlds_session_revocations r USING(issuer,subject)
+                WHERE l.issuer=$1 AND l.local_user_id=$2
+            ` : 'SELECT extract(epoch FROM linked_at)*1000 AS linked_at FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',
+            [issuer, account.id]);
+            if (!link) return true;
+            return typeof account.issuedAt === 'number' && Number.isFinite(account.issuedAt) &&
+                account.issuedAt <= Number(link.linked_at) &&
+                (link.revoked_through == null || account.issuedAt > Number(link.revoked_through));
         },
         async requiresCentral(id){return (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',[issuer,id])).length>0;},
         async read(request) {
@@ -123,9 +149,19 @@ const startPlaying = () => {
     return response;
 };
 
-export async function worldsResponse(request: Request, config: AuthConfig | undefined, local: LocalAuthConfig, profiles: ProfileStore, query: PgQuery) {
+export async function worldsResponse(request: Request, config: SlopWorldsConfig | undefined, local: LocalAuthConfig, profiles: ProfileStore, query: PgQuery) {
     const url = new URL(request.url);
     if (!config || url.origin !== config.origin) return new Response(null, {status: 404});
+    if (url.pathname === sessionRevocationPath) {
+        const {sessionEventKey: key, store} = config;
+        if (!key || !(store instanceof SlopWorldsStore)) {
+            return new Response(null, {status: 404, headers: {'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow'}});
+        }
+        return receiveSessionRevocation(request, {
+            signer: 'https://worlds-hub.maki26.workers.dev', audience: config.origin + sessionRevocationPath,
+            identityIssuer: config.issuer, key
+        }, event => store.applySessionRevocation(event));
+    }
     const locale=requestLocale(request),text=(key:Parameters<typeof tr>[1])=>tr(locale,key);
     const html=(body:string,status=200)=>worldsPage(body,locale,status);
     const refused=()=>html(`<p role="alert">${text('refused')}</p><a href="/auth/worlds">${text('retry')}</a>`,403);

@@ -1,4 +1,4 @@
-/** Per-project linking only. All inputs are results of trusted server-side reauthentication,
+/** Per-project linking only. All inputs are results of trusted server-side authentication,
  * never identity values deserialized from an HTTP body. No email matching is supported. */
 export interface CentralProof { issuer:string; subject:string; authenticatedAt:number; sessionId:string }
 export interface LegacyProof { accountId:string; authenticatedAt:number; method:'password'|'managed-reauth'|'hf-owner-review' }
@@ -24,6 +24,47 @@ export async function prepareLink(central:CentralProof,legacy:LegacyProof,store:
 export async function confirmLink(proof:string,validatedSessionId:string,store:LinkStore,now=Date.now()) {
   if(!/^[A-Za-z0-9_-]{32,128}$/.test(proof)||!validatedSessionId)throw new Error('Invalid proof');
   if(!await store.consumeAndLink(await hash(proof),validatedSessionId,now))throw new Error('Expired, replayed or conflicting link');
+}
+
+/** Only an official Managed Auth server-side getSession result may produce this
+ * proof. A public nickname, guest cookie, passwordless username JWT or browser
+ * supplied session/account object is not proof of ownership. Never copy the
+ * provider's session token, cookie, password or email into this structure. */
+export interface ManagedSessionProof {
+  kind:'managed-auth-session';issuer:string;accountId:string;sessionId:string;
+  createdAt:number;expiresAt:number;validatedAt:number;privileged:boolean;
+}
+const MANAGED_VALIDATION_WINDOW=15_000;
+const nonempty=(value:unknown,max=2048):value is string=>typeof value==='string'&&value.length>0&&value.length<=max;
+const secureIssuer=(value:string)=>{
+  try{const url=new URL(value);return url.protocol==='https:'&&!url.username&&!url.password&&!url.search&&!url.hash;}
+  catch{return false;}
+};
+async function managedBinding(central:CentralProof,source:ManagedSessionProof,now:number){
+  if(!Number.isFinite(now)||!secureIssuer(central.issuer)||!nonempty(central.subject,512)||!nonempty(central.sessionId)||!recent(central.authenticatedAt,now))throw new Error('CENTRAL_REAUTHENTICATION_REQUIRED');
+  if(source.kind!=='managed-auth-session'||!secureIssuer(source.issuer)||!nonempty(source.accountId,512)||!nonempty(source.sessionId)||
+    !Number.isFinite(source.createdAt)||!Number.isFinite(source.expiresAt)||!Number.isFinite(source.validatedAt)||
+    source.createdAt>source.validatedAt||source.validatedAt>now||now-source.validatedAt>=MANAGED_VALIDATION_WINDOW||
+    source.expiresAt<=now||source.expiresAt<=source.createdAt||typeof source.privileged!=='boolean')throw new Error('MANAGED_SESSION_PROOF_REQUIRED');
+  // Persistent linking of a locally privileged account still requires a fresh
+  // source authentication or a separately reviewed owner-verification route.
+  if(source.privileged&&!recent(source.createdAt,now))throw new Error('LEGACY_REAUTHENTICATION_REQUIRED');
+  const binding=await hash(JSON.stringify(['worlds-managed-session-link-v1',central.issuer,central.subject,
+    central.sessionId,central.authenticatedAt,source.issuer,source.accountId,source.sessionId,source.createdAt,source.privileged]));
+  const expires=Math.min(now+PROOF_LIFETIME,central.authenticatedAt+PROOF_LIFETIME,source.expiresAt,
+    source.privileged?source.createdAt+PROOF_LIFETIME:Infinity);
+  return {binding,expires};
+}
+/** Ordinary existing managed sessions can prove their owner without pretending
+ * that an older login just happened. Both sources must be revalidated at confirm. */
+export async function prepareManagedSessionLink(central:CentralProof,source:ManagedSessionProof,store:LinkStore,now=Date.now()){
+  const {binding,expires}=await managedBinding(central,source,now),proof=token();
+  await store.stage(await hash(proof),{issuer:central.issuer,subject:central.subject,localId:source.accountId,sessionId:binding,expires});
+  return proof;
+}
+export async function confirmManagedSessionLink(proof:string,central:CentralProof,source:ManagedSessionProof,store:LinkStore,now=Date.now()){
+  const {binding}=await managedBinding(central,source,now);
+  return confirmLink(proof,binding,store,now);
 }
 export async function projectAccount(issuer:string,subject:string,store:LinkStore) {
   const local=await store.lookup(issuer,subject);if(!local)throw new Error('PROJECT_ACCOUNT_NOT_LINKED');return local;

@@ -5,6 +5,20 @@ unverändert. Der eigene Worker `slopurself-worlds-pilot` verwendet nur den
 wiederhergestellten QA-Zweig, simulierte Generierung und noindex/no-store.
 Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
+## Zentrale Abmeldung – 12.11.2026
+
+Der Worlds-Client 0.1.5 akzeptiert signierte Sitzungswiderrufe vom Hub.
+Der Projektserver sperrt damit frühere Worlds-Sitzungen und bisherige
+lokale Tokens desselben verknüpften Profils. Profilzuordnung, Passwortversion
+und eigenständige Hugging-Face-Verbindung bleiben erhalten.
+178 lokale Tests, Typprüfung und Build bestanden. Ein Test mit lokalem
+Postgres prüft die Signatur, Wiederholung, beide bisherigen Anmeldewege,
+ein unbeteiligtes Profil und eine neuere Worlds-Sitzung.
+
+Vor der Pilotabnahme das additive Worlds-Schema anwenden und den öffentlichen
+`WORLDS_HUB_SESSION_EVENT_JWK` setzen. Der veröffentlichte Pilot verwendet
+noch die bisherige Version.
+
 ## Bestehendes Profil und zentrale Anmeldung
 
 - Genau eine betreibergeprüfte QA-Zuordnung: das vom Eigentümer benannte

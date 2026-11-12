@@ -12,6 +12,13 @@ export const WORLDS_SCHEMA = [
     `ALTER TABLE worlds_auth_sessions ADD COLUMN IF NOT EXISTS local_user_id text`,
     `ALTER TABLE worlds_auth_sessions ADD COLUMN IF NOT EXISTS local_auth_version text`,
     `CREATE TABLE IF NOT EXISTS worlds_auth_replays (id text PRIMARY KEY, expires bigint NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS public.worlds_session_revocations (
+        issuer text NOT NULL CHECK (length(issuer) BETWEEN 1 AND 2048),
+        subject text NOT NULL CHECK (length(subject) BETWEEN 1 AND 512),
+        revoked_through bigint NOT NULL CHECK (revoked_through > 0),
+        PRIMARY KEY (issuer,subject)
+    )`,
+    `REVOKE ALL ON public.worlds_session_revocations FROM PUBLIC`,
     `CREATE INDEX IF NOT EXISTS worlds_auth_sessions_identity ON worlds_auth_sessions(issuer, subject, sid)`,
     `CREATE INDEX IF NOT EXISTS worlds_auth_transactions_expiry ON worlds_auth_transactions(expires)`,
     `CREATE INDEX IF NOT EXISTS worlds_auth_sessions_expiry ON worlds_auth_sessions(expires)`,

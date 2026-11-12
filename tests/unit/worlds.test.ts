@@ -11,6 +11,7 @@ import { reportWorldsLinks } from '../../src/auth/worlds-receipts';
 import { HfConnections, HfRequiredError, requirePlayerHf, type HfStorage } from '../../src/auth/huggingface';
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
+import { sessionEventContentType, sessionRevocationPath, signSessionRevocation } from '../../src/auth/worlds-shared/session-revocation.ts';
 import { WORLDS_SCHEMA } from '../../src/database/worlds-schema';
 import worker from '../../src/server/cloudflare/worker';
 import type { Env } from '../../src/server/cloudflare/types';
@@ -21,6 +22,59 @@ const password = 'a unique test password';
 const env = { WORLDS_PILOT_ENABLED: 'true', WORLDS_PILOT_ORIGIN: origin, WORLDS_PILOT_DATABASE_HOST: 'db.test',
     DATABASE_URL: 'postgres://db.test/test', WORLDS_ISSUER: issuer, WORLDS_CLIENT_ID: 'slop-pilot', WORLDS_RESOURCE: origin + '/api',
     WORLDS_REAUTH_ENABLED: 'true' };
+
+test('signed Worlds sign-out invalidates both previous credentials for the linked player', async () => {
+    const db = new PGlite();
+    try {
+        const query = async (text: string, values?: unknown[]) => (await db.query<Record<string, unknown>>(text, values)).rows;
+        const profiles = sqlProfiles(async (text, values) => (await db.query<{id: string; name: string}>(text, values)).rows);
+        const linked = (await profiles.create('Linked'))!;
+        const other = (await profiles.create('Other'))!;
+        for (const statement of WORLDS_SCHEMA) await query(statement);
+        const {privateKey, publicKey} = await generateKeyPair('EdDSA', {extractable: true});
+        const {kty, crv, x} = await exportJWK(publicKey);
+        const kid = 'fixture', subject = token();
+        const config = worldsConfig({...env, WORLDS_HUB_SESSION_EVENT_JWK: JSON.stringify({kty, crv, x, kid})}, query)!;
+        const local = {AUTH_COOKIE_SECRET: 'a local test signing secret long enough', worlds: worldsAccounts(config, query)};
+        const auth = profileAuthConfig(local, profiles);
+        const account = (cookie: string) => requestAccount(new Request(origin + '/api/session', {headers: {cookie}}), auth);
+        const login = async (username: string) => {
+            const response = await sessionResponse(new Request(origin + '/api/session', {
+                method: 'POST', headers: {origin}, body: JSON.stringify({mode: 'login', username})
+            }), local, profiles);
+            assert.equal(response.status, 200);
+            return response.headers.get('set-cookie')!.split(';')[0];
+        };
+        const legacy = await login(linked.name), unrelated = await login(other.name);
+        const cutoff = Math.ceil(Date.now() / 1000) * 1000;
+        await query('INSERT INTO worlds_identity_links(issuer,subject,local_user_id) VALUES($1,$2,$3)', [issuer, subject, linked.id]);
+        async function central(authenticatedAt: number) {
+            const raw = token();
+            await config.store.putSession(await hash(raw), {issuer, sub: subject, csrf: token(), expires: cutoff + 60_000, authenticatedAt});
+            return SESSION_COOKIE + '=' + raw;
+        }
+        const previous = await central(cutoff - 1000), fresh = await central(cutoff + 1000);
+        assert.equal((await account(legacy))?.id, linked.id);
+        assert.equal((await account(previous))?.id, linked.id);
+        const audience = origin + sessionRevocationPath;
+        const event = {eventId: token(), identityIssuer: issuer, subject, revokedThrough: cutoff};
+        const deliver = (body: string) => worldsResponse(new Request(audience, {
+            method: 'POST', headers: {'Content-Type': sessionEventContentType}, body
+        }), config, local, profiles, query);
+        const signed = (signer: string) => signSessionRevocation(event, signer, audience, {kid, privateKey}, cutoff);
+        assert.equal((await deliver(await signed('https://invalid.test'))).status, 400);
+        const message = await signed('https://worlds-hub.maki26.workers.dev');
+        assert.equal((await deliver(message)).status, 202);
+        assert.equal((await deliver(message)).status, 202);
+        await assert.rejects(() => account(previous));
+        await assert.rejects(() => account(legacy));
+        assert.equal((await account(unrelated))?.id, other.id);
+        assert.equal((await account(fresh))?.id, linked.id);
+        assert.deepEqual(await query('SELECT local_user_id FROM worlds_identity_links'), [{local_user_id: linked.id}]);
+    } finally {
+        await db.close();
+    }
+});
 
 test('the pilot fails closed without an exact isolated target and rejects the production origin and database', async () => {
     assert.equal(worldsPilotTarget({}), undefined);
