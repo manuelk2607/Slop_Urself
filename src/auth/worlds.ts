@@ -130,6 +130,7 @@ export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQu
     }
     return {
         async legacyAllowed(account){
+            if (account.id === adminId) return true;
             const [link] = await query(config.sessionEventKey ? `
                 SELECT extract(epoch FROM l.linked_at)*1000 AS linked_at,r.revoked_through
                 FROM worlds_identity_links l LEFT JOIN public.worlds_session_revocations r USING(issuer,subject)
@@ -141,7 +142,10 @@ export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQu
                 account.issuedAt <= Number(link.linked_at) &&
                 (link.revoked_through == null || account.issuedAt > Number(link.revoked_through));
         },
-        async requiresCentral(id){return (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',[issuer,id])).length>0;},
+        async requiresCentral(id){
+            return id !== adminId &&
+                (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',[issuer,id])).length > 0;
+        },
         async read(request) {
             const key = await browserSessionKey(request, config);
             return key ? readKey(key) : undefined;

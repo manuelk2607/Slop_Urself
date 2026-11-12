@@ -101,6 +101,9 @@ test('production Worlds sign-in requires the exact live database and client and 
     };
     const query = async () => { throw new Error('Anonymous account page must not query the database'); };
     assert.equal(worldsConfig(production, query)?.origin, origin);
+    const admin = worldsAccounts(worldsConfig(production, query), query, 'admin')!;
+    assert.equal(await admin.requiresCentral?.('admin'), false);
+    assert.equal(await admin.legacyAllowed?.({id:'admin',name:'Admin',expiresAt:Date.now()+1000}), true);
     for (const config of [
         {...production, WORLDS_PRODUCTION_ENABLED: 'false'},
         {...production, WORLDS_CLIENT_ID: env.WORLDS_CLIENT_ID},
