@@ -4,7 +4,7 @@ import http from 'http';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { AuthConfig, requestAccount, sessionResponse, verifyAccountToken, authDisabled, profileAuthConfig, accountIsCurrent, authFailureStatus } from '../auth/session';
-import { WORLDS_PATHS, worldsAccounts, worldsConfig, worldsPilotTarget, worldsResponse } from '../auth/worlds';
+import { WORLDS_PATHS, worldsAccounts, worldsConfig, worldsResponse } from '../auth/worlds';
 import { reportWorldsLinks } from '../auth/worlds-receipts';
 import { cleanupWorldsSessions } from '../database/worlds-schema';
 import { accountsResponse } from './accounts';
@@ -103,7 +103,7 @@ function archive(url: string) {
 app.use(async (req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (privatePath(req.path)) { res.setHeader('X-Robots-Tag', 'noindex, nofollow, nosnippet'); res.setHeader('Cache-Control', 'no-store'); }
-    if (req.path.startsWith('/auth/') && (!WORLDS_PATHS.includes(req.path) || !worldsPilotTarget(process.env))) {
+    if (req.path.startsWith('/auth/') && (!WORLDS_PATHS.includes(req.path) || !worlds)) {
         res.sendStatus(404); return;
     }
     const rule = httpRateRule(req.path, req.method);
@@ -176,6 +176,7 @@ app.get('/api/config', async (req, res) => {
         ...(signedIn ? await budget.displayCapacity(players, 'auto', account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined) : { aiRoundLimit: 0, quotaMode: 'unavailable' }), authEnabled: !authDisabled(config),
         aiProvider: AI_PROVIDER === 'mock' ? 'mock' : AI_PROVIDER_CHAIN,
         worldsEnabled: Boolean(config.worlds),
+        worldsTransition: worlds?.production === true,
         mockAi: AI_PROVIDER === 'mock', hfRequired: AI_PROVIDER !== 'mock', videoDuration: Math.max(5, Number(process.env.LTX_DURATION) || 5)
     });
 });

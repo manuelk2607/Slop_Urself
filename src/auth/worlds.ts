@@ -12,6 +12,7 @@ import {escapeWorlds,worldsPage} from './worlds-page';
 import {approvedProfile,consumeApprovedProfile} from './worlds-approved';
 
 export interface WorldsEnv {
+    WORLDS_PRODUCTION_ENABLED?: string;
     WORLDS_PILOT_ENABLED?: string;
     WORLDS_PILOT_ORIGIN?: string;
     WORLDS_PILOT_DATABASE_HOST?: string;
@@ -28,9 +29,12 @@ export interface WorldsEnv {
 
 const production = 'slopurself.maki26.workers.dev';
 const productionDatabase = 'ep-holy-voice-b1djk94x';
+const productionOrigin = 'https://' + production;
+const worldsIssuer = 'https://ep-bold-boat-batl101c.neonauth.c-8.eu-central-1.aws.neon.tech/worlds_identity/auth';
+const productionClient = 'BBHPxFFlfMahuTkpeBpLeUfkqjVGYfPO';
 export const WORLDS_PATHS = ['/auth/login', '/auth/start', '/auth/callback', '/auth/logout', '/auth/backchannel-logout',
     '/auth/worlds', '/auth/worlds/link', '/auth/worlds/claim', '/auth/worlds/play', sessionRevocationPath];
-type SlopWorldsConfig = AuthConfig & { sessionEventKey?: ReturnType<typeof sessionEventPublicKey> };
+type SlopWorldsConfig = AuthConfig & { production?: boolean; sessionEventKey?: ReturnType<typeof sessionEventPublicKey> };
 export function worldsPilotTarget(env: WorldsEnv) {
     return env.WORLDS_PILOT_ENABLED === 'true' ? isolatedWorldsTarget(env) : undefined;
 }
@@ -45,6 +49,19 @@ export function isolatedWorldsTarget(env: WorldsEnv) {
             origin.protocol !== 'https:' || origin.origin !== env.WORLDS_PILOT_ORIGIN || origin.hostname === production) return;
         return { origin: origin.origin, database: env.DATABASE_URL };
     } catch { return; }
+}
+
+export function worldsProductionEnabled(env: WorldsEnv) {
+    if (env.WORLDS_PRODUCTION_ENABLED !== 'true' || env.WORLDS_PILOT_ENABLED === 'true' ||
+        env.WORLDS_ISSUER !== worldsIssuer || env.WORLDS_CLIENT_ID !== productionClient ||
+        env.WORLDS_RESOURCE !== productionOrigin + '/api' || !env.DATABASE_URL) return false;
+    try {
+        const database = new URL(env.DATABASE_URL);
+        const host = database.hostname.replace(/-pooler\./, '.');
+        return ['postgres:', 'postgresql:'].includes(database.protocol) &&
+            host === productionDatabase + '.c-5.eu-central-1.aws.neon.tech' &&
+            decodeURIComponent(database.pathname) === '/Slop_Urself';
+    } catch { return false; }
 }
 
 class SlopWorldsStore extends PostgresAuthStore {
@@ -71,14 +88,15 @@ class SlopWorldsStore extends PostgresAuthStore {
 }
 
 export function worldsConfig(env: WorldsEnv, query: PgQuery): SlopWorldsConfig | undefined {
-    const target = worldsPilotTarget(env);
-    if (!target || !env.WORLDS_ISSUER || !env.WORLDS_CLIENT_ID || !env.WORLDS_RESOURCE) return;
+    const production = worldsProductionEnabled(env);
+    const origin = production ? productionOrigin : worldsPilotTarget(env)?.origin;
+    if (!origin || !env.WORLDS_ISSUER || !env.WORLDS_CLIENT_ID || !env.WORLDS_RESOURCE) return;
     const sessionEventKey = sessionEventPublicKey(env.WORLDS_HUB_SESSION_EVENT_JWK);
     return {
-        origin: target.origin, issuer: env.WORLDS_ISSUER, clientId: env.WORLDS_CLIENT_ID,
+        origin, production, issuer: env.WORLDS_ISSUER, clientId: env.WORLDS_CLIENT_ID,
         algorithm: 'EdDSA', resource: env.WORLDS_RESOURCE, store: new SlopWorldsStore(query, !!sessionEventKey), sessionEventKey,
         returnPaths: ['/auth/worlds'], signedOutPaths: {de: '/', en: '/'},
-        reauthEnabled: env.WORLDS_REAUTH_ENABLED === 'true'
+        reauthEnabled: !production && env.WORLDS_REAUTH_ENABLED === 'true'
     };
 }
 
@@ -163,7 +181,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
         }, event => store.applySessionRevocation(event));
     }
     const locale=requestLocale(request),text=(key:Parameters<typeof tr>[1])=>tr(locale,key);
-    const html=(body:string,status=200)=>worldsPage(body,locale,status);
+    const html=(body:string,status=200)=>worldsPage(body,locale,status,config.production);
     const refused=()=>html(`<p role="alert">${text('refused')}</p><a href="/auth/worlds">${text('retry')}</a>`,403);
     const loginForm=(key:Parameters<typeof tr>[1],reauth=false)=>`<form action="/auth/login?ui_locales=${locale}${reauth?'&amp;reauth=1':''}" method="post"><button class="btn-primary">${text(key)}</button></form>`;
     try {
@@ -243,7 +261,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
         let action:string;
         if(account)action=`<p>${text('linkedBody')}</p><p><strong>${escapeWorlds(account.name)}</strong></p><form action="/auth/worlds/play" method="post">${field}<button class="btn-primary">${text('play')}</button></form>`;
         else if(linked)action=`<p>${text('renew')}</p>${loginForm('renewAction')}`;
-        else if(!config.reauthEnabled)action=`<p>${text('locked')}</p>`;
+        else if(!config.reauthEnabled)action=`<p>${text(config.production?'productionPending':'locked')}</p>`;
         else if(approved){
             const fresh=typeof current.authenticatedAt==='number'&&Number.isFinite(current.authenticatedAt)&&current.authenticatedAt<=Date.now()&&Date.now()-current.authenticatedAt<300000;
             action=`<h2>${text('approvedTitle')}</h2><p><strong>${escapeWorlds(approved.name)}</strong></p><p>${text('approvedBody')}</p>`;

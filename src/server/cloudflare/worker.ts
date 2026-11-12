@@ -1,6 +1,6 @@
 import { authDisabled, requestAccount, sessionResponse, authFailureStatus } from '../../auth/session';
 import { getDatabase } from '../../database/neon';
-import { WORLDS_PATHS, isolatedWorldsTarget, worldsConfig, worldsPilotTarget, worldsResponse } from '../../auth/worlds';
+import { WORLDS_PATHS, isolatedWorldsTarget, worldsConfig, worldsPilotTarget, worldsProductionEnabled, worldsResponse } from '../../auth/worlds';
 import { reportWorldsLinks } from '../../auth/worlds-receipts';
 import { cleanupWorldsSessions } from '../../database/worlds-schema';
 import { emptyStats } from '../../database/types';
@@ -48,7 +48,8 @@ async function handleRequest(request: Request, env: Env, pilot: boolean): Promis
         }
         const seoResponse = pilot ? undefined : publicSeoResponse(url.pathname, request.method);
         if (seoResponse) return seoResponse;
-        if (url.pathname.startsWith('/auth/') && (!WORLDS_PATHS.includes(url.pathname) || !worldsPilotTarget(env)))
+        const worldsTransition = !pilot && worldsProductionEnabled(env) && !authDisabled(env);
+        if (url.pathname.startsWith('/auth/') && (!WORLDS_PATHS.includes(url.pathname) || (!worldsPilotTarget(env) && !worldsTransition)))
             return new Response(null, { status: 404 });
         const auth = cloudflareAuth(env);
         const rule = httpRateRule(url.pathname, request.method);
@@ -80,6 +81,7 @@ async function handleRequest(request: Request, env: Env, pilot: boolean): Promis
                 ...(signedIn ? await service(env, '/quota/display', { players, participants: account?.hfConnectionId && players === 1 ? [{ id: account.id, accountId: account.id, hfConnectionId: account.hfConnectionId }] : undefined }) : { aiRoundLimit: 0, quotaMode: 'unavailable' }),
                 authEnabled: !authDisabled(env),
                 worldsEnabled: Boolean(auth.worlds),
+                worldsTransition,
                 aiProvider: env.AI_PROVIDER === 'mock' ? 'mock' : env.AI_PROVIDER_CHAIN || env.AI_PROVIDER || DEFAULT_PROVIDER_CHAIN,
                 mockAi: env.AI_PROVIDER === 'mock',
                 hfRequired: env.AI_PROVIDER !== 'mock',

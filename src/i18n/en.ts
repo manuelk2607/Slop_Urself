@@ -3,6 +3,8 @@ export const en:Record<keyof typeof de,string>={
  sessionExpired:'Your Slop Urself session has expired. Sign in again through Worlds Hub.',
  approvedTitle:'Keep your existing profile',approvedBody:'This profile has been specifically approved for migration to your verified Worlds account. No additional Slop password is needed. After migration, new sign-ins for this profile use Worlds Hub exclusively. Existing valid sessions can continue until their original expiry.',claim:'Keep this profile and play with Worlds',
  centralOnly:'Sign in centrally through Worlds Hub. Your Slop profile and personal HF connection are preserved.',
+ centralTransition:'Sign in through Worlds Hub for linked profiles. Use your existing Slop sign-in until your profile is linked.',
+ productionPending:'You are signed in to Worlds. This account has no game profile linked yet. Use your existing Slop sign-in until your profile is linked.',
  title:'Worlds account · Slop Urself',heading:'Your Worlds account',eyebrow:'Slop Urself · Test version',
  testNote:'You are using a separate test version. The regular game and its data are unchanged.',
  intro:'One central sign-in. Your game profile and progress stay with Slop Urself.',

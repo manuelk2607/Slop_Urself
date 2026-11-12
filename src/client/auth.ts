@@ -83,13 +83,14 @@ export async function initializeAccount(ui: AuthUI) {
         if (location.protocol === 'file:') throw new Error('Bitte öffne das Spiel über den Server oder den Cloudflare-Link.');
         const response = await fetch('/api/config', { signal: AbortSignal.timeout(10_000) });
         if (!response.ok) throw new Error('Spielkonfiguration nicht erreichbar.');
-        const config = await response.json() as { authEnabled: boolean; hfRequired?: boolean; mockAi?: boolean; worldsEnabled?: boolean };
+        const config = await response.json() as { authEnabled: boolean; hfRequired?: boolean; mockAi?: boolean; worldsEnabled?: boolean; worldsTransition?: boolean };
         document.getElementById('worldsSignIn')!.hidden = !config.worldsEnabled;
         document.getElementById('worldsAccount')!.hidden = !config.worldsEnabled;
         if(config.worldsEnabled){
             let locale=normalizeLocale(navigator.language)??'de';try{locale=normalizeLocale(localStorage.getItem(localeKey))??locale;}catch{}
             worldsEnabled=true;worldsLocale=locale;
-            form.hidden=true;document.getElementById('authHint')!.textContent=messages[locale].centralOnly;
+            form.hidden=!config.worldsTransition;
+            document.getElementById('authHint')!.textContent=messages[locale][config.worldsTransition?'centralTransition':'centralOnly'];
             const link=document.querySelector<HTMLAnchorElement>('#worldsSignIn a')!;link.href='/auth/start?ui_locales='+locale;link.textContent=messages[locale].signIn;
         }
         hfRequired = config.hfRequired ?? config.mockAi !== true;

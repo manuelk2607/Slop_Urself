@@ -2,6 +2,8 @@ export const de={
  sessionExpired:'Deine Sitzung in Slop Urself ist abgelaufen. Melde dich über Worlds Hub erneut an.',
  approvedTitle:'Dein bisheriges Profil übernehmen',approvedBody:'Die Übernahme dieses Profils wurde gezielt für dein bestätigtes Worlds-Konto freigegeben. Du brauchst kein zusätzliches Slop-Passwort. Neue Anmeldungen für dieses Profil erfolgen anschließend ausschließlich über Worlds Hub. Bereits gültige Anmeldungen können bis zu ihrem bisherigen Ablauf weiterlaufen.',claim:'Profil übernehmen und mit Worlds spielen',
  centralOnly:'Melde dich zentral über Worlds Hub an. Dein Slop-Profil und deine persönliche HF-Verbindung bleiben erhalten.',
+ centralTransition:'Für verknüpfte Spielprofile meldest du dich über Worlds Hub an. Die bisherige Anmeldung gilt für Profile, die noch auf die Übernahme warten.',
+ productionPending:'Deine Worlds-Anmeldung ist aktiv. Deinem Konto ist noch kein Spielprofil zugeordnet. Nutze bis zur Übernahme die bisherige Anmeldung im Spiel.',
  title:'Worlds-Konto · Slop Urself',heading:'Dein Worlds-Konto',eyebrow:'Slop Urself · Testversion',
  testNote:'Du bist in einer getrennten Testversion. Das reguläre Spiel und seine Daten bleiben unverändert.',
  intro:'Eine zentrale Anmeldung. Dein Spielprofil und deine Fortschritte bleiben bei Slop Urself.',

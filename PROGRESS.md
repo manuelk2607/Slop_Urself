@@ -5,6 +5,34 @@ unverändert. Der eigene Worker `slopurself-worlds-pilot` verwendet nur den
 wiederhergestellten QA-Zweig, simulierte Generierung und noindex/no-store.
 Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
+## Produktive Worlds-Anmeldung
+
+Die erste Freigabe ist auf die vorhandene Slop-Domain, den produktiven
+Neon-Endpunkt und den registrierten Slop-OIDC-Client begrenzt. Verknüpfte
+Profile melden sich zentral an. Für ausstehende Übernahmen bleibt der
+bisherige Zugang erreichbar. Die HF-Pflicht gilt auch im Übergang.
+
+Produktionsabgleich mit ausschließlich lesenden Abfragen am 12.11.:
+Das bereits in QA übernommene passwortlose Profil stimmt über stabile
+Profil-ID und Auth-Version mit dem Produktionsprofil überein. Produktion
+enthält 13 Profile, 15 Spieler, 4 Runden, 2 Stimmen und 4 Videoeinträge.
+Die Mapping-Tabelle fehlt. Der bestehende Sicherungszweig ist Kind der
+Produktionsdatenbank und Ausgangspunkt des bereits geprüften QA-Restores.
+Neon meldet sechs Stunden Wiederherstellungshistorie.
+
+Das bestehende Migrationstool hat einen getrennten Produktionsmodus.
+Er installiert die Worlds-Tabellen und übernimmt genau ein ausdrücklich
+freigegebenes Profil in derselben Transaktion. Die Rücknahme verlangt
+dieselbe Freigabereferenz, entfernt gezielt die Zuordnung und beendet
+deren Worlds-Sitzungen. Vor Anwendung einen aktuellen Neon-
+Wiederherstellungspunkt und die aktive Cloudflare-Version festhalten.
+Nach Anwendung Profil-ID, Quelltabellen, zentralen Browser-Login und
+HF-Pflicht prüfen. Bei Rücknahme den gespeicherten Worker-Stand aktivieren.
+
+Die produktive Schaltung steht aus. Der vorhandene Cloudflare-
+Deployment-Zugang gilt für den Testworker. Wrangler hat aktuell keinen
+Zugang zum Produktionsworker. Die Produktionsdatenbank wurde nur gelesen.
+
 Der Sender für Migrationsnachweise verwendet die gemeinsame, exakt
 referenzierte Implementierung aus `@worlds-hub/auth` 0.1.6. Zustellziel,
 Audit-Status und Datenbankverhalten bleiben wie zuvor. Lokal bestanden

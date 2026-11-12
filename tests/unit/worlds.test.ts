@@ -88,6 +88,36 @@ test('the pilot fails closed without an exact isolated target and rejects the pr
     assert.equal((await worldsResponse(new Request(origin + '/auth/worlds'), undefined, {}, {} as never, unexpected)).status, 404);
 });
 
+test('production Worlds sign-in requires the exact live database and client and keeps the transition available', async () => {
+    const origin = 'https://slopurself.maki26.workers.dev';
+    const production = {
+        WORLDS_PRODUCTION_ENABLED: 'true',
+        DATABASE_URL: 'postgres://ep-holy-voice-b1djk94x-pooler.c-5.eu-central-1.aws.neon.tech/Slop_Urself',
+        WORLDS_ISSUER: 'https://ep-bold-boat-batl101c.neonauth.c-8.eu-central-1.aws.neon.tech/worlds_identity/auth',
+        WORLDS_CLIENT_ID: 'BBHPxFFlfMahuTkpeBpLeUfkqjVGYfPO',
+        WORLDS_RESOURCE: origin + '/api',
+        AUTH_COOKIE_SECRET: 'test-only-cookie-secret-for-rate-limit',
+        SERVICES: { idFromName: () => 'test', get: () => ({ fetch: async () => Response.json({ retryAfter: 0 }) }) },
+    };
+    const query = async () => { throw new Error('Anonymous account page must not query the database'); };
+    assert.equal(worldsConfig(production, query)?.origin, origin);
+    for (const config of [
+        {...production, WORLDS_PRODUCTION_ENABLED: 'false'},
+        {...production, WORLDS_CLIENT_ID: env.WORLDS_CLIENT_ID},
+        {...production, DATABASE_URL: env.DATABASE_URL},
+        {...production, WORLDS_PILOT_ENABLED: 'true'},
+    ]) assert.equal(worldsConfig(config, query), undefined);
+    const account = await worker.fetch(new Request(origin + '/auth/worlds'), production as unknown as Env);
+    assert.equal(account.status, 200);
+    const html = await account.text();
+    assert.match(html, /Mit Worlds anmelden/);
+    assert.doesNotMatch(html, /Testversion/);
+    const config = await worker.fetch(new Request(origin + '/api/config'), production as unknown as Env);
+    const data = await config.json() as { worldsTransition: boolean; hfRequired: boolean };
+    assert.equal(data.worldsTransition, true);
+    assert.equal(data.hfRequired, true);
+});
+
 test('the dedicated Cloudflare pilot excludes indexing and refuses a real generator or disabled authentication', async () => {
     const deployment = {...env, WORLDS_PILOT_DEPLOYMENT: 'true', AI_PROVIDER: 'mock'} as Env;
     const robots = await worker.fetch(new Request(origin + '/robots.txt'), deployment);
