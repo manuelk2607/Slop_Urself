@@ -15,9 +15,16 @@ und eigenständige Hugging-Face-Verbindung bleiben erhalten.
 Postgres prüft die Signatur, Wiederholung, beide bisherigen Anmeldewege,
 ein unbeteiligtes Profil und eine neuere Worlds-Sitzung.
 
-Vor der Pilotabnahme das additive Worlds-Schema anwenden und den öffentlichen
-`WORLDS_HUB_SESSION_EVENT_JWK` setzen. Der veröffentlichte Pilot verwendet
-noch die bisherige Version.
+Release `1a89485` bestand GitHub-CI **43190980122** mit Chromium und
+WebKit. **43192117425** installierte die Widerrufstabelle im isolierten
+Zweig `br-sparkling-firefly-b1pssf1o` und veröffentlichte den Empfänger
+mit öffentlichem Testschlüssel. Aktive Version
+`c024fc41-f994-48e3-ad6f-dd367812c6c6` lieferte HTTP 200 und noindex.
+Die Live-Prüfung mit simuliertem zentralen Anmeldedienst und dem echten
+Hub-Sender sperrte die vorherige passwortlose lokale Sitzung und die
+vorherige Worlds-Sitzung. Die neuere Worlds-Sitzung, das Kontrollprofil
+und die bestehende Projektzuordnung funktionierten weiter. Beide
+künstlichen Testprofile und ihre Sitzungseinträge wurden entfernt.
 
 ## Bestehendes Profil und zentrale Anmeldung
 
