@@ -30,6 +30,7 @@ jobs:
     env:
       WRANGLER_SEND_METRICS: 'false'
       CLOUDFLARE_ACCOUNT_ID: ec3c070d8e4f88d2fc533d7d797f2daa
+      WORLDS_HUB_SESSION_EVENT_JWK: ${{ vars.WORLDS_HUB_SESSION_EVENT_JWK }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -47,13 +48,25 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Prepare the revocation table in the fixed isolated database
+        if: vars.WORLDS_HUB_SESSION_EVENT_JWK != ''
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          WORLDS_PILOT_ENABLED: 'true'
+          WORLDS_PILOT_ORIGIN: https://slopurself-worlds-pilot.maki26.workers.dev
+          WORLDS_PILOT_DATABASE_HOST: ep-muddy-dawn-b1fl6foa-pooler.c-5.eu-central-1.aws.neon.tech
+        run: npm run worlds:schema -- --session-revocations
       - name: Deploy only slopurself-worlds-pilot
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           digest=$(node --import tsx tools/worlds-pilot-assets.mts)
-          npx wrangler deploy --config cloudflare/wrangler.worlds-pilot.toml --name slopurself-worlds-pilot --var "WORLDS_PILOT_COMMIT_SHA:$GITHUB_SHA" --var "WORLDS_PILOT_ASSET_SHA256:$digest"
+          args=(--config cloudflare/wrangler.worlds-pilot.toml --name slopurself-worlds-pilot --var "WORLDS_PILOT_COMMIT_SHA:$GITHUB_SHA" --var "WORLDS_PILOT_ASSET_SHA256:$digest")
+          if [ -n "$WORLDS_HUB_SESSION_EVENT_JWK" ]; then
+            args+=(--var "WORLDS_HUB_SESSION_EVENT_JWK:$WORLDS_HUB_SESSION_EVENT_JWK")
+          fi
+          npx wrangler deploy "${args[@]}"
       - name: Configure secrets only for the isolated pilot
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -92,6 +105,10 @@ jobs:
           assert.equal(response.headers.get('cache-control'),'no-store');
           assert.match(response.headers.get('x-worlds-pilot-version')??'',/^[0-9a-f-]{36}$/);
           assert.match(response.headers.get('x-robots-tag')??'',/noindex/);
+          const event=await fetch(origin+'/auth/events/session-revoked',{
+            method:'POST',headers:{'content-type':'application/secevent+jwt'},body:'unsigned-probe'
+          });
+          assert.equal(event.status,process.env.WORLDS_HUB_SESSION_EVENT_JWK?400:404);
           console.log('PASS isolated pilot target and private response headers');
           JS
 

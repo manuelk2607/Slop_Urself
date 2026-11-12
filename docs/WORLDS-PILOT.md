@@ -104,6 +104,14 @@ und die Ressource derselben Pilot-Origin mit `/api`.
 Die kostenlose zentrale Identity-Pilotinstanz bleibt der Aussteller.
 Die Konfiguration bindet ausschließlich den wiederhergestellten Datenbankhost.
 
+Für den Empfang signierter Sitzungswiderrufe setzt der Release die optionale
+Variable `WORLDS_HUB_SESSION_EVENT_JWK` aus der GitHub-Umgebung
+`worlds-pilot`. Die Migration legt zuerst die Widerrufstabelle im
+fest konfigurierten Testzweig an. Der anschließende Live-Check prüft, ob
+der öffentliche Testworker den absichtlich unsignierten Aufruf zurückweist.
+Ein aktiver Empfänger benötigt auch bei einer Rücknahme eine Version, die
+bereits gespeicherte Widerrufe beim Sitzungszugriff prüft.
+
 Der ausdrücklich freigegebene Token `slop-worlds-pilot deploy` hat nur
 `Workers Scripts Write` und endet am 08.12.2026. Er liegt als
 `CLOUDFLARE_API_TOKEN` in der GitHub-Umgebung `worlds-pilot`.
