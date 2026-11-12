@@ -5,6 +5,12 @@ unverändert. Der eigene Worker `slopurself-worlds-pilot` verwendet nur den
 wiederhergestellten QA-Zweig, simulierte Generierung und noindex/no-store.
 Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
+Der Sender für Migrationsnachweise verwendet die gemeinsame, exakt
+referenzierte Implementierung aus `@worlds-hub/auth` 0.1.6. Zustellziel,
+Audit-Status und Datenbankverhalten bleiben wie zuvor. Lokal bestanden
+178 Tests, Typprüfung und Build. Der Test mit externer PostgreSQL-Instanz
+läuft in GitHub-CI.
+
 ## Zentrale Abmeldung – 12.11.2026
 
 Der Worlds-Client 0.1.5 akzeptiert signierte Sitzungswiderrufe vom Hub.
