@@ -8,8 +8,8 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 Der Sender für Migrationsnachweise verwendet die gemeinsame, exakt
 referenzierte Implementierung aus `@worlds-hub/auth` 0.1.6. Zustellziel,
 Audit-Status und Datenbankverhalten bleiben wie zuvor. Lokal bestanden
-178 Tests, Typprüfung und Build. Der Test mit externer PostgreSQL-Instanz
-läuft in GitHub-CI.
+178 Tests, Typprüfung und Build. GitHub **43197870625** bestand mit
+179 Tests, PostgreSQL, Chromium und WebKit.
 
 ## Zentrale Abmeldung – 12.11.2026
 
@@ -31,6 +31,13 @@ Hub-Sender sperrte die vorherige passwortlose lokale Sitzung und die
 vorherige Worlds-Sitzung. Die neuere Worlds-Sitzung, das Kontrollprofil
 und die bestehende Projektzuordnung funktionierten weiter. Beide
 künstlichen Testprofile und ihre Sitzungseinträge wurden entfernt.
+
+Das echte Testkonto hatte vor der gemeinsamen Hub-Abmeldung eine
+aktive Slop-Sitzung. Der erste Versand scheiterte in der Hub-Laufzeit.
+Nach der Korrektur bestätigte Slop beim geplanten Wiederholungsversuch
+den ursprünglichen Widerruf vom 12.11. um 11:02:39 MEZ. In der
+QA-Datenbank blieben keine alten Sitzungen des Kontos. Der Hub-
+Testschalter wurde anschließend zurückgenommen.
 
 ## Bestehendes Profil und zentrale Anmeldung
 
