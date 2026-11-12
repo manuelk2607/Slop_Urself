@@ -18,7 +18,11 @@ Profil-ID und Auth-Version mit dem Produktionsprofil überein. Produktion
 enthält 13 Profile, 15 Spieler, 4 Runden, 2 Stimmen und 4 Videoeinträge.
 Die Mapping-Tabelle fehlt. Der bestehende Sicherungszweig ist Kind der
 Produktionsdatenbank und Ausgangspunkt des bereits geprüften QA-Restores.
-Neon meldet sechs Stunden Wiederherstellungshistorie.
+Alle sechs Quelltabellen stimmen heute per Prüfsumme mit dem wieder-
+hergestellten Stand überein. Neon meldet sechs Stunden Wiederherstellungs-
+historie. Cloudflare zeigt `4b62baad` bei 100 Prozent als Ausgangsversion.
+Der öffentliche Slop-OIDC-Client ist aktiviert und hat die genaue
+Produktions-Callback-Adresse sowie die passende Ressource.
 
 Das bestehende Migrationstool hat einen getrennten Produktionsmodus.
 Er installiert die Worlds-Tabellen und übernimmt genau ein ausdrücklich
