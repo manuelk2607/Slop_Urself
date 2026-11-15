@@ -32,6 +32,11 @@ blieben bei 13 Profilen, 12 Räumen, 15 Spielern, 4 Runden, 2 Stimmen und
 4 Videoeinträgen. Sämtliche sechs Prüfsummen stimmen exakt mit dem Stand vor
 dieser Korrektur überein.
 
+Auch die lokale Abmeldung ist produktiv bestätigt: Sie entfernte ausschließlich
+die Slop-Sitzung. Der unverändert aktive zentrale Worlds-Login führte ohne
+Passwort oder erneuten Consent zurück zum verknüpften Profil; die Spielsession
+wurde anschließend wiederhergestellt.
+
 ### Produktive Datenfreigabe – 15.11.2026
 
 Nach ausdrücklicher Freigabe wurde der compute-freie Sicherungszweig
@@ -62,8 +67,8 @@ hostgebundenem HttpOnly-Lax-Cookie. Alle sechs Projektquellen stimmen nach dem
 Deployment weiterhin per Anzahl und Prüfsumme exakt überein. Die reale
 Consent-Seite für Slop Urself wurde mit der vorhandenen zentralen Sitzung
 erreicht. Consent, Zuordnung zum Profil Manuel, aktiver Rücksprung in die
-Spiel-Lobby und die weiterhin erzwungene HF-Pflicht sind produktiv bestätigt.
-Die produktive Abmeldung bleibt noch offen.
+Spiel-Lobby, lokale Ab-/Wiederanmeldung und die weiterhin erzwungene HF-Pflicht
+sind produktiv bestätigt.
 
 Erneuter lesender Produktionsabgleich am 15.11.2026, 09:40:46 UTC,
 WAL `0/3C04130`: 13 Profile, 15 Spieler, 12 Räume, 4 Runden, 2 Stimmen
