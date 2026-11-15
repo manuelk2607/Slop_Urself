@@ -19,8 +19,18 @@ Selbstverknüpfung des Besitzerprofils bleibt gesperrt; Verwaltungsrechte
 erfordern weiterhin den getrennten Verwaltungsschlüssel.
 
 Lokal bestanden 181 Tests (ein dokumentierter Build-Test übersprungen),
-Typprüfung und Build. Produktivveröffentlichung und persönlicher Rücksprung
-mit aktiver Spielsession stehen noch aus.
+Typprüfung und Build. Commit `a8d2960` bestand GitHub **43731189933** in
+PostgreSQL 17 sowie Chromium und WebKit. Produktiv ist Version
+`e2e6566b-53d3-4f1d-a368-84c1fd5e6812` aktiv.
+
+Der bestehende Safari-Login zeigte nach Neuladen „Mit diesem Profil spielen“
+statt der erneuten Anmeldung. Der Wechsel öffnete die echte Spiel-Lobby als
+Manuel. Ohne persönliche HF-Verbindung blieb die Raum-Erstellung mit
+„HF verbinden“ gesperrt. Produktiv bestehen genau eine Identitätszuordnung
+und eine aktive Worlds-Spielsitzung; kein Widerruf. Die sechs Projektquellen
+blieben bei 13 Profilen, 12 Räumen, 15 Spielern, 4 Runden, 2 Stimmen und
+4 Videoeinträgen. Sämtliche sechs Prüfsummen stimmen exakt mit dem Stand vor
+dieser Korrektur überein.
 
 ### Produktive Datenfreigabe – 15.11.2026
 
@@ -51,9 +61,9 @@ Hub-Anbieter mit PKCE-S256, registriertem Client/Callback und sicherem
 hostgebundenem HttpOnly-Lax-Cookie. Alle sechs Projektquellen stimmen nach dem
 Deployment weiterhin per Anzahl und Prüfsumme exakt überein. Die reale
 Consent-Seite für Slop Urself wurde mit der vorhandenen zentralen Sitzung
-erreicht. Consent und Zuordnung zum Profil Manuel sind bestätigt; die dabei
-entdeckte Besitzerprofil-Sitzungskorrektur ist lokal geprüft und noch nicht
-produktiv veröffentlicht. HF-Pflicht und produktive Abmeldung bleiben offen.
+erreicht. Consent, Zuordnung zum Profil Manuel, aktiver Rücksprung in die
+Spiel-Lobby und die weiterhin erzwungene HF-Pflicht sind produktiv bestätigt.
+Die produktive Abmeldung bleibt noch offen.
 
 Erneuter lesender Produktionsabgleich am 15.11.2026, 09:40:46 UTC,
 WAL `0/3C04130`: 13 Profile, 15 Spieler, 12 Räume, 4 Runden, 2 Stimmen
