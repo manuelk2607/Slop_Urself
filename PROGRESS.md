@@ -7,6 +7,16 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+Erneuter lesender Produktionsabgleich am 15.11.2026, 09:40:46 UTC,
+WAL `0/3C04130`: 13 Profile, 15 Spieler, 12 Räume, 4 Runden, 2 Stimmen
+und 4 Videoeinträge. Alle sechs Quelltabellen erhielten neue Prüfsummen.
+Das eindeutig benannte passwortlose Profil ist weiterhin einmal vorhanden
+und unverändert auf Auth-Version 0. Worlds-Tabellen und Zuordnungen fehlen
+weiterhin. Die ältere QA-Sicherung bildet den inzwischen gewachsenen
+Produktionsstand daher nicht mehr vollständig ab und wird nicht als aktueller
+Rücksetzpunkt verwendet. Vor einer Schaltung ist eine neue Sicherung nötig.
+Die öffentliche Produktion zeigt weiterhin den bisherigen lokalen Login.
+
 Die erste Freigabe ist auf die vorhandene Slop-Domain, den produktiven
 Neon-Endpunkt und den registrierten Slop-OIDC-Client begrenzt. Verknüpfte
 Profile melden sich zentral an. Für ausstehende Übernahmen bleibt der
