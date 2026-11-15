@@ -1,18 +1,41 @@
 # Slop Urself – Worlds-Integration
 
-Featurebranch `feature/worlds-hub-sso`. Produktion und ihre Konten bleiben
-unverändert. Der eigene Worker `slopurself-worlds-pilot` verwendet nur den
+Featurebranch `feature/worlds-hub-sso`. Der eigene Worker
+`slopurself-worlds-pilot` verwendet nur den
 wiederhergestellten QA-Zweig, simulierte Generierung und noindex/no-store.
 Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Produktive Datenfreigabe – 15.11.2026
+
+Nach ausdrücklicher Freigabe wurde der compute-freie Sicherungszweig
+`before-worlds-production-20261115` (`br-summer-frog-b14e2j9y`) direkt von
+Produktion angelegt und als bereit bestätigt. Wiederherstellungspunkt:
+`0/3C24AC8`. Der geprüfte Produktionslauf bestand zuerst vollständig mit
+Rollback und wurde danach einmal angewendet. Er installierte ausschließlich
+die additiven Worlds-Tabellen und verknüpfte genau das bestätigte
+passwortlose Profil Manuel mit der verifizierten zentralen Identität.
+
+Nach Anwendung: genau eine Worlds-Zuordnung, eine verbrauchte Freigabe,
+keine Worlds-Sitzung und kein Widerruf. Die sechs Projektquellen blieben
+exakt unverändert: 13 Profile, 12 Räume, 15 Spieler, 4 Runden, 2 Stimmen,
+4 Videoeinträge; alle Prüfsummen stimmen mit dem Stand vor der Migration
+überein. HF-Verbindungen und Generierung wurden nicht verändert.
+
+Der Produktivworker ist noch nicht veröffentlicht. Der erste neue Wrangler-
+OAuth-Anlauf endete vor dem Deployment mit `request_forbidden` wegen einer
+fehlenden CSRF-Sitzungsangabe. Kein Worker-Upload und keine Cloudflare-
+Änderung erfolgten. Nächster Schritt: frische persönliche Cloudflare-
+Anmeldung, Ausgangsversion feststellen, `npm run cf:deploy:worlds`, danach
+öffentlichen Login, Callback, Profil, HF-Pflicht und Abmeldung prüfen.
+
 Erneuter lesender Produktionsabgleich am 15.11.2026, 09:40:46 UTC,
 WAL `0/3C04130`: 13 Profile, 15 Spieler, 12 Räume, 4 Runden, 2 Stimmen
 und 4 Videoeinträge. Alle sechs Quelltabellen erhielten neue Prüfsummen.
 Das eindeutig benannte passwortlose Profil ist weiterhin einmal vorhanden
-und unverändert auf Auth-Version 0. Worlds-Tabellen und Zuordnungen fehlen
-weiterhin. Die ältere QA-Sicherung bildet den inzwischen gewachsenen
+und unverändert auf Auth-Version 0. Zu diesem Zeitpunkt fehlten Worlds-
+Tabellen und Zuordnungen noch. Die ältere QA-Sicherung bildet den inzwischen gewachsenen
 Produktionsstand daher nicht mehr vollständig ab und wird nicht als aktueller
 Rücksetzpunkt verwendet. Vor einer Schaltung ist eine neue Sicherung nötig.
 Die öffentliche Produktion zeigt weiterhin den bisherigen lokalen Login.
@@ -43,9 +66,10 @@ Wiederherstellungspunkt und die aktive Cloudflare-Version festhalten.
 Nach Anwendung Profil-ID, Quelltabellen, zentralen Browser-Login und
 HF-Pflicht prüfen. Bei Rücknahme den gespeicherten Worker-Stand aktivieren.
 
-Die produktive Schaltung steht aus. Der vorhandene Cloudflare-
+Die produktive Worker-Schaltung steht aus. Der vorhandene Cloudflare-
 Deployment-Zugang gilt für den Testworker. Wrangler hat aktuell keinen
-Zugang zum Produktionsworker. Die Produktionsdatenbank wurde nur gelesen.
+Zugang zum Produktionsworker. Die oben dokumentierte produktive Datenmigration
+ist abgeschlossen; alle Projektquellen blieben unverändert.
 Der produktive Schalter und der weiter nutzbare Administrationszugang
 in `191501e` sind lokal typgeprüft. GitHub **43204100289** bestätigte
 Chromium, WebKit und die PostgreSQL-Integration.
