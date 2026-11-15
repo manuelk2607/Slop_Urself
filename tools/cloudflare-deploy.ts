@@ -9,7 +9,7 @@ const wrangler = 'node_modules/wrangler/bin/wrangler.js';
 const config = ['--config', 'cloudflare/wrangler.toml'];
 async function main() {
  const mode = deploymentMode(process.argv.slice(2));
- const localEnv = existsSync('.env.local') ? parse(readFileSync('.env.local')) : {};
+ const localEnv = {...process.env,...(existsSync('.env.local') ? parse(readFileSync('.env.local')) : {})};
  if (!mode.dryRun) {
     const check = spawnSync(process.execPath, [wrangler, 'secret', 'list', ...config], { encoding: 'utf8' });
     if (check.error) throw check.error;

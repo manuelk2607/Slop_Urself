@@ -23,12 +23,21 @@ exakt unverändert: 13 Profile, 12 Räume, 15 Spieler, 4 Runden, 2 Stimmen,
 4 Videoeinträge; alle Prüfsummen stimmen mit dem Stand vor der Migration
 überein. HF-Verbindungen und Generierung wurden nicht verändert.
 
-Der Produktivworker ist noch nicht veröffentlicht. Der erste neue Wrangler-
-OAuth-Anlauf endete vor dem Deployment mit `request_forbidden` wegen einer
-fehlenden CSRF-Sitzungsangabe. Kein Worker-Upload und keine Cloudflare-
-Änderung erfolgten. Nächster Schritt: frische persönliche Cloudflare-
-Anmeldung, Ausgangsversion feststellen, `npm run cf:deploy:worlds`, danach
-öffentlichen Login, Callback, Profil, HF-Pflicht und Abmeldung prüfen.
+Der Produktivworker wurde nach erfolgreicher persönlicher Wrangler-Anmeldung
+mit dem abgesicherten Worlds-Modus veröffentlicht. Ausgangsversion
+`4b62baad-18a8-4489-9f1e-5e5925146f1a`, neue aktive Version
+`bc0caef6-046f-4437-a315-c64e5155e440`, Deployment
+`31f34ce2-13b2-4ac9-b879-9382a16abd85`, 100 Prozent Traffic. Alle bisherigen
+Spiel-, HF-, Storage- und Durable-Object-Bindings blieben erhalten.
+
+Live bestätigt: Startseite, robots und Sitemap HTTP 200; anonyme private
+Session HTTP 401 mit no-store/noindex; Worlds-Loginstart HTTP 303 zum exakten
+Hub-Anbieter mit PKCE-S256, registriertem Client/Callback und sicherem
+hostgebundenem HttpOnly-Lax-Cookie. Alle sechs Projektquellen stimmen nach dem
+Deployment weiterhin per Anzahl und Prüfsumme exakt überein. Die reale
+Consent-Seite für Slop Urself wurde mit der vorhandenen zentralen Sitzung
+erreicht. Persönliches „Zugriff erlauben“, Rücksprung zum Profil Manuel,
+HF-Pflicht und produktive Abmeldung sind noch offen.
 
 Erneuter lesender Produktionsabgleich am 15.11.2026, 09:40:46 UTC,
 WAL `0/3C04130`: 13 Profile, 15 Spieler, 12 Räume, 4 Runden, 2 Stimmen
@@ -66,10 +75,9 @@ Wiederherstellungspunkt und die aktive Cloudflare-Version festhalten.
 Nach Anwendung Profil-ID, Quelltabellen, zentralen Browser-Login und
 HF-Pflicht prüfen. Bei Rücknahme den gespeicherten Worker-Stand aktivieren.
 
-Die produktive Worker-Schaltung steht aus. Der vorhandene Cloudflare-
-Deployment-Zugang gilt für den Testworker. Wrangler hat aktuell keinen
-Zugang zum Produktionsworker. Die oben dokumentierte produktive Datenmigration
-ist abgeschlossen; alle Projektquellen blieben unverändert.
+Die produktive Worker-Schaltung und Datenmigration sind abgeschlossen; alle
+Projektquellen blieben unverändert. Die vorübergehende Wrangler-Anmeldung
+wird nach der noch offenen persönlichen Browserabnahme wieder entfernt.
 Der produktive Schalter und der weiter nutzbare Administrationszugang
 in `191501e` sind lokal typgeprüft. GitHub **43204100289** bestätigte
 Chromium, WebKit und die PostgreSQL-Integration.
