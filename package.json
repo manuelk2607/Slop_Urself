@@ -16,6 +16,8 @@
     "cf:build": "npm run build",
     "cf:dev": "npm run cf:build && npx wrangler dev --config cloudflare/wrangler.toml",
     "cf:deploy": "npm run cf:build && node --import tsx tools/cloudflare-deploy.ts",
+    "cf:deploy:worlds": "npm run cf:build && node --import tsx tools/cloudflare-deploy.ts --worlds-production",
+    "cf:deploy:worlds:dry": "npm run cf:build && node --import tsx tools/cloudflare-deploy.ts --worlds-production --dry-run",
     "cf:secrets": "node --import tsx tools/cloudflare-setup.ts upload",
     "cf:local": "node --import tsx tools/cloudflare-setup.ts local",
     "admin:setup": "node --import tsx tools/admin-setup.ts",

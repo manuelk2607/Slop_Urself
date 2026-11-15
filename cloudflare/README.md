@@ -48,6 +48,13 @@ eingerichtetes Archiv ebenfalls abgelehnt, bevor GPU-Kontingent verbraucht wird.
 Das Video wird vor VOTING archiviert. Ein fehlgeschlagener Archiv-Abruf wird
 nicht als erfolgreich vorbereitetes Video mit temporärem Link veröffentlicht.
 
+Alle Deployments erhalten vorhandene, nur im Cloudflare-Dashboard gesetzte
+Variablen. Die Worlds-Produktionsanmeldung wird ausschließlich über
+`npm run cf:deploy:worlds` aktiviert. Dieser Modus akzeptiert nur die fest
+geprüfte Produktionsdatenbank und veröffentlicht erst, wenn alle erforderlichen
+Worlds-Tabellen vorhanden sind. `npm run cf:deploy:worlds:dry` prüft Build und
+Bindings ohne Upload.
+
 cf:secrets überträgt DATABASE_URL,
 AUTH_COOKIE_SECRET und die zwei privaten Storage-Schlüssel aus .env.local.
 Der Spiellink benötigt keinen zusätzlichen Zugangscode. Jeder Spieler legt

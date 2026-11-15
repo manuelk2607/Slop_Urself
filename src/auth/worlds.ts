@@ -10,6 +10,7 @@ import { hash, type Session } from './worlds-shared/store.ts';
 import {requestLocale,tr} from '../i18n/worlds';
 import {escapeWorlds,worldsPage} from './worlds-page';
 import {approvedProfile,consumeApprovedProfile} from './worlds-approved';
+import { isWorldsProductionDatabase, WORLDS_PRODUCTION_ORIGIN, WORLDS_PRODUCTION_VARS } from './worlds-production';
 
 export interface WorldsEnv {
     WORLDS_PRODUCTION_ENABLED?: string;
@@ -29,9 +30,7 @@ export interface WorldsEnv {
 
 const production = 'slopurself.maki26.workers.dev';
 const productionDatabase = 'ep-holy-voice-b1djk94x';
-const productionOrigin = 'https://' + production;
-const worldsIssuer = 'https://ep-bold-boat-batl101c.neonauth.c-8.eu-central-1.aws.neon.tech/worlds_identity/auth';
-const productionClient = 'BBHPxFFlfMahuTkpeBpLeUfkqjVGYfPO';
+const productionOrigin = WORLDS_PRODUCTION_ORIGIN;
 export const WORLDS_PATHS = ['/auth/login', '/auth/start', '/auth/callback', '/auth/logout', '/auth/backchannel-logout',
     '/auth/worlds', '/auth/worlds/link', '/auth/worlds/claim', '/auth/worlds/play', sessionRevocationPath];
 type SlopWorldsConfig = AuthConfig & { production?: boolean; sessionEventKey?: ReturnType<typeof sessionEventPublicKey> };
@@ -53,15 +52,10 @@ export function isolatedWorldsTarget(env: WorldsEnv) {
 
 export function worldsProductionEnabled(env: WorldsEnv) {
     if (env.WORLDS_PRODUCTION_ENABLED !== 'true' || env.WORLDS_PILOT_ENABLED === 'true' ||
-        env.WORLDS_ISSUER !== worldsIssuer || env.WORLDS_CLIENT_ID !== productionClient ||
-        env.WORLDS_RESOURCE !== productionOrigin + '/api' || !env.DATABASE_URL) return false;
-    try {
-        const database = new URL(env.DATABASE_URL);
-        const host = database.hostname.replace(/-pooler\./, '.');
-        return ['postgres:', 'postgresql:'].includes(database.protocol) &&
-            host === productionDatabase + '.c-5.eu-central-1.aws.neon.tech' &&
-            decodeURIComponent(database.pathname) === '/Slop_Urself';
-    } catch { return false; }
+        env.WORLDS_ISSUER !== WORLDS_PRODUCTION_VARS.WORLDS_ISSUER ||
+        env.WORLDS_CLIENT_ID !== WORLDS_PRODUCTION_VARS.WORLDS_CLIENT_ID ||
+        env.WORLDS_RESOURCE !== WORLDS_PRODUCTION_VARS.WORLDS_RESOURCE) return false;
+    return isWorldsProductionDatabase(env.DATABASE_URL);
 }
 
 class SlopWorldsStore extends PostgresAuthStore {

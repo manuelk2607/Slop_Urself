@@ -134,6 +134,16 @@ Der bisherige strenge Anbieter-Manifestvergleich bleibt unverändert.
 
 ## Offen / nächster konkreter Schritt
 
+### Sicherer Worlds-Produktivweg – 15.11.2026
+
+Der allgemeine Cloudflare-Upload erhält nun vorhandene Dashboard-Variablen.
+Worlds lässt sich nur über einen eigenen Produktionsmodus aktivieren; dieser
+akzeptiert ausschließlich die fest geprüfte Slop-Datenbank und kontrolliert vor
+dem echten Upload alle erforderlichen Worlds-Tabellen. Ein lokaler Trockenlauf
+bestätigte bestehende Spiel-/HF-Bindings plus die vier exakten Worlds-Bindings,
+ohne Upload. **181/181 ausgeführte Tests** (ein unveränderter CI-Artefakttest
+planmäßig übersprungen) und Build bestanden. Produktion wurde nicht verändert.
+
 Die Deployment-Rücknahme blockiert die nächste Phase nicht mehr. Weiter offen:
 unterstützter globaler Logout, Kontolöschung, sichere Eigentumsnachweise für die
 übrigen Profile, neue lokale Profile aus zentralen Identitäten und reale
