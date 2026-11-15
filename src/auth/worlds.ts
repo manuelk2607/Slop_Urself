@@ -100,7 +100,7 @@ async function browserSessionKey(request: Request, config: AuthConfig) {
     if (raw && /^[A-Za-z0-9_-]{32,128}$/.test(raw)) return hash(raw);
 }
 
-export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQuery, adminId?: string): LocalAuthConfig['worlds'] {
+export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQuery): LocalAuthConfig['worlds'] {
     if (!config) return;
     const { issuer } = config;
     const fence = config.sessionEventKey ? ` AND NOT EXISTS (
@@ -116,15 +116,13 @@ export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQu
             JOIN worlds_identity_links l ON l.issuer=s.issuer AND l.subject=s.subject AND l.local_user_id=s.local_user_id
             JOIN user_profiles p ON p.id=s.local_user_id AND p.auth_version=s.local_auth_version
             WHERE s.id=$1 AND s.issuer=$2 AND s.expires>extract(epoch FROM now())*1000
-              AND p.id IS DISTINCT FROM $3
               ${fence}
-        `, [key, issuer, adminId ?? null]);
+        `, [key, issuer]);
         if (!row || typeof row.id !== 'string' || typeof row.name !== 'string' || typeof row.auth_version !== 'string') return;
         return { id: row.id, name: row.name, expiresAt: Number(row.expires), authVersion: row.auth_version, worldsSessionKey: key };
     }
     return {
         async legacyAllowed(account){
-            if (account.id === adminId) return true;
             const [link] = await query(config.sessionEventKey ? `
                 SELECT extract(epoch FROM l.linked_at)*1000 AS linked_at,r.revoked_through
                 FROM worlds_identity_links l LEFT JOIN public.worlds_session_revocations r USING(issuer,subject)
@@ -137,8 +135,7 @@ export function worldsAccounts(config: SlopWorldsConfig | undefined, query: PgQu
                 (link.revoked_through == null || account.issuedAt > Number(link.revoked_through));
         },
         async requiresCentral(id){
-            return id !== adminId &&
-                (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',[issuer,id])).length > 0;
+            return (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND local_user_id=$2',[issuer,id])).length > 0;
         },
         async read(request) {
             const key = await browserSessionKey(request, config);
@@ -193,7 +190,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
             if (!sameOrigin(request, config.origin)) return refused();
             const current = await session(request, config);
             const body = new URLSearchParams(await boundedBody(request, 2048));
-            const account = await worldsAccounts(config, query, local.ADMIN_ACCOUNT_ID)?.read(request);
+            const account = await worldsAccounts(config, query)?.read(request);
             return current && body.get('csrf') === current.csrf && account ? startPlaying() : refused();
         }
         if (url.pathname === '/auth/worlds/claim') {
@@ -253,7 +250,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
         if (!/^[A-Za-z0-9_-]{32,128}$/.test(current.csrf)) return refused();
         const field = `<input type="hidden" name="csrf" value="${current.csrf}">`;
         const linked = (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND subject=$2', [current.issuer, current.sub])).length === 1;
-        const account = linked && await worldsAccounts(config, query, local.ADMIN_ACCOUNT_ID)?.read(request);
+        const account = linked && await worldsAccounts(config, query)?.read(request);
         const approved=!linked&&config.reauthEnabled?await approvedProfile(query,current.issuer,current.sub,local.ADMIN_ACCOUNT_ID):undefined;
         const status=`<section class="worlds-status" role="status"><p>✓ ${text('signedIn')}</p><h2>${text(linked?'linked':'pending')}</h2>${current.name?`<small>${escapeWorlds(current.name)}</small>`:''}</section>`;
         let action:string;

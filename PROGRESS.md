@@ -7,6 +7,21 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Besitzerprofil-Rücksprung – 15.11.2026
+
+Der reale Consent und Rücksprung haben die zentrale Identität korrekt mit dem
+bestehenden Profil Manuel verknüpft. Die anschließende Spielanmeldung blieb
+jedoch aus, weil die Laufzeit das zugleich als Besitzerkonto konfigurierte
+Profil pauschal aus Worlds-Spielsitzungen ausschloss. Die Korrektur akzeptiert
+nun auch ein bereits betreibergeprüft verknüpftes Besitzerprofil als normales
+Spielprofil und erzwingt für dessen lokale Anmeldung Worlds Hub. Öffentliche
+Selbstverknüpfung des Besitzerprofils bleibt gesperrt; Verwaltungsrechte
+erfordern weiterhin den getrennten Verwaltungsschlüssel.
+
+Lokal bestanden 181 Tests (ein dokumentierter Build-Test übersprungen),
+Typprüfung und Build. Produktivveröffentlichung und persönlicher Rücksprung
+mit aktiver Spielsession stehen noch aus.
+
 ### Produktive Datenfreigabe – 15.11.2026
 
 Nach ausdrücklicher Freigabe wurde der compute-freie Sicherungszweig
@@ -36,8 +51,9 @@ Hub-Anbieter mit PKCE-S256, registriertem Client/Callback und sicherem
 hostgebundenem HttpOnly-Lax-Cookie. Alle sechs Projektquellen stimmen nach dem
 Deployment weiterhin per Anzahl und Prüfsumme exakt überein. Die reale
 Consent-Seite für Slop Urself wurde mit der vorhandenen zentralen Sitzung
-erreicht. Persönliches „Zugriff erlauben“, Rücksprung zum Profil Manuel,
-HF-Pflicht und produktive Abmeldung sind noch offen.
+erreicht. Consent und Zuordnung zum Profil Manuel sind bestätigt; die dabei
+entdeckte Besitzerprofil-Sitzungskorrektur ist lokal geprüft und noch nicht
+produktiv veröffentlicht. HF-Pflicht und produktive Abmeldung bleiben offen.
 
 Erneuter lesender Produktionsabgleich am 15.11.2026, 09:40:46 UTC,
 WAL `0/3C04130`: 13 Profile, 15 Spieler, 12 Räume, 4 Runden, 2 Stimmen

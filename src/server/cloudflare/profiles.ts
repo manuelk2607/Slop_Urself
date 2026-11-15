@@ -21,6 +21,6 @@ export const cloudflareWorldsQuery = (env: Env): PgQuery => async (text, values)
 export function cloudflareAuth(env: Env, profiles = serviceProfiles(env)) {
     const query = cloudflareWorldsQuery(env);
     return profileAuthConfig({
-        ...env, worlds: worldsAccounts(worldsConfig(env, query), query, env.ADMIN_ACCOUNT_ID)
+        ...env, worlds: worldsAccounts(worldsConfig(env, query), query)
     }, profiles);
 }

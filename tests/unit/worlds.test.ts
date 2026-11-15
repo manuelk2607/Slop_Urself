@@ -101,9 +101,6 @@ test('production Worlds sign-in requires the exact live database and client and 
     };
     const query = async () => { throw new Error('Anonymous account page must not query the database'); };
     assert.equal(worldsConfig(production, query)?.origin, origin);
-    const admin = worldsAccounts(worldsConfig(production, query), query, 'admin')!;
-    assert.equal(await admin.requiresCentral?.('admin'), false);
-    assert.equal(await admin.legacyAllowed?.({id:'admin',name:'Admin',expiresAt:Date.now()+1000}), true);
     for (const config of [
         {...production, WORLDS_PRODUCTION_ENABLED: 'false'},
         {...production, WORLDS_CLIENT_ID: env.WORLDS_CLIENT_ID},
@@ -347,7 +344,7 @@ test('Slop Worlds linking checks both proofs and atomically keeps the local prof
         assert.equal((await profiles.find(protectedProfile.name))?.id, protectedProfile.id);
         const third = await central(Date.now());
         assert.equal((await post(third, renewed)).status, 403);
-        const settings = { ...local, AI_PROVIDER: 'wan22', worlds: worldsAccounts(config, query, admin.id) };
+        const settings = { ...local, AI_PROVIDER: 'wan22', worlds: worldsAccounts(config, query) };
         const auth = profileAuthConfig(settings, profiles);
         const sessionRequest = (cookie: string, method = 'GET') => new Request(origin + '/api/session', {
             method, headers: {origin, cookie}, body: method === 'POST' ? '{"mode":"refresh"}' : undefined

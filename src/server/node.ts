@@ -59,7 +59,7 @@ const worlds = worldsConfig(process.env, queryWorlds);
 if (worlds && process.env.WORLDS_TRUST_LOOPBACK_PROXY === 'true') app.set('trust proxy', 'loopback');
 const config: AuthConfig & HfConfig & QuotaConfig & ArchiveConfig = profileAuthConfig({
     ...process.env, AI_PROVIDER, AI_PROVIDER_CHAIN, AI_IMAGE_PROFILE: process.env.AI_IMAGE_PROFILE || 'bounded',
-    worlds: worldsAccounts(worlds, queryWorlds, process.env.ADMIN_ACCOUNT_ID)
+    worlds: worldsAccounts(worlds, queryWorlds)
 }, getProfiles());
 const hf = new HfConnections(nodeHfStorage(process.env.HF_LOCAL_STORAGE_DIR || path.join(process.cwd(), '.local/hf')), config);
 const imageData = new Map<string, unknown>();

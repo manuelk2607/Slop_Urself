@@ -30,9 +30,9 @@ test('reviewed passwordless migration preserves profile and active Worlds sessio
   assert.equal(await applyApprovedMigration(query,id),true);assert.equal(await applyApprovedMigration(query,id),false);
   assert.equal(await approvedProfile(query,issuer,subject),undefined);
   assert.equal((await profiles.find(profile.name))?.id,profile.id);assert.equal(!!(await profiles.find(profile.name))?.passwordHash,false);
-  const worlds=worldsAccounts(config,query),local={AUTH_COOKIE_SECRET:'fixture-only-secret-long-enough-32-characters',worlds};
+  const worlds=worldsAccounts(config,query),local={AUTH_COOKIE_SECRET:'fixture-only-secret-long-enough-32-characters',ADMIN_ACCOUNT_ID:profile.id,worlds};
   const request=new Request(origin+'/api/session',{headers:{cookie:SESSION_COOKIE+'='+raw}});
-  assert.equal((await requestAccount(request,profileAuthConfig(local,profiles)))?.id,profile.id,'Existing central session gains its approved game profile without another login');
+  assert.equal((await requestAccount(request,profileAuthConfig(local,profiles)))?.id,profile.id,'An explicitly reviewed owner profile can play through Worlds without granting administration');
   const otherSession=await config.store.getSession('other-session');assert.equal(otherSession?.sub,'other-subject');
   t.mock.method(globalThis,'fetch',async()=>new Response('{}',{status:500}));
   await assert.rejects(()=>hf.finish(new URL(pendingHf.url).searchParams.get('state'),'fixture-code',pendingHf.nonce,origin),(error:unknown)=>(error as {code?:string}).code==='exchange_failed','Pending HF authorization retains its original account proof after migration');
