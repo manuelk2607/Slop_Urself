@@ -8,6 +8,7 @@ export interface AuthConfig {
     ADMIN_ACCOUNT_ID?: string; ADMIN_ACCESS_KEY?: string;
     validateAccount?: (account: Account) => Promise<boolean>;
     worlds?: {
+        centralRegistration?: boolean;
         requiresCentral?(id:string):Promise<boolean>;
         legacyAllowed?(account:Account):Promise<boolean>;
         read(request: Request): Promise<Account | undefined>;
@@ -101,6 +102,9 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         data = JSON.parse(body);
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
     } catch { return respond({ error: 'Ungültige Anfrage.' }, 400); }
+    if (data.mode === 'create' && config.worlds?.centralRegistration) {
+        return respond({code:'worlds_required',error:'Neue Profile werden mit einem Worlds-Konto erstellt.'},409);
+    }
     let profile;
     if (data.mode === 'refresh') {
         try { profile = await requestAccount(request, config); }

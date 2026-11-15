@@ -7,6 +7,24 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Neue Spielprofile mit Worlds – 15.11.2026
+
+Geprüft, noch nicht veröffentlicht. Ein bestätigtes Worlds-Konto kann nach
+dem Rücksprung einmal ein neues Slop-Spielprofil mit freiem Benutzernamen
+anlegen. Profil, Zuordnung, Audit und Spielsitzung entstehen atomar. Die
+bisherige lokale Registrierung ist im Produktionsmodus geschlossen. Noch
+nicht übernommene Bestandsprofile behalten ihren bisherigen Zugang. Eine
+aktive Migrationsfreigabe verhindert die Erstellung eines zweiten Profils.
+Hugging Face bleibt für Generierung erforderlich.
+
+182 Unit-Tests bestanden, ein dokumentierter Skip. Typprüfung und Build
+bestanden. Chromium und WebKit prüften das DE/EN-Formular bei 320 px,
+Sprachwechsel mit erhaltener Eingabe und die Weitergabe per Same-Origin-POST.
+PostgreSQL 17 bestätigte bei zwei konkurrierenden Sitzungen genau ein neues
+Profil, eine Zuordnung und eine Auditzeile. Die vollständige lokale
+Node-Integration einschließlich Socket.IO, HF-Sperre und Widerruf bestand.
+Nächster Schritt: GitHub-CI und gezielte Veröffentlichung des geprüften Stands.
+
 ### Besitzerprofil-Rücksprung – 15.11.2026
 
 Der reale Consent und Rücksprung haben die zentrale Identität korrekt mit dem

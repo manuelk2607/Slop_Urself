@@ -27,7 +27,7 @@ const server=createServer(async(incoming,outgoing)=>{
   if(incoming.method==='POST'){
    outgoing.writeHead(sameOrigin(request,origin)?200:403,{'content-type':'application/json'});outgoing.end(JSON.stringify({origin:incoming.headers.origin,site:incoming.headers['sec-fetch-site']}));return;
   }
-  const config={origin,issuer:'https://identity.test/auth',clientId:'fixture',algorithm:'EdDSA',reauthEnabled:true,
+  const config={origin,issuer:'https://identity.test/auth',clientId:'fixture',algorithm:'EdDSA',reauthEnabled:true,production:fixture==='new',
    store:{getSession:async()=>fixture?{issuer:'https://identity.test/auth',sub:'synthetic',csrf:'B'.repeat(43),expires:Date.now()+60000,authenticatedAt:Date.now()}:null}} as AuthConfig;
   const response=await worldsResponse(request,config,{AUTH_COOKIE_SECRET:secret},{find:async()=>profile} as never,async()=>[]);
   outgoing.writeHead(response.status,Object.fromEntries(response.headers));outgoing.end(await response.text());
@@ -61,6 +61,15 @@ try{
  const posted=page.waitForResponse(response=>response.request().method()==='POST');
  await page.getByRole('button',{name:'Link this profile to Worlds',exact:true}).click();const postResult=await posted;
  assert.equal(postResult.status(),200);assert.deepEqual(await postResult.json(),{origin,site:'same-origin'});
+ await page.goto(origin+'/auth/worlds?fixture=new&ui_locales=de');
+ const newName=page.getByLabel('Benutzername für dein Spielprofil');
+ await newName.fill('New player');
+ await page.getByRole('button',{name:'English',exact:true}).click();
+ assert.equal(await page.getByLabel('Username for your game profile').inputValue(),'New player');
+ assert.equal(await page.locator('input[name=password]').count(),0);
+ const registration=page.waitForResponse(response=>new URL(response.url()).pathname==='/auth/worlds/new');
+ await page.getByRole('button',{name:'Create a game profile',exact:true}).click();
+ assert.equal((await registration).status(),200);
  await page.goto(origin+'/auth/worlds?fixture=central');
 
  if(process.env.TEST_ARTIFACT_DIR){await page.goto(origin+'/auth/worlds?fixture=central');await page.screenshot({path:join(process.env.TEST_ARTIFACT_DIR,'slop-worlds-account-'+engine.name()+'.png'),fullPage:true});}

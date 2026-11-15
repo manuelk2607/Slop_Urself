@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
-import { worldsConfig } from '../../src/auth/worlds';
+import { worldsConfig, worldsResponse } from '../../src/auth/worlds';
 import {applyApprovedMigration} from '../../src/auth/worlds-approved';
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
@@ -71,6 +71,29 @@ try {
         await query("DELETE FROM user_profiles WHERE id='reviewed-id'");
         console.log('PASS PostgreSQL concurrent reviewed passwordless migration is one-use and rollback preserves the source profile');
     }finally{await competing.end();}
+
+    // Distinct callbacks can each hold a valid session for the same Worlds identity.
+    // If they register different names concurrently, the losing insert must leave no orphan.
+    const registrationDb=new Client({connectionString:connection.href});
+    await registrationDb.connect();
+    try{
+        const subject='concurrent-registration';
+        const registration=async(name:string,execute:typeof query)=>{
+            const browser=token(),csrf=token();
+            await worlds.store.putSession(await hash(browser),{issuer,sub:subject,csrf,expires:now+600_000});
+            return ()=>worldsResponse(new Request(origin+'/auth/worlds/new',{method:'POST',
+                headers:{origin,cookie:SESSION_COOKIE+'='+browser},body:new URLSearchParams({csrf,username:name}),
+            }),{...worlds,production:true},{},{} as never,execute);
+        };
+        const first=await registration('Worlds A',query);
+        const second=await registration('Worlds B',async(sql,values)=>(await registrationDb.query(sql,values)).rows);
+        const registered=await Promise.all([first(),second()]);
+        assert.deepEqual(registered.map(response=>response.status).sort(),[303,409]);
+        assert.equal((await query("SELECT count(*)::int AS n FROM user_profiles WHERE username_key IN ('worlds a','worlds b')"))[0].n,1);
+        assert.equal((await query('SELECT count(*)::int AS n FROM worlds_identity_links WHERE subject=$1',[subject]))[0].n,1);
+        assert.equal((await query('SELECT count(*)::int AS n FROM worlds_link_audit WHERE subject=$1',[subject]))[0].n,1);
+        console.log('PASS PostgreSQL concurrent Worlds registration creates one profile, link and audit record');
+    }finally{await registrationDb.end();}
 
     const probe = createServer().listen(0, '127.0.0.1');
     await once(probe, 'listening');

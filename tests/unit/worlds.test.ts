@@ -88,6 +88,54 @@ test('the pilot fails closed without an exact isolated target and rejects the pr
     assert.equal((await worldsResponse(new Request(origin + '/auth/worlds'), undefined, {}, {} as never, unexpected)).status, 404);
 });
 
+test('new Worlds profiles require the verified browser and never reuse or replace an existing profile',async()=>{
+    const db=new PGlite();
+    try {
+        const query=async(sql:string,values?:unknown[])=>(await db.query<Record<string,unknown>>(sql,values)).rows;
+        const profiles=sqlProfiles(async(sql,values)=>(await db.query<{id:string;name:string}>(sql,values)).rows);
+        const original=(await profiles.create('Existing'))!;
+        for(const statement of WORLDS_SCHEMA) await query(statement);
+        const config={...worldsConfig(env,query)!,production:true};
+        const local={AUTH_COOKIE_SECRET:'fixture-always-separate-from-live-signing-key',worlds:worldsAccounts(config,query)};
+        const raw=token(),csrf=token(),subject='new-subject';
+        await config.store.putSession(await hash(raw),{issuer,sub:subject,csrf,expires:Date.now()+60_000,authenticatedAt:Date.now()-1000});
+        const cookie=SESSION_COOKIE+'='+raw;
+        const create=(username:string,headers={origin,cookie},proof=csrf,settings=config)=>worldsResponse(
+            new Request(origin+'/auth/worlds/new?ui_locales=en',{method:'POST',headers,body:new URLSearchParams({username,csrf:proof})}),
+            settings,local,profiles,query);
+        assert.equal((await create('Fresh',{origin:'https://evil.test',cookie})).status,403);
+        assert.equal((await create('Fresh',{origin,cookie:''})).status,403);
+        assert.equal((await create('Fresh',undefined,'wrong')).status,403);
+        assert.equal((await create('Fresh',undefined,csrf,{...config,production:false})).status,404);
+        assert.equal((await create('')).status,422);
+        assert.equal((await create('ｅＸＩＳＴＩＮＧ')).status,409);
+        assert.equal((await profiles.find('Existing'))?.id,original.id);
+        assert.deepEqual(await query('SELECT local_user_id FROM worlds_identity_links'),[]);
+        await query(`INSERT INTO worlds_migration_approvals
+          (id,issuer,subject,local_user_id,source_auth_version,approved_by,approval_ref,expires_at)
+          VALUES($1,$2,$3,$4,'0','fixture','fixture',now()+interval '1 hour')`,[crypto.randomUUID(),issuer,subject,original.id]);
+        assert.equal((await create('Fresh')).status,409);
+        await query('UPDATE worlds_migration_approvals SET consumed_at=now()');
+        await query('INSERT INTO worlds_session_revocations(issuer,subject,revoked_through) VALUES($1,$2,$3)',[issuer,subject,Date.now()]);
+        assert.equal((await create('Fresh')).status,409);
+        await query('DELETE FROM worlds_session_revocations');
+        const success=await create('Fresh');
+        assert.equal(success.status,303);
+        assert.equal(success.headers.get('location'),'/');
+        assert.equal((await create('Second')).status,409);
+        const account=await requestAccount(new Request(origin+'/api/session',{headers:{cookie}}),profileAuthConfig(local,profiles));
+        assert.equal(account?.name,'Fresh');
+        assert.notEqual(account?.id,original.id);
+        assert.deepEqual(await query('SELECT local_user_id,event FROM worlds_link_audit'),[{local_user_id:account?.id,event:'linked'}]);
+        assert.deepEqual((await profiles.list()).map(profile=>profile.name),['Existing','Fresh']);
+        const legacy=(mode:string,username:string)=>sessionResponse(new Request(origin+'/api/session',{method:'POST',headers:{origin},
+            body:JSON.stringify({mode,username})}),local,profiles);
+        assert.equal((await legacy('create','LocalOnly')).status,409);
+        assert.equal((await legacy('login','Fresh')).status,409);
+        assert.equal((await legacy('login','Existing')).status,200);
+    } finally { await db.close(); }
+});
+
 test('production Worlds sign-in requires the exact live database and client and keeps the transition available', async () => {
     const origin = 'https://slopurself.maki26.workers.dev';
     const production = {

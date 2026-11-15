@@ -58,7 +58,7 @@ export async function initializeAccount(ui: AuthUI) {
             form.removeAttribute('aria-busy');
         }
     }
-    form.addEventListener('submit', event => { event.preventDefault(); void enter('create'); });
+    form.addEventListener('submit', event => { event.preventDefault(); void enter(submit.hidden ? 'login' : 'create'); });
     existing.addEventListener('click', () => { void enter('login'); });
     refresh = async () => {
         if (!ready) return;
@@ -90,6 +90,7 @@ export async function initializeAccount(ui: AuthUI) {
             let locale=normalizeLocale(navigator.language)??'de';try{locale=normalizeLocale(localStorage.getItem(localeKey))??locale;}catch{}
             worldsEnabled=true;worldsLocale=locale;
             form.hidden=!config.worldsTransition;
+            submit.hidden=!!config.worldsTransition;
             document.getElementById('authHint')!.textContent=messages[locale][config.worldsTransition?'centralTransition':'centralOnly'];
             const link=document.querySelector<HTMLAnchorElement>('#worldsSignIn a')!;link.href='/auth/start?ui_locales='+locale;link.textContent=messages[locale].signIn;
         }
