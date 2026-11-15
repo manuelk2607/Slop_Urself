@@ -17,13 +17,22 @@ nicht übernommene Bestandsprofile behalten ihren bisherigen Zugang. Eine
 aktive Migrationsfreigabe verhindert die Erstellung eines zweiten Profils.
 Hugging Face bleibt für Generierung erforderlich.
 
+Der Worlds-Link steht über dem bisherigen Formular. Fehlt das alte Profil,
+verweist die Meldung auf Worlds Hub. Die Hinweise und Fehler zum Übergang
+sind auf Deutsch und Englisch verfügbar. Chromium (1440 px) und WebKit
+(320 px) bestätigten den Link, die ausgeblendete lokale Registrierung und
+die lokalisierte Meldung auf der gebauten Startseite.
+
 182 Unit-Tests bestanden, ein dokumentierter Skip. Typprüfung und Build
 bestanden. Chromium und WebKit prüften das DE/EN-Formular bei 320 px,
 Sprachwechsel mit erhaltener Eingabe und die Weitergabe per Same-Origin-POST.
 PostgreSQL 17 bestätigte bei zwei konkurrierenden Sitzungen genau ein neues
 Profil, eine Zuordnung und eine Auditzeile. Die vollständige lokale
 Node-Integration einschließlich Socket.IO, HF-Sperre und Widerruf bestand.
-Nächster Schritt: GitHub-CI und gezielte Veröffentlichung des geprüften Stands.
+[GitHub CI](https://github.com/manuelk2607/Slop_Urself/actions/runs/43765575904)
+bestand für die ursprüngliche Profilerstellung `fecb3b4`. Der
+Produktions-Trockenlauf inklusive beider Durable-Object-Bindings bestand.
+Nächster Schritt: CI für die aktualisierte Einstiegsansicht und Veröffentlichung.
 
 ### Besitzerprofil-Rücksprung – 15.11.2026
 

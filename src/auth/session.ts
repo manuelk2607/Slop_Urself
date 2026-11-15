@@ -2,6 +2,7 @@ import { jwtVerify, SignJWT } from 'jose';
 import { profileName, type ProfileStore } from './profiles';
 import { hfCookie, HF_COOKIE, HF_STATE_COOKIE } from './huggingface';
 import { checkPassword, hashPassword, validPassword } from './passwords';
+import { messages, requestLocale } from '../i18n/worlds';
 
 export interface AuthConfig {
     AUTH_MODE?: string; AI_PROVIDER?: string; AUTH_COOKIE_SECRET?: string;
@@ -102,8 +103,10 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         data = JSON.parse(body);
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error();
     } catch { return respond({ error: 'Ungültige Anfrage.' }, 400); }
-    if (data.mode === 'create' && config.worlds?.centralRegistration) {
-        return respond({code:'worlds_required',error:'Neue Profile werden mit einem Worlds-Konto erstellt.'},409);
+    const centralRegistration = config.worlds?.centralRegistration === true;
+    const text = messages[requestLocale(request)];
+    if (data.mode === 'create' && centralRegistration) {
+        return respond({code:'worlds_required',error:text.centralRegistrationRequired},409);
     }
     let profile;
     if (data.mode === 'refresh') {
@@ -123,8 +126,9 @@ export async function sessionResponse(request: Request, config: AuthConfig, prof
         catch { return respond({ error: `${data.mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar. Bitte versuche es erneut.` }, 503); }
         if (!profile) return respond({ error: data.mode === 'create'
             ? 'Dieser Benutzername ist bereits vergeben. Melde dich mit dem vorhandenen Benutzer an oder verwende einen anderen Namen.'
+            : centralRegistration ? text.legacyProfileMissing
             : 'Dieser Benutzername existiert noch nicht. Erstelle ihn mit "Neuen Benutzer registrieren".' }, data.mode === 'create' ? 409 : 404);
-        try { if(await config.worlds?.requiresCentral?.(profile.id))return respond({error:'Bitte melde dich für dieses Profil über Worlds Hub an.',code:'worlds_required'},409); }
+        try { if(await config.worlds?.requiresCentral?.(profile.id))return respond({error:text.linkedProfileSignIn,code:'worlds_required'},409); }
         catch { return respond({error:'Die Profilanmeldung ist gerade nicht erreichbar.'},503); }
         if (data.mode === 'login' && profile.passwordHash) {
             if (!data.password) return respond({ error: 'Dieses Profil ist geschützt. Bitte gib dein Passwort ein.', code: 'password_required' }, 401);

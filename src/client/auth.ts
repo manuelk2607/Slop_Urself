@@ -28,7 +28,8 @@ export async function initializeAccount(ui: AuthUI) {
     let hfRequired = true;
     let pending: Promise<void> | undefined;
     async function session(mode: 'create' | 'login' | 'refresh') {
-        const response = await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode, ...(mode !== 'refresh' && password.value ? { password: password.value } : {}) }), signal: AbortSignal.timeout(15_000) });
+        const language = worldsEnabled ? '?ui_locales=' + worldsLocale : '';
+        const response = await fetch('/api/session' + language, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: username.value, mode, ...(mode !== 'refresh' && password.value ? { password: password.value } : {}) }), signal: AbortSignal.timeout(15_000) });
         const result = await response.json() as { account?: Account; token?: string; source?: 'worlds'; error?: string; code?: string };
         if (!response.ok || !result.account || (!result.token && !(mode === 'refresh' && result.source === 'worlds'))) throw new SessionError(result.error || `${mode === 'create' ? 'Die Registrierung' : 'Die Anmeldung'} ist gerade nicht erreichbar.`, response.status, result.code);
         if (result.token) ui.refreshToken(result.token);
@@ -92,6 +93,7 @@ export async function initializeAccount(ui: AuthUI) {
             form.hidden=!config.worldsTransition;
             submit.hidden=!!config.worldsTransition;
             document.getElementById('authHint')!.textContent=messages[locale][config.worldsTransition?'centralTransition':'centralOnly'];
+            if(config.worldsTransition)document.getElementById('authPasswordHint')!.textContent=messages[locale].legacyPasswordHint;
             const link=document.querySelector<HTMLAnchorElement>('#worldsSignIn a')!;link.href='/auth/start?ui_locales='+locale;link.textContent=messages[locale].signIn;
         }
         hfRequired = config.hfRequired ?? config.mockAi !== true;

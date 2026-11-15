@@ -128,9 +128,14 @@ test('new Worlds profiles require the verified browser and never reuse or replac
         assert.notEqual(account?.id,original.id);
         assert.deepEqual(await query('SELECT local_user_id,event FROM worlds_link_audit'),[{local_user_id:account?.id,event:'linked'}]);
         assert.deepEqual((await profiles.list()).map(profile=>profile.name),['Existing','Fresh']);
-        const legacy=(mode:string,username:string)=>sessionResponse(new Request(origin+'/api/session',{method:'POST',headers:{origin},
+        const legacy=(mode:string,username:string)=>sessionResponse(new Request(origin+'/api/session?ui_locales=en',{method:'POST',headers:{origin},
             body:JSON.stringify({mode,username})}),local,profiles);
-        assert.equal((await legacy('create','LocalOnly')).status,409);
+        const disabled=await legacy('create','LocalOnly');
+        assert.equal(disabled.status,409);
+        assert.deepEqual(await disabled.json(),{code:'worlds_required',error:'Sign in through Worlds Hub to create a new game profile.'});
+        const missing=await legacy('login','LocalOnly');
+        assert.equal(missing.status,404);
+        assert.match((await missing.json()).error,/Create a new profile through Worlds Hub/);
         assert.equal((await legacy('login','Fresh')).status,409);
         assert.equal((await legacy('login','Existing')).status,200);
     } finally { await db.close(); }

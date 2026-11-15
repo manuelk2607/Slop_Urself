@@ -75,6 +75,7 @@
         <h1>Slop Urself!</h1>
         <h2>Anmelden oder registrieren</h2>
         <p id="authHint" class="subtitle">Neu dabei? Registriere dich. Schon gespielt? Melde dich mit deinem bisherigen Benutzernamen an.</p>
+        <p id="worldsSignIn" hidden><a class="worlds-auth-link" href="/auth/start">Mit Worlds anmelden</a></p>
         <form id="authForm">
             <label>Benutzername<input id="authUsername" type="text" autocomplete="nickname" maxlength="30" aria-describedby="authHint authError" required></label>
             <details id="authPasswordSection" class="variant-settings">
@@ -86,7 +87,6 @@
             <button id="existingNameButton" class="btn-muted" type="button">Vorhandenen Benutzer anmelden</button>
         </form>
         <p id="authError" class="error-msg" role="alert"></p>
-        <p id="worldsSignIn" hidden><a class="worlds-auth-link" href="/auth/start">Mit Worlds anmelden</a></p>
     </section>
 
     <!-- HEADER (Immer sichtbar im Spiel) -->
