@@ -9,7 +9,10 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ### Neue Spielprofile mit Worlds – 15.11.2026
 
-Geprüft, noch nicht veröffentlicht. Ein bestätigtes Worlds-Konto kann nach
+Live mit `2e5a65a`, Worker `0e3e6114-7a24-48ad-beee-991e8372168b`,
+Deployment `1ec2e32e-d73c-417e-a772-d0d48473add5`, 100 % Traffic.
+Rücknahmeversion `e2e6566b-53d3-4f1d-a368-84c1fd5e6812`.
+Ein bestätigtes Worlds-Konto kann nach
 dem Rücksprung einmal ein neues Slop-Spielprofil mit freiem Benutzernamen
 anlegen. Profil, Zuordnung, Audit und Spielsitzung entstehen atomar. Die
 bisherige lokale Registrierung ist im Produktionsmodus geschlossen. Noch
@@ -29,10 +32,16 @@ Sprachwechsel mit erhaltener Eingabe und die Weitergabe per Same-Origin-POST.
 PostgreSQL 17 bestätigte bei zwei konkurrierenden Sitzungen genau ein neues
 Profil, eine Zuordnung und eine Auditzeile. Die vollständige lokale
 Node-Integration einschließlich Socket.IO, HF-Sperre und Widerruf bestand.
-[GitHub CI](https://github.com/manuelk2607/Slop_Urself/actions/runs/43765575904)
-bestand für die ursprüngliche Profilerstellung `fecb3b4`. Der
-Produktions-Trockenlauf inklusive beider Durable-Object-Bindings bestand.
-Nächster Schritt: CI für die aktualisierte Einstiegsansicht und Veröffentlichung.
+[GitHub CI](https://github.com/manuelk2607/Slop_Urself/actions/runs/43766307425)
+bestand für den veröffentlichten Commit in Chromium und WebKit einschließlich
+PostgreSQL 17. Öffentliche Live-Prüfungen bestätigten DE am Desktop und EN
+mobil, den zentralen Anmelde-Link, die Ablehnung lokaler Neuregistrierung und
+anonymer Profilerstellung sowie die weiterhin aktive persönliche HF-Pflicht.
+Der Kontoinhaber bestätigte die Rückkehr zu seinem bisherigen Spielprofil
+und in die Lobby ohne erneutes Passwort. Ein neues Profil wurde im
+isolierten Test angelegt. Zahl und Prüfsummen der sechs produktiven
+Projekttabellen und der einen Zuordnung stimmten vor und nach dem Release
+überein. Die vorübergehende Cloudflare-Anmeldung wurde beendet.
 
 ### Besitzerprofil-Rücksprung – 15.11.2026
 
@@ -47,8 +56,8 @@ erfordern weiterhin den getrennten Verwaltungsschlüssel.
 
 Lokal bestanden 181 Tests (ein dokumentierter Build-Test übersprungen),
 Typprüfung und Build. Commit `a8d2960` bestand GitHub **43731189933** in
-PostgreSQL 17 sowie Chromium und WebKit. Produktiv ist Version
-`e2e6566b-53d3-4f1d-a368-84c1fd5e6812` aktiv.
+PostgreSQL 17 sowie Chromium und WebKit. Die damals veröffentlichte
+Version war `e2e6566b-53d3-4f1d-a368-84c1fd5e6812`.
 
 Der bestehende Safari-Login zeigte nach Neuladen „Mit diesem Profil spielen“
 statt der erneuten Anmeldung. Der Wechsel öffnete die echte Spiel-Lobby als
