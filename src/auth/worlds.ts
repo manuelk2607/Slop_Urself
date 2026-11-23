@@ -25,6 +25,7 @@ export interface WorldsEnv {
     WORLDS_RECEIPT_URL?: string;
     WORLDS_RECEIPT_KID?: string;
     WORLDS_RECEIPT_KEY?: string;
+    WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK?: string;
     DATABASE_URL?: string;
 }
 

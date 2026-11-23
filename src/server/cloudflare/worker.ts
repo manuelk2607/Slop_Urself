@@ -30,6 +30,14 @@ export default {
         if (env.WORLDS_PILOT_DEPLOYMENT === 'true' && env.AI_PROVIDER === 'mock' && worldsPilotTarget(env)) {
             const query = cloudflareWorldsQuery(env);
             await Promise.all([cleanupWorldsSessions(query), reportWorldsLinks(env, query)]);
+        } else if (env.WORLDS_PILOT_DEPLOYMENT !== 'true' &&
+            env.WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK && worldsProductionEnabled(env)) {
+            try {
+                const result = await reportWorldsLinks(env, cloudflareWorldsQuery(env));
+                if (result && (result.acknowledged || result.conflict)) console.info('Worlds migration receipts', result);
+            } catch {
+                throw new Error('Worlds migration receipt delivery needs a retry');
+            }
         }
     }
 };

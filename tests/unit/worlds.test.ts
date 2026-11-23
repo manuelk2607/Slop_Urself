@@ -8,6 +8,8 @@ import { sqlProfiles } from '../../src/auth/profiles';
 import { accountIsCurrent, profileAuthConfig, requestAccount, sessionResponse } from '../../src/auth/session';
 import { worldsAccounts, worldsConfig, worldsPilotTarget, worldsResponse } from '../../src/auth/worlds';
 import { reportWorldsLinks } from '../../src/auth/worlds-receipts';
+import { applyApprovedMigration } from '../../src/auth/worlds-approved';
+import { WORLDS_PRODUCTION_DATABASE_HOST, WORLDS_PRODUCTION_VARS } from '../../src/auth/worlds-production';
 import { HfConnections, HfRequiredError, requirePlayerHf, type HfStorage } from '../../src/auth/huggingface';
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
@@ -269,6 +271,61 @@ test('the migration outbox retries committed records and records rollback withou
         assert.deepEqual(await query(`SELECT event, receipt_reported_at IS NOT NULL AS sent,
             receipt_conflict_at IS NOT NULL AS conflict FROM worlds_link_audit ORDER BY id`), [
             {event: 'linked', sent: true, conflict: false}, {event: 'unlinked', sent: false, conflict: true}
+        ]);
+    } finally { await db.close(); }
+});
+
+test('production receipts send only consumed legacy approvals and keep the fixed Hub target', async t => {
+    const db = new PGlite();
+    try {
+        const query = async (text: string, params?: unknown[]) => (await db.query<Record<string, unknown>>(text, params)).rows;
+        const profiles = sqlProfiles(async (text, params) => (await db.query<{id: string; name: string}>(text, params)).rows);
+        const reviewed = (await profiles.create('Reviewed'))!;
+        const newlyCreated = (await profiles.create('New'))!;
+        for (const statement of WORLDS_SCHEMA) await query(statement);
+        const idp = WORLDS_PRODUCTION_VARS.WORLDS_ISSUER;
+        const approval = crypto.randomUUID();
+        await query(`INSERT INTO worlds_migration_approvals
+            (id,issuer,subject,local_user_id,source_auth_version,approved_by,approval_ref,expires_at)
+            VALUES($1,$2,'reviewed',$3,$4,'test','fixture',now()+interval '1 hour')`,
+            [approval,idp,reviewed.id,reviewed.authVersion || '0']);
+        assert.equal(await applyApprovedMigration(query, approval), true);
+        await query(`WITH link AS (
+            INSERT INTO worlds_identity_links(issuer,subject,local_user_id) VALUES($1,'new',$2) RETURNING *
+        ) INSERT INTO worlds_link_audit(issuer,subject,local_user_id,event)
+          SELECT issuer,subject,local_user_id,'linked' FROM link`, [idp,newlyCreated.id]);
+        await query('DELETE FROM worlds_identity_links WHERE local_user_id=$1', [newlyCreated.id]);
+        const key = await generateKeyPair('EdDSA', {extractable: true});
+        const target = 'https://worlds-hub.maki26.workers.dev/api/migrations/receipts/slop-urself';
+        const runtime = {
+            ...WORLDS_PRODUCTION_VARS,
+            DATABASE_URL: `postgres://fixture@${WORLDS_PRODUCTION_DATABASE_HOST}/Slop_Urself`,
+            WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK: JSON.stringify({kid:'slop-fixture', ...await exportJWK(key.privateKey)}),
+            WORLDS_RECEIPT_URL: 'https://unrelated.test/api/migrations/receipts/slop-urself',
+        };
+        const send = t.mock.method(globalThis, 'fetch', async (url: string, request: RequestInit) => {
+            assert.equal(url, target);
+            const {payload} = await jwtVerify(String(request.body), key.publicKey, {
+                algorithms: ['EdDSA'], audience: target, subject: 'reviewed',
+            });
+            assert.equal(payload.identity_issuer, idp);
+            assert.equal(payload.account_ref, await hash('worlds:slop-urself:' + reviewed.id));
+            return Response.json({result: 'stored'});
+        });
+        const mustNotQuery = async () => { throw new Error('Unexpected query'); };
+        assert.equal(await reportWorldsLinks({...runtime, DATABASE_URL: env.DATABASE_URL}, mustNotQuery), undefined);
+        assert.equal(await reportWorldsLinks({...runtime, WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK: undefined}, mustNotQuery), undefined);
+        assert.equal(send.mock.callCount(), 0);
+        assert.deepEqual(await reportWorldsLinks(runtime, query), {acknowledged: 1, conflict: 0});
+        await query('DELETE FROM worlds_identity_links WHERE local_user_id=$1', [reviewed.id]);
+        assert.deepEqual(await reportWorldsLinks(runtime, query), {acknowledged: 1, conflict: 0});
+        assert.deepEqual(await reportWorldsLinks(runtime, query), {acknowledged: 0, conflict: 0});
+        assert.deepEqual(await query(`SELECT subject,event,receipt_reported_at IS NOT NULL AS sent
+            FROM worlds_link_audit ORDER BY id`), [
+            {subject: 'reviewed', event: 'linked', sent: true},
+            {subject: 'new', event: 'linked', sent: false},
+            {subject: 'new', event: 'unlinked', sent: false},
+            {subject: 'reviewed', event: 'unlinked', sent: true},
         ]);
     } finally { await db.close(); }
 });

@@ -10,6 +10,9 @@ enabled = true
 [observability.logs]
 invocation_logs = false
 
+[triggers]
+crons = ["42 3 * * *"]
+
 [assets]
 directory = "public"
 binding = "ASSETS"

@@ -11,6 +11,7 @@
     "test:db": "node --import tsx tests/integration/db.integration.mts",
     "test:auth": "node --import tsx tests/e2e/auth.e2e.mts",
     "worlds:schema": "node --import tsx tools/worlds-schema.ts",
+    "worlds:report-migrations": "node --import tsx tools/worlds-report-migrations.ts",
     "dev": "npm run build && node dist/server/node.js",
     "start": "node dist/server/node.js",
     "cf:build": "npm run build",

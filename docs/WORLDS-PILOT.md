@@ -147,6 +147,23 @@ oder fremder Origin bleiben abgewiesen. Beide Browser prüfen dies in der CI.
 
 ## Migrationsnachweis und Rücknahme
 
+Der Produktionsversand verwendet ausschließlich Audit-Zeilen mit einer
+verbrauchten Freigabe für exakt dieselbe zentrale Identität und lokale
+Profil-ID. Ein neu angelegtes Worlds-Spielprofil kann deshalb weder eine
+Übernahme noch deren Rücknahme melden. Es ist keine Datenbankmigration nötig.
+
+Der bestehende produktive Worker benötigt das eigene verschlüsselte Secret
+`WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK` mit `kid`. Der Hub pinnt nur den
+öffentlichen Schlüssel für `slop-urself`. Der Versand prüft Produktions-DB und
+Worlds-Client und akzeptiert als Ziel nur den fest konfigurierten Hub.
+Der vorhandene Audit-Bestand kann nach Freigabe einmal mit
+`npm run worlds:report-migrations` und den entsprechenden Secret-Bindings
+zugestellt werden. Der tägliche Trigger um 03:42 UTC verarbeitet offene
+Nachweise weiter. Bei einer Veröffentlichung über Worker-Versionen müssen
+die Trigger separat synchronisiert und geprüft werden. Alte Worker-Versionen
+stehen für die Rücknahme bereit. Signierte Abmeldung sowie HF- und
+Generierungsbindungen gehören zum unveränderten Produktionsstand.
+
 Das Pilot-Schema verwendet das vorhandene Audit als Versandwarteschlange.
 Setze im isolierten Pilot `WORLDS_RECEIPT_URL` auf die vollständige
 HTTPS-Adresse `/api/migrations/receipts/slop-urself` des isolierten Hubs.

@@ -7,6 +7,19 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Zentraler Migrationsnachweis vorbereitet – 23.11.2026
+
+Der Produktionssender verwendet die vorhandene Audit-Tabelle und beschränkt
+den Export auf exakt bestätigte, verbrauchte Altprofil-Freigaben. Auch die
+Rücknahme nutzt die ursprüngliche Profilreferenz. Neuprofile bleiben lokal.
+Nachweise gehen ausschließlich an den produktiven Hub. Einzelsendung und
+täglicher Trigger nutzen denselben Sender. Kein neues Schema nötig.
+Produktiver Nur-Lese-Abgleich: genau ein bestätigter Nachweis wartet,
+null Konflikte. Nach vier Laufzeit-Abhängigkeitsupdates bestehen
+183 Unit-Tests (ein dokumentierter Skip), Typprüfung, Build und
+Cloudflare-Probelauf. Laufzeit-Audit: null Meldungen. Produktive
+Freigabe erteilt. GitHub-Prüfung und Veröffentlichung folgen.
+
 ### Neue Spielprofile mit Worlds – 15.11.2026
 
 Live mit `2e5a65a`, Worker `0e3e6114-7a24-48ad-beee-991e8372168b`,
