@@ -7,7 +7,7 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
-### Zentraler Migrationsnachweis vorbereitet – 23.11.2026
+### Zentraler Migrationsnachweis produktiv – 23.11.2026
 
 Der Produktionssender verwendet die vorhandene Audit-Tabelle und beschränkt
 den Export auf exakt bestätigte, verbrauchte Altprofil-Freigaben. Auch die
@@ -17,8 +17,16 @@ täglicher Trigger nutzen denselben Sender. Kein neues Schema nötig.
 Produktiver Nur-Lese-Abgleich: genau ein bestätigter Nachweis wartet,
 null Konflikte. Nach vier Laufzeit-Abhängigkeitsupdates bestehen
 183 Unit-Tests (ein dokumentierter Skip), Typprüfung, Build und
-Cloudflare-Probelauf. Laufzeit-Audit: null Meldungen. Produktive
-Freigabe erteilt. GitHub-Prüfung und Veröffentlichung folgen.
+Cloudflare-Probelauf. Laufzeit-Audit: null Meldungen.
+Der kontrollierte Erstversand bestätigte Revision 1 ohne Konflikt.
+Produktives Audit und Anzeige „Zuordnung bestätigt“ sind verifiziert.
+Worker `ae3e169a-b868-4f59-bed8-ae61779a715a` läuft zu 100 %,
+Rücknahme `5ca81c49-c8d4-4d5a-ab94-c22ccbe84772`. Alle 30 bisherigen
+Bindungen sind erhalten. Täglicher Trigger um 03:42 UTC bestätigt.
+[GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45262945615)
+bestand mit PostgreSQL 17, Chromium und WebKit. Live geprüft: PKCE,
+anonyme Zugriffssperre, Worlds-Abmeldung und persönliche HF-Pflicht.
+Eine weitere automatische Zustellung wurde live noch nicht beobachtet.
 
 ### Neue Spielprofile mit Worlds – 15.11.2026
 
