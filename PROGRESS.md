@@ -22,6 +22,9 @@ Anmelderücksprung, die sichtbare Einladung und die persönliche HF-Prüfung
 beim Klick auf „Beitreten“. Die Änderung liegt getrennt vom bereits zur
 Produktion freigegebenen Altprofil-Stand.
 
+Die [GitHub-Prüfung](https://github.com/manuelk2607/Slop_Urself/actions/runs/45450131098)
+für `e22f7a4` ist in Chromium, WebKit und PostgreSQL 17 vollständig grün.
+
 ### Selbstübernahme passwortgeschützter Altprofile vorbereitet – 24.11.2026
 
 Der produktive Nur-Lese-Abgleich zählt 13 Profile, davon eines bestätigt
