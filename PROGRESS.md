@@ -25,7 +25,7 @@ Produktion freigegebenen Altprofil-Stand.
 Die [GitHub-Prüfung](https://github.com/manuelk2607/Slop_Urself/actions/runs/45450131098)
 für `e22f7a4` ist in Chromium, WebKit und PostgreSQL 17 vollständig grün.
 
-### Selbstübernahme passwortgeschützter Altprofile vorbereitet – 24.11.2026
+### Selbstübernahme passwortgeschützter Altprofile produktiv – 24.11.2026
 
 Der produktive Nur-Lese-Abgleich zählt 13 Profile, davon eines bestätigt
 verknüpft. Vier der zwölf offenen Profile sind passwortgeschützt. Die acht
@@ -49,15 +49,21 @@ ist bereit, ohne Compute, direkt von Produktion mit LSN `0/3FA8988`.
 `WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA` wurde transaktional angewendet. Die
 Spalte hat Standardwert `false`. Vorher und nachher stimmen die Prüfsummen
 der 13 Profile und der einen vorhandenen Zuordnung überein. Der vorhandene
-Audit-Eintrag blieb erhalten. Kein Kontoinhaber hat über den neuen Ablauf
-eine Zuordnung bestätigt.
+Audit-Eintrag blieb erhalten.
 
-Der Worker-Upload steht aus. Den bestehenden Worker mit
-`--worlds-production --enable-worlds-legacy-password-link` veröffentlichen.
-Die Freigabe setzt den Abmelde-Prüfschlüssel und das Nachweis-Secret voraus.
-Vor dem Upload die aktive Worker-Version festhalten. Bei Rücknahme des
-Workers bleibt die additive Spalte bestehen, ebenso bereits ausdrücklich
-bestätigte Zuordnungen.
+Worker `756c193c-b151-4e96-818c-0860e7ea7a30` läuft zu 100 % im Deployment
+`ada61e18-c3fc-4190-9fe6-bcabae0ea6a4`. Die 31 bisherigen Bindungen sind
+vorhanden. `WORLDS_LEGACY_PASSWORD_LINK_ENABLED` ist aktiv. Live geprüft
+wurden DE/EN, der Worlds-Anmeldestart mit PKCE, die Ablehnung einer anonymen
+Verknüpfung und eines unsignierten Abmeldeereignisses sowie die weiterhin
+aktive persönliche HF-Pflicht. Der tägliche Nachweisversand bleibt um 03:42 UTC
+eingeplant.
+
+Nach Veröffentlichung bestätigt: 13 Profile, eine bisherige Zuordnung und
+null über den neuen Passwortablauf bestätigte Zuordnungen. Die erste
+Übernahme durch einen Kontoinhaber und ihre Nachweiszustellung stehen aus.
+Rücknahmeversion `ae3e169a-b868-4f59-bed8-ae61779a715a`. Bei Rücknahme des
+Workers bleiben die additive Spalte und bestätigte Zuordnungen erhalten.
 
 ### Automatischer Migrationsversand korrigiert – 24.11.2026
 
@@ -68,9 +74,9 @@ Der WebKit-Test für den Archivmodus wartet auf die Kontingentsperre nach
 dem ersten Raumstatus. Die Spiellogik wurde dafür nicht geändert.
 [GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45390239830)
 bestand für `eda4f9b` mit Chromium, WebKit und PostgreSQL 17. Cloudflare-
-Trockenlauf bestanden. Produktionsversion vor dem Upload `ae3e169a`.
-Für die Veröffentlichung auf dem vorhandenen Produktions-Worker fehlt ein
-gültiger Cloudflare-Zugang.
+Trockenlauf bestanden. Die Korrektur läuft seit Worker-Version `756c193c`
+zusammen mit der Selbstübernahme. Die nächste echte Nachweiszustellung
+steht noch aus.
 
 ### Zentraler Migrationsnachweis produktiv – 23.11.2026
 
