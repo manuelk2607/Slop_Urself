@@ -7,6 +7,34 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Selbstübernahme passwortgeschützter Altprofile vorbereitet – 24.11.2026
+
+Der produktive Nur-Lese-Abgleich zählt 13 Profile, davon eines bestätigt
+verknüpft. Vier der zwölf offenen Profile sind passwortgeschützt. Die acht
+passwortlosen Profile brauchen weiterhin einen überprüften Eigentumsnachweis.
+
+Die vorhandene Übernahme verlangt für geschützte Altprofile eine frische
+Worlds-Anmeldung, das gültige bisherige Profil im selben Browser und die
+Bestätigung des bisherigen Passworts. Administrationsprofile, belegte
+Zuordnungen und reservierte Übernahmen bleiben ausgeschlossen. Die
+Verknüpfung erhält Profil-ID, Spielstände und HF-Anbindung. Nur die bestätigte
+Übernahme und ihr späterer Widerruf werden an den Hub gemeldet. Weitere
+Anmeldungen für das verknüpfte Profil erfolgen über Worlds Hub.
+
+`6787566` liegt auf `feature/worlds-slop-password-migration`. Lokal bestanden
+184 Tests (1 optionaler Skip), beide Typprüfungen, Build und Cloudflare-
+Trockenlauf. Die GitHub-Prüfung bestand mit Chromium, WebKit und PostgreSQL 17.
+[GitHub-Prüfung](https://github.com/manuelk2607/Slop_Urself/actions/runs/45400243124)
+
+Die produktive Freigabe steht aus. Nach einer frischen Sicherung nur
+`WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA` anwenden. Der vorhandene Workflow führt
+diese Schemaänderung nicht automatisch aus. Den bestehenden Worker mit
+`--worlds-production --enable-worlds-legacy-password-link` veröffentlichen.
+Die Freigabe setzt den Abmelde-Prüfschlüssel und das Nachweis-Secret voraus.
+Vor dem Upload aktive Worker-Version und Datenbankstand festhalten. Bei
+Rücknahme des Workers bleibt die additive Spalte bestehen, ebenso bereits
+ausdrücklich bestätigte Zuordnungen.
+
 ### Automatischer Migrationsversand korrigiert – 24.11.2026
 
 Der gemeinsame Sender aus Auth 0.1.7 akzeptiert Cloudflares Weiterleitungsmodus
