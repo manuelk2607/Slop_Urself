@@ -31,18 +31,24 @@ export async function reportWorldsLinks(env: WorldsEnv, query: PgQuery) {
     const send = await receiptSender(env, identityIssuer, production);
     if (!send) return;
 
-    // New Worlds profiles also leave audit events. Only a consumed, exact
-    // legacy approval qualifies a production event for migration reporting.
+    // Only a consumed operator approval or a verified legacy password link
+    // qualifies. New Worlds profiles leave their ordinary audit events local.
+    const passwordLink = env.WORLDS_LEGACY_PASSWORD_LINK_ENABLED === 'true';
     const pending = await query(`
         SELECT audit.id::text AS revision, audit.subject, audit.local_user_id, audit.event
         FROM worlds_link_audit audit
         WHERE audit.issuer=$1 AND audit.receipt_reported_at IS NULL AND audit.receipt_conflict_at IS NULL
-        ${production ? `AND EXISTS (
+        ${production ? `AND (EXISTS (
             SELECT 1 FROM worlds_migration_approvals approval
             WHERE (approval.issuer, approval.subject, approval.local_user_id) =
                 (audit.issuer, audit.subject, audit.local_user_id)
             AND approval.consumed_at IS NOT NULL
-        )` : ''}
+        )${passwordLink ? ` OR EXISTS (
+            SELECT 1 FROM worlds_link_audit verified
+            WHERE (verified.issuer, verified.subject, verified.local_user_id) =
+                (audit.issuer, audit.subject, audit.local_user_id)
+            AND verified.legacy_password_verified AND verified.event='linked' AND verified.id<=audit.id
+        )` : ''})` : ''}
         ORDER BY audit.id LIMIT 10
     `, [identityIssuer]);
     const totals = {acknowledged: 0, conflict: 0};

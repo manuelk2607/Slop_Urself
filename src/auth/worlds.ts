@@ -21,6 +21,7 @@ export interface WorldsEnv {
     WORLDS_CLIENT_ID?: string;
     WORLDS_RESOURCE?: string;
     WORLDS_REAUTH_ENABLED?: string;
+    WORLDS_LEGACY_PASSWORD_LINK_ENABLED?: string;
     WORLDS_HUB_SESSION_EVENT_JWK?: string;
     WORLDS_RECEIPT_URL?: string;
     WORLDS_RECEIPT_KID?: string;
@@ -34,7 +35,11 @@ const productionDatabase = 'ep-holy-voice-b1djk94x';
 const productionOrigin = WORLDS_PRODUCTION_ORIGIN;
 export const WORLDS_PATHS = ['/auth/login', '/auth/start', '/auth/callback', '/auth/logout', '/auth/backchannel-logout',
     '/auth/worlds', '/auth/worlds/link', '/auth/worlds/claim', '/auth/worlds/play', '/auth/worlds/new', sessionRevocationPath];
-type SlopWorldsConfig = AuthConfig & { production?: boolean; sessionEventKey?: ReturnType<typeof sessionEventPublicKey> };
+type SlopWorldsConfig = AuthConfig & {
+    production?: boolean;
+    legacyPasswordLink?: boolean;
+    sessionEventKey?: ReturnType<typeof sessionEventPublicKey>;
+};
 export function worldsPilotTarget(env: WorldsEnv) {
     return env.WORLDS_PILOT_ENABLED === 'true' ? isolatedWorldsTarget(env) : undefined;
 }
@@ -87,11 +92,13 @@ export function worldsConfig(env: WorldsEnv, query: PgQuery): SlopWorldsConfig |
     const origin = production ? productionOrigin : worldsPilotTarget(env)?.origin;
     if (!origin || !env.WORLDS_ISSUER || !env.WORLDS_CLIENT_ID || !env.WORLDS_RESOURCE) return;
     const sessionEventKey = sessionEventPublicKey(env.WORLDS_HUB_SESSION_EVENT_JWK);
+    const legacyPasswordLink = production && env.WORLDS_LEGACY_PASSWORD_LINK_ENABLED === 'true' && !!sessionEventKey;
     return {
         origin, production, issuer: env.WORLDS_ISSUER, clientId: env.WORLDS_CLIENT_ID,
         algorithm: 'EdDSA', resource: env.WORLDS_RESOURCE, store: new SlopWorldsStore(query, !!sessionEventKey), sessionEventKey,
         returnPaths: ['/auth/worlds'], signedOutPaths: {de: '/', en: '/'},
-        reauthEnabled: !production && env.WORLDS_REAUTH_ENABLED === 'true'
+        legacyPasswordLink,
+        reauthEnabled: legacyPasswordLink || (!production && env.WORLDS_REAUTH_ENABLED === 'true')
     };
 }
 
@@ -266,7 +273,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
         }
         if (url.pathname === '/auth/worlds/claim') {
             if(request.method!=='POST')return new Response(null,{status:405});
-            if(!config.reauthEnabled||!sameOrigin(request,config.origin))return refused();
+            if(config.production||!config.reauthEnabled||!sameOrigin(request,config.origin))return refused();
             const proof=await centralProof(request,config).catch(()=>null),current=await session(request,config);
             if(!proof||!current)return refused();
             const body=new URLSearchParams(await boundedBody(request,2048));
@@ -275,7 +282,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
         }
         if (url.pathname === '/auth/worlds/link') {
             if (request.method !== 'POST') return new Response(null, {status: 405});
-            if (!config.reauthEnabled || !sameOrigin(request, config.origin)) return refused();
+            if (!config.reauthEnabled || (config.production && !config.legacyPasswordLink) || !sameOrigin(request, config.origin)) return refused();
             const central = await centralProof(request, config).catch(() => null);
             if (!central) return refused();
             const body = new URLSearchParams(await boundedBody(request, 2048));
@@ -297,14 +304,25 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
                       AND (s.payload->>'authenticatedAt')::bigint=$6
                       AND $6>extract(epoch FROM now())*1000-300000
                       AND $7>extract(epoch FROM now())*1000
+                      ${config.legacyPasswordLink ? `AND NOT EXISTS (
+                          SELECT 1 FROM public.worlds_session_revocations r
+                          WHERE r.issuer=s.issuer AND r.subject=s.subject AND r.revoked_through >= $6
+                      ) AND NOT EXISTS (
+                          SELECT 1 FROM public.worlds_link_audit a WHERE a.local_user_id=p.id
+                      ) AND NOT EXISTS (
+                          SELECT 1 FROM public.worlds_migration_approvals a
+                          WHERE (a.local_user_id=p.id OR (a.issuer=s.issuer AND a.subject=s.subject))
+                            AND a.consumed_at IS NULL AND a.expires_at>now()
+                      )` : ''}
                     FOR UPDATE OF p,s
                 ), inserted AS (
                     INSERT INTO worlds_identity_links (issuer, subject, local_user_id)
                     SELECT $2,$3,id FROM eligible ON CONFLICT DO NOTHING
                     RETURNING issuer, subject, local_user_id
                 ), audited AS (
-                    INSERT INTO worlds_link_audit (issuer, subject, local_user_id, event)
-                    SELECT issuer, subject, local_user_id, 'linked' FROM inserted RETURNING local_user_id
+                    INSERT INTO worlds_link_audit (issuer, subject, local_user_id, event${config.legacyPasswordLink ? ', legacy_password_verified' : ''})
+                    SELECT issuer, subject, local_user_id, 'linked'${config.legacyPasswordLink ? ', true' : ''}
+                    FROM inserted RETURNING local_user_id
                 ), activated AS (
                     UPDATE worlds_auth_sessions s SET local_user_id=a.local_user_id, local_auth_version=$5
                     FROM audited a WHERE s.id=$1 RETURNING s.id
@@ -320,16 +338,33 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
         // CSRF values are generated by the shared OIDC session store.
         if (!/^[A-Za-z0-9_-]{32,128}$/.test(current.csrf)) return refused();
         const field = `<input type="hidden" name="csrf" value="${current.csrf}">`;
+        const passwordLinkForm = () => `<p data-worlds-text="ownership">${text('ownership')}</p>
+            <form action="/auth/worlds/link?ui_locales=${locale}" method="post">${field}
+                <label><span data-worlds-text="password">${text('password')}</span>
+                    <input name="password" type="password" autocomplete="current-password" maxlength="200" required></label>
+                <p data-worlds-text="keepData">${text('keepData')}</p>
+                <button class="btn-primary" data-worlds-text="link">${text('link')}</button>
+            </form>`;
         const linked = (await query('SELECT 1 FROM worlds_identity_links WHERE issuer=$1 AND subject=$2', [current.issuer, current.sub])).length === 1;
         const account = linked && await worldsAccounts(config, query)?.read(request);
-        const approved=!linked&&config.reauthEnabled?await approvedProfile(query,current.issuer,current.sub,local.ADMIN_ACCOUNT_ID):undefined;
+        const approved=!linked&&!config.production&&config.reauthEnabled?await approvedProfile(query,current.issuer,current.sub,local.ADMIN_ACCOUNT_ID):undefined;
         const status=`<section class="worlds-status" role="status"><p>✓ ${text('signedIn')}</p><h2>${text(linked?'linked':'pending')}</h2>${current.name?`<small>${escapeWorlds(current.name)}</small>`:''}</section>`;
         let action:string;
         if(account)action=`<p>${text('linkedBody')}</p><p><strong>${escapeWorlds(account.name)}</strong></p><form action="/auth/worlds/play" method="post">${field}<button class="btn-primary">${text('play')}</button></form>`;
         else if(linked)action=`<p>${text('renew')}</p>${loginForm('renewAction')}`;
         else if(config.production){
             const reserved=await approvedProfile(query,current.issuer,current.sub,local.ADMIN_ACCOUNT_ID);
-            action=`<p data-worlds-text="productionPending">${text('productionPending')}</p>${reserved?'':newProfileForm(current.csrf)}`;
+            const legacy = config.legacyPasswordLink && !reserved
+                ? await requestLegacyAccount(request,profileAuthConfig(local,profiles)).catch(() => null) : null;
+            const profile = legacy && legacy.id !== local.ADMIN_ACCOUNT_ID ? await profiles.find(legacy.name) : null;
+            if (legacy && profile?.id === legacy.id && profile.passwordHash) {
+                const fresh = typeof current.authenticatedAt === 'number' && current.authenticatedAt <= Date.now()
+                    && current.authenticatedAt > Date.now() - 300_000;
+                action = `<h2 data-worlds-text="localProfile">${text('localProfile')}</h2><p><strong>${escapeWorlds(legacy.name)}</strong></p>`;
+                action += fresh ? passwordLinkForm() : `<p data-worlds-text="freshNeeded">${text('freshNeeded')}</p>${loginForm('reauth',true)}`;
+            } else {
+                action=`<p data-worlds-text="productionPending">${text('productionPending')}</p>${reserved?'':newProfileForm(current.csrf)}`;
+            }
         }
         else if(!config.reauthEnabled)action=`<p>${text('locked')}</p>`;
         else if(approved){
@@ -347,7 +382,7 @@ export async function worldsResponse(request: Request, config: SlopWorldsConfig 
                 action=`<h2>${text('localProfile')}</h2><p><strong>${escapeWorlds(legacy.name)}</strong></p>`;
                 if(!eligible)action+=`<p>${text('unavailable')}</p>`;
                 else if(!fresh)action+=`<p>${text('freshNeeded')}</p>${loginForm('reauth',true)}`;
-                else action+=`<p>${text('ownership')}</p><form action="/auth/worlds/link" method="post">${field}<label>${text('password')}<input name="password" type="password" autocomplete="current-password" maxlength="200" required></label><p>${text('keepData')}</p><button class="btn-primary">${text('link')}</button></form>`;
+                else action+=passwordLinkForm();
             }
         }
         return html(`${status}${action}<form class="worlds-logout" action="/auth/logout" method="post">${field}<button class="btn-muted">${text('logout')}</button><p>${text('logoutHint')}</p></form>`);

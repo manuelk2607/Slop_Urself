@@ -18,7 +18,7 @@ const server=createServer(async(incoming,outgoing)=>{
    outgoing.writeHead(200,{'content-type':url.pathname.endsWith('.css')?'text/css':'text/javascript'});outgoing.end(await readFile(join('public',url.pathname)));return;
   }
   const fixture=url.searchParams.get('fixture'),headers={...incoming.headers} as Record<string,string>;
-  if(fixture)headers.cookie=SESSION_COOKIE+'='+'A'.repeat(43)+(fixture==='profile'?'; slop_auth='+legacy:'');
+  if(fixture)headers.cookie=SESSION_COOKIE+'='+'A'.repeat(43)+(['profile','production-link'].includes(fixture)?'; slop_auth='+legacy:'');
   const request=new Request(url,{method:incoming.method,headers});
   if(url.pathname==='/auth/start'){
    const ok=incoming.method==='GET'&&incoming.headers['sec-fetch-mode']==='navigate'&&incoming.headers['sec-fetch-dest']==='document';
@@ -27,7 +27,8 @@ const server=createServer(async(incoming,outgoing)=>{
   if(incoming.method==='POST'){
    outgoing.writeHead(sameOrigin(request,origin)?200:403,{'content-type':'application/json'});outgoing.end(JSON.stringify({origin:incoming.headers.origin,site:incoming.headers['sec-fetch-site']}));return;
   }
-  const config={origin,issuer:'https://identity.test/auth',clientId:'fixture',algorithm:'EdDSA',reauthEnabled:true,production:fixture==='new',
+  const config={origin,issuer:'https://identity.test/auth',clientId:'fixture',algorithm:'EdDSA',reauthEnabled:true,
+   production:fixture==='new'||fixture==='production-link',legacyPasswordLink:fixture==='production-link',
    store:{getSession:async()=>fixture?{issuer:'https://identity.test/auth',sub:'synthetic',csrf:'B'.repeat(43),expires:Date.now()+60000,authenticatedAt:Date.now()}:null}} as AuthConfig;
   const response=await worldsResponse(request,config,{AUTH_COOKIE_SECRET:secret},{find:async()=>profile} as never,async()=>[]);
   outgoing.writeHead(response.status,Object.fromEntries(response.headers));outgoing.end(await response.text());
@@ -61,6 +62,11 @@ try{
  const posted=page.waitForResponse(response=>response.request().method()==='POST');
  await page.getByRole('button',{name:'Link this profile to Worlds',exact:true}).click();const postResult=await posted;
  assert.equal(postResult.status(),200);assert.deepEqual(await postResult.json(),{origin,site:'same-origin'});
+ await page.goto(origin+'/auth/worlds?fixture=production-link&ui_locales=de');
+ await page.getByRole('button',{name:'Dieses Profil mit Worlds verknüpfen',exact:true}).waitFor();
+ assert.equal(await page.locator('form[action*="/auth/worlds/new"]').count(),0);
+ await page.getByRole('button',{name:'English',exact:true}).click();
+ await page.getByRole('button',{name:'Link this profile to Worlds',exact:true}).waitFor();
  await page.goto(origin+'/auth/worlds?fixture=new&ui_locales=de');
  const newName=page.getByLabel('Benutzername für dein Spielprofil');
  await newName.fill('New player');

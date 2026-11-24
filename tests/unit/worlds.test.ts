@@ -14,7 +14,7 @@ import { HfConnections, HfRequiredError, requirePlayerHf, type HfStorage } from 
 import { SESSION_COOKIE, token } from '../../src/auth/worlds-shared/oidc.ts';
 import { hash } from '../../src/auth/worlds-shared/store.ts';
 import { sessionEventContentType, sessionRevocationPath, signSessionRevocation } from '../../src/auth/worlds-shared/session-revocation.ts';
-import { WORLDS_SCHEMA } from '../../src/database/worlds-schema';
+import { WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA, WORLDS_SCHEMA } from '../../src/database/worlds-schema';
 import worker from '../../src/server/cloudflare/worker';
 import type { Env } from '../../src/server/cloudflare/types';
 
@@ -171,6 +171,90 @@ test('production Worlds sign-in requires the exact live database and client and 
     const data = await config.json() as { worldsTransition: boolean; hfRequired: boolean };
     assert.equal(data.worldsTransition, true);
     assert.equal(data.hfRequired, true);
+});
+
+test('production legacy password link requires both accounts and queues only the verified migration', async t => {
+    const db = new PGlite();
+    try {
+        const query = async (sql: string, values?: unknown[]) => (await db.query<Record<string, unknown>>(sql, values)).rows;
+        const profiles = sqlProfiles(async (sql, values) => (await db.query<{id: string; name: string}>(sql, values)).rows);
+        const owner = (await profiles.create('Existing', await hashPassword(password)))!;
+        const open = (await profiles.create('NoPassword'))!;
+        for (const statement of WORLDS_SCHEMA) await query(statement);
+        await query(WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA);
+        const signing = await generateKeyPair('EdDSA', {extractable: true});
+        const runtime = {
+            ...WORLDS_PRODUCTION_VARS,
+            DATABASE_URL: `postgres://fixture@${WORLDS_PRODUCTION_DATABASE_HOST}/Slop_Urself`,
+            WORLDS_HUB_SESSION_EVENT_JWK: JSON.stringify({kid: 'event-test', ...await exportJWK(signing.publicKey)}),
+            WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK: JSON.stringify({kid: 'receipt-test', ...await exportJWK(signing.privateKey)}),
+            WORLDS_LEGACY_PASSWORD_LINK_ENABLED: 'true',
+        };
+        const config = worldsConfig(runtime, query)!;
+        const disabled = worldsConfig({...runtime, WORLDS_LEGACY_PASSWORD_LINK_ENABLED: undefined}, query)!;
+        assert.equal(disabled.reauthEnabled, false);
+        assert.equal(worldsConfig({...runtime, WORLDS_HUB_SESSION_EVENT_JWK: undefined}, query)?.reauthEnabled, false);
+        const {origin, issuer} = config;
+        const local = {AUTH_COOKIE_SECRET: 'separate-test-signing-secret-at-least-32-characters', worlds: worldsAccounts(config, query)};
+        const legacySignIn = (username: string) => sessionResponse(new Request(origin + '/api/session', {
+            method: 'POST', headers: {origin}, body: JSON.stringify({mode: 'login', username, password}),
+        }), local, profiles);
+        const ownerCookie = (await legacySignIn(owner.name)).headers.get('set-cookie')!.split(';')[0];
+        const openCookie = (await legacySignIn(open.name)).headers.get('set-cookie')!.split(';')[0];
+        const raw = token(), csrf = token(), authenticatedAt = Date.now() - 1000, subject = 'verified-owner';
+        const centralCookie = SESSION_COOKIE + '=' + raw;
+        const centralSession = {issuer, sub: subject, csrf, expires: Date.now() + 60000, authenticatedAt};
+        await config.store.putSession(await hash(raw), centralSession);
+        const withOwner = `${centralCookie}; ${ownerCookie}`;
+        const route = (path: string, init: RequestInit, settings = config) => worldsResponse(
+            new Request(origin + path, init), settings, local, profiles, query);
+        const page = (cookie: string, settings = config) => route('/auth/worlds?ui_locales=en', {headers: {cookie}}, settings);
+        const post = (cookie: string, body = {csrf, password}, path = '/auth/worlds/link', site = origin, settings = config) =>
+            route(path, {method: 'POST', headers: {origin: site, cookie}, body: new URLSearchParams(body)}, settings);
+        assert.match(await (await page(withOwner)).text(), /Link this profile to Worlds/);
+        assert.doesNotMatch(await (await page(withOwner, disabled)).text(), /name="password"/);
+        assert.doesNotMatch(await (await page(`${centralCookie}; ${openCookie}`)).text(), /name="password"/);
+        assert.equal((await post(withOwner, {csrf, password}, '/auth/worlds/link', origin, disabled)).status, 403);
+        assert.equal((await post(withOwner, {csrf, password}, '/auth/worlds/claim')).status, 403);
+        assert.equal((await post(withOwner, {csrf, password}, '/auth/worlds/link', 'https://elsewhere.test')).status, 403);
+        assert.equal((await post(centralCookie)).status, 403);
+        assert.equal((await post(withOwner, {csrf: token(), password})).status, 403);
+        assert.equal((await post(withOwner, {csrf, password: 'wrong password'})).status, 403);
+
+        const booking = crypto.randomUUID();
+        await query(`INSERT INTO worlds_migration_approvals
+            (id,issuer,subject,local_user_id,source_auth_version,approved_by,approval_ref,expires_at)
+            VALUES($1,$2,'reserved-identity',$3,'0','fixture','fixture',now()+interval '1 hour')`, [booking, issuer, owner.id]);
+        assert.equal((await post(withOwner)).status, 403);
+        await query('DELETE FROM worlds_migration_approvals WHERE id=$1', [booking]);
+        assert.deepEqual(await query('SELECT local_user_id FROM worlds_identity_links'), []);
+        const linked = await post(withOwner);
+        assert.equal(linked.status, 303);
+        assert.equal(linked.headers.get('location'), '/');
+        assert.match(linked.headers.get('Set-Cookie') ?? '', /slop_auth=;/);
+        assert.equal((await post(withOwner)).status, 403);
+        assert.equal((await legacySignIn(owner.name)).status, 409);
+        assert.equal((await worldsAccounts(config, query)!.read(new Request(origin, {headers: {cookie: centralCookie}})))?.id, owner.id);
+        assert.deepEqual(await query('SELECT local_user_id,legacy_password_verified FROM worlds_link_audit'), [
+            {local_user_id: owner.id, legacy_password_verified: true},
+        ]);
+        const receipts: unknown[] = [];
+        const target = 'https://worlds-hub.maki26.workers.dev/api/migrations/receipts/slop-urself';
+        t.mock.method(globalThis, 'fetch', async (url: string, request: RequestInit) => {
+            assert.equal(url, target);
+            const {payload} = await jwtVerify(String(request.body), signing.publicKey, {
+                algorithms: ['EdDSA'], audience: target, subject,
+            });
+            assert.equal(payload.account_ref, await hash('worlds:slop-urself:' + owner.id));
+            receipts.push(payload.state);
+            return Response.json({result: 'stored'});
+        });
+        assert.deepEqual(await reportWorldsLinks(runtime, query), {acknowledged: 1, conflict: 0});
+        await query('DELETE FROM worlds_identity_links WHERE local_user_id=$1', [owner.id]);
+        assert.deepEqual(await reportWorldsLinks(runtime, query), {acknowledged: 1, conflict: 0});
+        assert.deepEqual(receipts, ['confirmed', 'revoked']);
+        assert.equal((await profiles.find(owner.name))?.id, owner.id);
+    } finally { await db.close(); }
 });
 
 test('the dedicated Cloudflare pilot excludes indexing and refuses a real generator or disabled authentication', async () => {

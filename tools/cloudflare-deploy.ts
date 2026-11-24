@@ -18,7 +18,8 @@ async function main() {
         process.exit(check.status || 1);
     }
     const secrets = JSON.parse(check.stdout) as { name: string }[];
-    const missing = SECRET_NAMES.filter(name => !secrets.some(secret => secret.name === name));
+    const required = mode.legacyPasswordLink ? [...SECRET_NAMES, 'WORLDS_MIGRATION_RECEIPT_PRIVATE_JWK'] : SECRET_NAMES;
+    const missing = required.filter(name => !secrets.some(secret => secret.name === name));
     if (missing.length) {
         console.error(`Deployment abgebrochen: Cloudflare-Secrets fehlen: ${missing.join(', ')}. Führe npm run cf:secrets aus.`);
         process.exit(1);
@@ -29,7 +30,7 @@ async function main() {
     const databaseUrl = localEnv.DATABASE_URL ?? (mode.dryRun
         ? 'postgresql://dry-run@ep-holy-voice-b1djk94x-pooler.c-5.eu-central-1.aws.neon.tech/Slop_Urself'
         : undefined);
-    productionArgs = productionDeployArgs(databaseUrl);
+    productionArgs = productionDeployArgs(databaseUrl, mode.legacyPasswordLink);
     if (!mode.dryRun) {
         const pool = new Pool({ connectionString: databaseUrl, ssl: { rejectUnauthorized: true }, max: 1 });
         try {
@@ -40,6 +41,14 @@ async function main() {
             const installed = new Set(result.rows.map(row => row.name));
             const absent = REQUIRED_WORLDS_TABLES.filter(name => !installed.has(name));
             if (absent.length) throw new Error(`Worlds-Produktivdeployment abgebrochen: Datenbanktabellen fehlen: ${absent.join(', ')}`);
+            if (mode.legacyPasswordLink) {
+                const audit = await pool.query<{ ready: boolean }>(`SELECT EXISTS (
+                    SELECT 1 FROM pg_attribute WHERE attrelid='public.worlds_link_audit'::regclass
+                    AND attname='legacy_password_verified' AND NOT attisdropped
+                    AND atttypid='boolean'::regtype AND attnotnull
+                ) AS ready`);
+                if (!audit.rows[0]?.ready) throw new Error('Worlds-Produktivdeployment abgebrochen: Audit-Spalte für die Altprofil-Übernahme fehlt.');
+            }
         } finally { await pool.end(); }
     }
  }

@@ -10,6 +10,9 @@ export const WORLDS_SESSION_REVOCATION_SCHEMA = [
     `REVOKE ALL ON public.worlds_session_revocations FROM PUBLIC`
 ] as const;
 
+export const WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA = `ALTER TABLE public.worlds_link_audit
+    ADD COLUMN IF NOT EXISTS legacy_password_verified boolean NOT NULL DEFAULT false`;
+
 // Installed only by the explicitly enabled Worlds pilot, after the profile schema.
 export const WORLDS_SCHEMA = [
     `CREATE TABLE IF NOT EXISTS worlds_auth_transactions (
