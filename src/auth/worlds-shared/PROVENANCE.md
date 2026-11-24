@@ -1,7 +1,7 @@
 # Shared Worlds authentication
 
 Unmodified server-side sources from `manuelk2607/Worlds-Hub`, tag
-`auth-v0.1.6`, standalone commit `ad8704848f409009b78f5c3b6121e5f6d12c6ba1`.
+`auth-v0.1.7`, standalone commit `a8f1d3e570197063a2b6b9848c58389378c7f9ab`.
 Each application retains its own client ID, database and host-only sessions.
 
 | File | SHA-256 |
@@ -12,4 +12,4 @@ Each application retains its own client ID, database and host-only sessions.
 | postgres-links.ts | `2f5e9e0da66ad9394e1e86b2f29f9a40962c181470ef0a6ea2b5623e60e87022` |
 | postgres-store.ts | `7792deabc4405a544d45567c0e7961bdd028e828b3708361387f4fa8a467121b` |
 | session-revocation.ts | `713c059741ee9b0bbe394f20a95c96b1769393a35a298738397eaf59f33c325c` |
-| migration-receipts.ts | `208b8f0e04922fa6c2e2f9084ba4de93e382236702f7b7311f4017347687accb` |
+| migration-receipts.ts | `ac60f2fd3522b580e18993651715c2d57b7aa1f4749e4229dad32e05e6b03587` |

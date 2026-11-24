@@ -60,8 +60,9 @@ export async function migrationReceiptSender(settings: ReceiptSenderSettings) {
     try {
       response = await fetch(target.href, {
         method: 'POST', headers: { 'content-type': 'application/jwt' }, body,
-        redirect: 'error', signal: AbortSignal.timeout(5000),
+        redirect: 'manual', signal: AbortSignal.timeout(5000),
       });
+      if (response.status >= 300 && response.status < 400) throw new Error('Receipt endpoint redirected');
       result = await response.json() as typeof result;
     } catch {
       throw new Error('Worlds receipt endpoint is unavailable');

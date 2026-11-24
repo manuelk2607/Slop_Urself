@@ -7,6 +7,14 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Automatischer Migrationsversand korrigiert – 24.11.2026
+
+Der gemeinsame Sender aus Auth 0.1.7 akzeptiert Cloudflares Weiterleitungsmodus
+und weist 3xx-Antworten ab. Signatur, Ziel und Quittierung bleiben geprüft.
+183 Tests und der Build bestanden, ein bestehender Test ist optional.
+Für die Veröffentlichung auf dem vorhandenen Produktions-Worker fehlt ein
+gültiger Cloudflare-Zugang.
+
 ### Zentraler Migrationsnachweis produktiv – 23.11.2026
 
 Der Produktionssender verwendet die vorhandene Audit-Tabelle und beschränkt

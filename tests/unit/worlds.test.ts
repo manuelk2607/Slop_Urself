@@ -242,7 +242,7 @@ test('the migration outbox retries committed records and records rollback withou
         const receipts: {revision: unknown; state: unknown}[] = [];
         t.mock.method(globalThis, 'fetch', async (url: string, request: RequestInit) => {
             assert.equal(url, audience);
-            assert.equal(request.redirect, 'error');
+            assert.equal(request.redirect, 'manual');
             assert.deepEqual(request.headers, {'content-type': 'application/jwt'});
             const {payload} = await jwtVerify(String(request.body), pair.publicKey, {
                 algorithms: ['EdDSA'], issuer: 'https://slopurself.maki26.workers.dev',
