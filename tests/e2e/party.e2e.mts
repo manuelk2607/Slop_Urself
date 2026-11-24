@@ -33,7 +33,8 @@ try {
     }
     for (const mode of ['archive-vote', 'archive-guess']) {
         await host.locator('#createRoomButton').click(); await visible(host, 'screenRoomLobby');
-        assert.equal(await host.locator('#startGameButton').isDisabled(), true, 'Live play is blocked at zero quota, not room creation.');
+        // The room opens before the first state update applies the quota limit.
+        await host.locator('#startGameButton:disabled').waitFor({state:'visible',timeout:15000});
         const code = await host.locator('#displayRoomCode').innerText();
         await guest.goto(`http://127.0.0.1:3317/?room=${code}`); await visible(guest, 'screenLobby');
         assert.equal(await guest.locator('#roomCodeInput').inputValue(), code);

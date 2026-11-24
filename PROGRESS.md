@@ -12,6 +12,8 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 Der gemeinsame Sender aus Auth 0.1.7 akzeptiert Cloudflares Weiterleitungsmodus
 und weist 3xx-Antworten ab. Signatur, Ziel und Quittierung bleiben geprüft.
 183 Tests und der Build bestanden, ein bestehender Test ist optional.
+Der WebKit-Test für den Archivmodus wartet auf die Kontingentsperre nach
+dem ersten Raumstatus. Die Spiellogik wurde dafür nicht geändert.
 Für die Veröffentlichung auf dem vorhandenen Produktions-Worker fehlt ein
 gültiger Cloudflare-Zugang.
 
