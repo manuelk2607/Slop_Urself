@@ -1,7 +1,8 @@
-import {messages,normalizeLocale,localeKey} from '../i18n/worlds';
+import {messages,normalizeLocale,localeKey,type Locale} from '../i18n/worlds';
+import {rememberWorldsInvitation,takeWorldsInvitation} from './room-invitation';
 interface Account { id: string; name: string }
 interface AuthUI {
-    signedIn(name: string, hfRequired: boolean): Promise<void>;
+    signedIn(name: string, hfRequired: boolean, locale: Locale): Promise<void>;
     signedOut(): Promise<void>;
     showAuth(): void;
     refreshToken(token: string): void;
@@ -40,7 +41,17 @@ export async function initializeAccount(ui: AuthUI) {
         ready = true; bar.hidden = false;
         document.getElementById('accountName')!.innerText = account.name;
         username.value = account.name;
-        await ui.signedIn(account.name, hfRequired);
+        if (worldsEnabled) {
+            try {
+                const code = takeWorldsInvitation(sessionStorage);
+                const url = new URL(location.href);
+                if (code && !url.searchParams.has('room')) {
+                    url.searchParams.set('room', code);
+                    history.replaceState(null, '', url);
+                }
+            } catch { /* Sign-in also works when the tab blocks storage. */ }
+        }
+        await ui.signedIn(account.name, hfRequired, worldsEnabled ? worldsLocale : 'de');
     }
     async function enter(mode: 'create' | 'login') {
         if (!form.reportValidity() || submit.disabled) return;
@@ -72,6 +83,7 @@ export async function initializeAccount(ui: AuthUI) {
     };
     document.getElementById('signOutButton')!.addEventListener('click', async () => {
         ready = false; await pending;
+        try { takeWorldsInvitation(sessionStorage); } catch { /* The tab may block storage. */ }
         try {
             await ui.signedOut();
             const response = await fetch('/api/session', { method: 'DELETE', signal: AbortSignal.timeout(10_000) });
@@ -95,9 +107,14 @@ export async function initializeAccount(ui: AuthUI) {
             document.getElementById('authHint')!.textContent=messages[locale][config.worldsTransition?'centralTransition':'centralOnly'];
             if(config.worldsTransition)document.getElementById('authPasswordHint')!.textContent=messages[locale].legacyPasswordHint;
             const link=document.querySelector<HTMLAnchorElement>('#worldsSignIn a')!;link.href='/auth/start?ui_locales='+locale;link.textContent=messages[locale].signIn;
+            const rememberInvitation = () => {
+                try { rememberWorldsInvitation(sessionStorage, location.search); } catch { /* The tab may block storage. */ }
+            };
+            link.addEventListener('click', rememberInvitation);
+            document.getElementById('worldsAccount')!.addEventListener('click', rememberInvitation);
         }
         hfRequired = config.hfRequired ?? config.mockAi !== true;
-        if (!config.authEnabled) { await ui.signedIn('', hfRequired); return; }
+        if (!config.authEnabled) { await ui.signedIn('', hfRequired, 'de'); return; }
         const saved = await fetch('/api/session', { signal: AbortSignal.timeout(10_000) });
         if (saved.ok) {
             const { account } = await saved.json() as { account?: Account };

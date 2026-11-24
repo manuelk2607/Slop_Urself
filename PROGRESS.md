@@ -7,6 +7,21 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Raumeinladung nach Worlds-Anmeldung wiederherstellen – 24.11.2026
+
+Eine offene Einladung bleibt während der Worlds-Anmeldung für höchstens
+15 Minuten im selben Tab. Nach dem Rücksprung füllt Slop Urself den Raumcode
+einmalig wieder aus und zeigt die Einladung auf Deutsch oder Englisch an.
+Eine neu geöffnete Einladung hat Vorrang. Spielbeitritt und HF-Prüfung laufen
+über die bestehenden Schaltflächen und Berechtigungen.
+
+186 lokale Tests (1 optionaler Skip), beide Typprüfungen, Build und der
+Cloudflare-Trockenlauf mit dem vorhandenen Übernahmeschalter bestanden.
+Chromium DE bei 1440 px und WebKit EN bei 320 px prüften den simulierten
+Anmelderücksprung, die sichtbare Einladung und die persönliche HF-Prüfung
+beim Klick auf „Beitreten“. Die Änderung liegt getrennt vom bereits zur
+Produktion freigegebenen Altprofil-Stand.
+
 ### Selbstübernahme passwortgeschützter Altprofile vorbereitet – 24.11.2026
 
 Der produktive Nur-Lese-Abgleich zählt 13 Profile, davon eines bestätigt

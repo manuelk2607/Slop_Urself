@@ -109,6 +109,7 @@ button:focus-visible, .custom-file-btn:focus-visible {
     color: #ffd28a;
     font-size: 0.85rem;
 }
+#invitationNotice:not([hidden]) { display: block; }
 
 h1 {
     margin-bottom: 14px;

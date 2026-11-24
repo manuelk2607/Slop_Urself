@@ -1,4 +1,6 @@
 import { initializeAccount, refreshAccount } from './auth';
+import { roomInvitation } from './room-invitation';
+import { messages as worldsMessages } from '../i18n/worlds';
 import { huggingFaceConnection } from './huggingface';
 import { createRealtimeClient, type SocketPayload } from './realtime';
 import { statisticsView } from './statistics';
@@ -709,8 +711,7 @@ socket.on('connect', () => {
 // Session restoration starts only after the account cookie is available.
 
 function invitationCode() {
-    const code = new URL(location.href).searchParams.get('room')?.toUpperCase() || '';
-    return /^[A-Z0-9]{4}$/.test(code) ? code : '';
+    return roomInvitation(location.search);
 }
 function clearInvitation() {
     const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
@@ -884,7 +885,7 @@ restartButton.addEventListener('click', () => {
 
 socket.on('authExpired', () => { void refreshAccount(); showRoomNotice('Anmeldung wird erneuert. Bitte die Aktion erneut ausführen.'); });
 void initializeAccount({
-    signedIn: async (name, hfRequired) => {
+    signedIn: async (name, hfRequired, locale) => {
         hfConnection.lock(false);
         await hfConnection.signedIn(hfRequired);
         if (name) usernameInput.value = name.slice(0, 15);
@@ -893,7 +894,9 @@ void initializeAccount({
         const invited = invitationCode();
         if (invited) {
             roomCodeInput.value = invited;
-            const notice = document.getElementById('invitationNotice')!; notice.textContent = `Einladung zu Raum ${invited}`; notice.hidden = false;
+            const notice = document.getElementById('invitationNotice')!;
+            notice.textContent = worldsMessages[locale].roomInvitation.replace('{code}', invited);
+            notice.hidden = false;
         }
         if (socket.isNativeWebSocket) await resumeStoredSession(); else await socket.connectToRoom('');
     },
