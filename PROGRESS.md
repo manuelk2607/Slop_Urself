@@ -26,14 +26,20 @@ Anmeldungen für das verknüpfte Profil erfolgen über Worlds Hub.
 Trockenlauf. Die GitHub-Prüfung bestand mit Chromium, WebKit und PostgreSQL 17.
 [GitHub-Prüfung](https://github.com/manuelk2607/Slop_Urself/actions/runs/45400243124)
 
-Die produktive Freigabe steht aus. Nach einer frischen Sicherung nur
-`WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA` anwenden. Der vorhandene Workflow führt
-diese Schemaänderung nicht automatisch aus. Den bestehenden Worker mit
+Die produktive Freigabe liegt vor. Neon-Sicherung `br-nameless-unit-b11zgo62`
+ist bereit, ohne Compute, direkt von Produktion mit LSN `0/3FA8988`.
+`WORLDS_LEGACY_PASSWORD_AUDIT_SCHEMA` wurde transaktional angewendet. Die
+Spalte hat Standardwert `false`. Vorher und nachher stimmen die Prüfsummen
+der 13 Profile und der einen vorhandenen Zuordnung überein. Der vorhandene
+Audit-Eintrag blieb erhalten. Kein Kontoinhaber hat über den neuen Ablauf
+eine Zuordnung bestätigt.
+
+Der Worker-Upload steht aus. Den bestehenden Worker mit
 `--worlds-production --enable-worlds-legacy-password-link` veröffentlichen.
 Die Freigabe setzt den Abmelde-Prüfschlüssel und das Nachweis-Secret voraus.
-Vor dem Upload aktive Worker-Version und Datenbankstand festhalten. Bei
-Rücknahme des Workers bleibt die additive Spalte bestehen, ebenso bereits
-ausdrücklich bestätigte Zuordnungen.
+Vor dem Upload die aktive Worker-Version festhalten. Bei Rücknahme des
+Workers bleibt die additive Spalte bestehen, ebenso bereits ausdrücklich
+bestätigte Zuordnungen.
 
 ### Automatischer Migrationsversand korrigiert – 24.11.2026
 
