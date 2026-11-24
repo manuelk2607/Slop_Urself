@@ -14,6 +14,9 @@ und weist 3xx-Antworten ab. Signatur, Ziel und Quittierung bleiben geprüft.
 183 Tests und der Build bestanden, ein bestehender Test ist optional.
 Der WebKit-Test für den Archivmodus wartet auf die Kontingentsperre nach
 dem ersten Raumstatus. Die Spiellogik wurde dafür nicht geändert.
+[GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45390239830)
+bestand für `eda4f9b` mit Chromium, WebKit und PostgreSQL 17. Cloudflare-
+Trockenlauf bestanden. Produktionsversion vor dem Upload `ae3e169a`.
 Für die Veröffentlichung auf dem vorhandenen Produktions-Worker fehlt ein
 gültiger Cloudflare-Zugang.
 
