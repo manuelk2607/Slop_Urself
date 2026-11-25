@@ -102,6 +102,8 @@ export async function initializeAccount(ui: AuthUI) {
         if(config.worldsEnabled){
             let locale=normalizeLocale(navigator.language)??'de';try{locale=normalizeLocale(localStorage.getItem(localeKey))??locale;}catch{}
             worldsEnabled=true;worldsLocale=locale;
+            const hubLink=document.querySelector<HTMLAnchorElement>('#worldsHubLink');
+            if(hubLink)hubLink.href=locale==='en'?'https://worlds-hub.maki26.workers.dev/en/':'https://worlds-hub.maki26.workers.dev/';
             form.hidden=!config.worldsTransition;
             submit.hidden=!!config.worldsTransition;
             document.getElementById('authHint')!.textContent=messages[locale][config.worldsTransition?'centralTransition':'centralOnly'];

@@ -1,5 +1,15 @@
 # Slop Urself – Worlds-Integration
 
+## Rückweg zum Worlds Hub
+
+Der Link im öffentlichen Bereich unterhalb des Spieleinstiegs führt zum
+Hub. Die bestehende Sprachpräferenz für Worlds wählt das DE/EN-Ziel. 186
+Tests, Typprüfung und Build bestanden, ein Test wurde übersprungen. Der
+Link war in Chromium-Desktop und WebKit bei 320 px per Tastatur erreichbar.
+Der lokale Browsertest simulierte die Auth-Konfiguration.
+
+Produktive Veröffentlichung und Live-Prüfung stehen aus.
+
 Featurebranch `feature/worlds-hub-sso`. Der eigene Worker
 `slopurself-worlds-pilot` verwendet nur den
 wiederhergestellten QA-Zweig, simulierte Generierung und noindex/no-store.
