@@ -48,6 +48,9 @@ Nach dem Abgleich mit `main` bestanden 186 lokale Tests, beide
 Anwendungstypprüfungen, Build und der Standard-Trockenlauf mit Worlds-Login
 und passwortgeschützter Altprofilübernahme. Der Upload für die Raumeinladung
 steht zur Produktionsfreigabe an.
+[GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45640333912)
+bestätigte den zusammengeführten Stand `67e79a0` in Chromium, WebKit
+und PostgreSQL 17.
 
 ### Selbstübernahme passwortgeschützter Altprofile produktiv – 24.11.2026
 
