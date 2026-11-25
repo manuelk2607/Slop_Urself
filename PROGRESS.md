@@ -21,6 +21,11 @@ Anwendungstypprüfungen, die Typprüfung des Upload-Skripts, Build und
 Standard-Trockenlauf bestanden. Ein falsches Cloudflare-Konto oder eine
 fremde Datenbank werden vor Wrangler abgewiesen. Der Live-Zustand
 bestätigte Worlds-Anmeldung, Übergang und persönliche Hugging-Face-Pflicht.
+[GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45637320426)
+bestand mit Chromium, WebKit und PostgreSQL 17.
+`main` enthält den bereits produktiven Anwendungscode und die geprüften
+Upload-Vorgaben. Der laufende Worker ist `756c193c`. Die Änderung für
+Raumeinladungen liegt zur gesonderten produktiven Freigabe vor.
 
 ### Selbstübernahme passwortgeschützter Altprofile produktiv – 24.11.2026
 
