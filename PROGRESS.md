@@ -23,9 +23,8 @@ fremde Datenbank werden vor Wrangler abgewiesen. Der Live-Zustand
 bestätigte Worlds-Anmeldung, Übergang und persönliche Hugging-Face-Pflicht.
 [GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45637320426)
 bestand mit Chromium, WebKit und PostgreSQL 17.
-`main` enthält den bereits produktiven Anwendungscode und die geprüften
-Upload-Vorgaben. Der laufende Worker ist `756c193c`. Die Änderung für
-Raumeinladungen liegt zur gesonderten produktiven Freigabe vor.
+`main` enthält den produktiven Anwendungscode und die geprüften
+Upload-Vorgaben. Ausgangspunkt für den Raumeinladungs-Release war `756c193c`.
 
 ### Raumeinladung nach Worlds-Anmeldung wiederherstellen – 24.11.2026
 
@@ -46,11 +45,17 @@ Die [GitHub-Prüfung](https://github.com/manuelk2607/Slop_Urself/actions/runs/45
 für `e22f7a4` ist in Chromium, WebKit und PostgreSQL 17 vollständig grün.
 Nach dem Abgleich mit `main` bestanden 186 lokale Tests, beide
 Anwendungstypprüfungen, Build und der Standard-Trockenlauf mit Worlds-Login
-und passwortgeschützter Altprofilübernahme. Der Upload für die Raumeinladung
-steht zur Produktionsfreigabe an.
+und passwortgeschützter Altprofilübernahme.
 [GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45640333912)
 bestätigte den zusammengeführten Stand `67e79a0` in Chromium, WebKit
 und PostgreSQL 17.
+Der Worker `7a68c388-8edf-4b6f-a031-c4f184339f7f` läuft zu 100 Prozent im
+Deployment `376063f1-64c7-4a99-9c74-47c214729208`. Alle 32 Bindungen und
+der Zeitplan um 03:42 UTC sind aktiv. Live bestätigte der Hashvergleich
+das neue Skript und CSS. Geprüft wurden DE/EN-Anmeldeseiten, der
+Abmeldeempfänger und die aktive persönliche HF-Pflicht. Die Datenbank
+meldet 13 Profile und eine bestätigte Worlds-Zuordnung. Die Rücknahmeversion
+ist `756c193c`. Ein realer Raumeinladungsrücksprung nach Anmelden steht aus.
 
 ### Selbstübernahme passwortgeschützter Altprofile produktiv – 24.11.2026
 
