@@ -7,6 +7,26 @@ Ausführliche Protokolle: `docs/WORLDS-PILOT.md`.
 
 ## Produktive Worlds-Anmeldung
 
+### Zentrale Anmeldung als Produktionsstandard – 25.11.2026
+
+Der Standard-Deploy erhält die bereits produktive Worlds-Anmeldung,
+die Übernahme passwortgeschützter Altprofile und die persönlichen
+Hugging-Face-Voraussetzungen. Der Runner verwendet den vorhandenen
+Cloudflare-Account, prüft die Produktionsdatenbank, Audit-Spalte und
+Secrets und kontrolliert den Worlds-Abmeldeempfänger vor und nach einem
+Upload. Der bestehende Pilot-Workflow ist weiterhin auf seinen separaten
+Worker beschränkt. Der Anwendungscode entspricht `6787566`.
+184 Tests bestanden, ein optionaler Test übersprungen. Beide
+Anwendungstypprüfungen, die Typprüfung des Upload-Skripts, Build und
+Standard-Trockenlauf bestanden. Ein falsches Cloudflare-Konto oder eine
+fremde Datenbank werden vor Wrangler abgewiesen. Der Live-Zustand
+bestätigte Worlds-Anmeldung, Übergang und persönliche Hugging-Face-Pflicht.
+[GitHub](https://github.com/manuelk2607/Slop_Urself/actions/runs/45637320426)
+bestand mit Chromium, WebKit und PostgreSQL 17.
+`main` enthält den bereits produktiven Anwendungscode und die geprüften
+Upload-Vorgaben. Der laufende Worker ist `756c193c`. Die Änderung für
+Raumeinladungen liegt zur gesonderten produktiven Freigabe vor.
+
 ### Raumeinladung nach Worlds-Anmeldung wiederherstellen – 24.11.2026
 
 Eine offene Einladung bleibt während der Worlds-Anmeldung für höchstens
@@ -24,6 +44,10 @@ Produktion freigegebenen Altprofil-Stand.
 
 Die [GitHub-Prüfung](https://github.com/manuelk2607/Slop_Urself/actions/runs/45450131098)
 für `e22f7a4` ist in Chromium, WebKit und PostgreSQL 17 vollständig grün.
+Nach dem Abgleich mit `main` bestanden 186 lokale Tests, beide
+Anwendungstypprüfungen, Build und der Standard-Trockenlauf mit Worlds-Login
+und passwortgeschützter Altprofilübernahme. Der Upload für die Raumeinladung
+steht zur Produktionsfreigabe an.
 
 ### Selbstübernahme passwortgeschützter Altprofile produktiv – 24.11.2026
 

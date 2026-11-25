@@ -1,4 +1,5 @@
 name = "slopurself"
+account_id = "ec3c070d8e4f88d2fc533d7d797f2daa"
 main = "../src/server/cloudflare/worker.ts"
 compatibility_date = "2026-10-03"
 workers_dev = true

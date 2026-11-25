@@ -67,6 +67,12 @@ npm run cf:secrets
 npm run cf:deploy
 ```
 
+Der normale Upload erhält die produktive Worlds-Anmeldung und die
+Übernahme passwortgeschützter Altprofile. Er prüft die konkrete Slop-
+Datenbank, die Worlds-Tabellen, die Audit-Spalte, die vorhandenen Worker-
+Secrets und den Abmeldeempfänger. `npm run cf:deploy:worlds:dry` paketiert
+denselben Stand ohne Upload. Der getrennte Pilot hat seine eigene Konfiguration.
+
 Für lokale Cloudflare-Tests direkt:
 `npx wrangler dev --config cloudflare/wrangler.toml --var AI_PROVIDER:mock`
 (nach `npm run cf:build`).
