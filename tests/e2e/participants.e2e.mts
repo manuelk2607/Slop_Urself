@@ -77,9 +77,13 @@ try {
     assert.equal(await guest.locator('#rematchGameButton').isVisible(), false);
     await host.locator('#rematchGameButton').click();
     await Promise.all(pages.map(p => visible(p, 'screenRoomLobby')));
-    // Reconnects are independent: wait for the complete roster on every browser.
-    for (const page of pages) await page.waitForFunction(() => document.getElementById('playerCount')?.textContent === '2' && document.getElementById('spectatorCount')?.textContent === '1');
     const newCode = await host.locator('#displayRoomCode').innerText(); assert.notEqual(newCode, oldCode);
+    // The lobby opens before the first snapshot and can still show the old roster and readiness.
+    await Promise.all(pages.map(page => page.waitForFunction(code =>
+        document.getElementById('displayRoomCode')?.textContent === code
+        && document.getElementById('playerCount')?.textContent === '2'
+        && document.getElementById('spectatorCount')?.textContent === '1'
+        && document.getElementById('readyStatus')?.textContent?.startsWith('0/2 bereit.'), newCode)));
     for (const [i, page] of pages.entries()) {
         assert.equal(await page.locator('#displayRoomCode').innerText(), newCode);
         assert.notEqual(await page.evaluate(() => localStorage.getItem('slopurself-session')), oldSessions[i]);

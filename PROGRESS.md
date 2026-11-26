@@ -6,7 +6,11 @@ Der Link im öffentlichen Bereich unterhalb des Spieleinstiegs führt zum
 Hub. Die bestehende Sprachpräferenz für Worlds wählt das DE/EN-Ziel. 186
 Tests, Typprüfung und Build bestanden, ein Test wurde übersprungen. Der
 Link war in Chromium-Desktop und WebKit bei 320 px per Tastatur erreichbar.
-Der lokale Browsertest simulierte die Auth-Konfiguration.
+Der lokale Browsertest simulierte die Auth-Konfiguration. Im ersten
+GitHub-Lauf las Chromium bei der Revanche noch den alten Bereit-Status,
+weil die bisherigen Spielerzahlen schon vor dem neuen Snapshot passten.
+Der Test wartet jetzt auf den bestätigten Status des neuen Raums.
+Der gezielte Test bestand in Chromium und WebKit gegen lokales workerd.
 
 Produktive Veröffentlichung und Live-Prüfung stehen aus.
 
