@@ -12,7 +12,12 @@ weil die bisherigen Spielerzahlen schon vor dem neuen Snapshot passten.
 Der Test wartet jetzt auf den bestätigten Status des neuen Raums.
 Der gezielte Test bestand in Chromium und WebKit gegen lokales workerd.
 
-Produktive Veröffentlichung und Live-Prüfung stehen aus.
+`05cb5b8` läuft seit 27.11. als Worker `67db3ee6-a214-4e87-8de5-ebf77b5b72ff`.
+Die deutsche Startseite, der englische Rücklink im ausgelieferten Skript,
+beide Worlds-Anmeldeseiten und die aktive persönliche Hugging-Face-Pflicht
+sind live geprüft. Der Abmeldeempfänger antwortete vor und nach dem Upload
+wie erwartet. Rücknahmeversion ist `7a68c388-8edf-4b6f-a031-c4f184339f7f`.
+[GitHub Actions](https://github.com/manuelk2607/Slop_Urself/actions/runs/45792725831)
 
 Featurebranch `feature/worlds-hub-sso`. Der eigene Worker
 `slopurself-worlds-pilot` verwendet nur den
